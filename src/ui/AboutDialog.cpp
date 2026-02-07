@@ -51,7 +51,7 @@ void AboutDialog::setupUI()
     // 4. Açıklama / Credit
     QLabel *descLabel = new QLabel(
         "Gelişmiş Windows Ekran Alıntısı Aracı<br>"
-        "<a href='https://github.com/emirhanyener/EShot' style='color: #4285F4; text-decoration: none;'>GitHub Sayfası</a>"
+        "<a href='https://github.com/Benoks/EShot' style='color: #4285F4; text-decoration: none;'>GitHub Sayfası</a>"
     );
     descLabel->setAlignment(Qt::AlignCenter);
     descLabel->setOpenExternalLinks(true);
