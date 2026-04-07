@@ -5,7 +5,7 @@
 #include <QAbstractNativeEventFilter>
 #include <QList>
 
-#ifdef Q_OS_WIN
+#if defined(Q_OS_WIN) || defined(_WIN32)
 #include <windows.h>
 #endif
 

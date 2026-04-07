@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(EShot VERSION 1.0.0 LANGUAGES CXX)
+project(EShot VERSION 1.1.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -33,6 +33,21 @@ set(HEADERS
 set(RESOURCES
     resources/icons.qrc
 )
+
+# Embed admin manifest into the executable (MSVC auto-embeds .manifest files
+# listed as sources; for MinGW we use a .rc file)
+if(MINGW)
+    configure_file(
+        ${CMAKE_CURRENT_SOURCE_DIR}/EShot.manifest
+        ${CMAKE_CURRENT_BINARY_DIR}/EShot.manifest
+        COPYONLY
+    )
+    set(RC_FILE ${CMAKE_CURRENT_BINARY_DIR}/EShot_manifest.rc)
+    file(WRITE ${RC_FILE} "1 24 \"${CMAKE_CURRENT_BINARY_DIR}/EShot.manifest\"\n")
+    list(APPEND SOURCES ${RC_FILE})
+elseif(MSVC)
+    list(APPEND SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/EShot.manifest)
+endif()
 
 qt_add_executable(${PROJECT_NAME} WIN32
     ${SOURCES}

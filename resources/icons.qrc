@@ -3,6 +3,7 @@
         <file alias="icons/pen.svg">../icons/pen.svg</file>
         <file alias="icons/arrow.svg">../icons/arrow.svg</file>
         <file alias="icons/rectangle.svg">../icons/rectangle.svg</file>
+        <file alias="icons/circle.svg">../icons/circle.svg</file>
         <file alias="icons/highlighter.svg">../icons/highlighter.svg</file>
         <file alias="icons/blur.svg">../icons/blur.svg</file>
         <file alias="icons/copy.svg">../icons/copy.svg</file>
@@ -12,5 +13,7 @@
         <file alias="icons/color.svg">../icons/color.svg</file>
         <file alias="icons/undo.svg">../icons/undo.svg</file>
         <file alias="icons/redo.svg">../icons/redo.svg</file>
+        <file alias="icons/counter.svg">../icons/counter.svg</file>
+        <file alias="icons/pin.svg">../icons/pin.svg</file>
     </qresource>
 </RCC>

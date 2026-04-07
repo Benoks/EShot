@@ -40,6 +40,11 @@ private slots:
     void onCaptureRequested()
     {
         qDebug() << "[EShot] Capture requested";
+        // Fix: eğer overlay zaten görünürdeyse (ss modu aktifse) yeniden başlatma
+        if (m_overlay && m_overlay->isVisible()) {
+            qDebug() << "[EShot] Capture already active, ignoring hotkey.";
+            return;
+        }
         if (m_overlay) m_overlay->startCapture();
     }
 
@@ -143,7 +148,7 @@ int main(int argc, char *argv[])
 
     QApplication app(argc, argv);
     app.setApplicationName("EShot");
-    app.setApplicationVersion("1.0.0");
+    app.setApplicationVersion("1.1.0");
     app.setOrganizationName("EShot");
     app.setQuitOnLastWindowClosed(false);
     app.setStyle("Fusion");

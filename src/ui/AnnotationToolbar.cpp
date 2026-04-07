@@ -77,11 +77,11 @@ void AnnotationToolbar::setupUI()
     m_layout->addWidget(createToolButton(":/icons/pen.svg", "Kalem (P)", AnnotationEngine::Pen, "Pen"));
     m_layout->addWidget(createToolButton(":/icons/arrow.svg", "Ok (A)", AnnotationEngine::Arrow, "Arrow"));
     m_layout->addWidget(createToolButton(":/icons/rectangle.svg", "Dikdörtgen (R)", AnnotationEngine::Rectangle, "Rectangle"));
-    m_layout->addWidget(createToolButton(":/icons/rectangle.svg", "Çember (C) [Shift=Tam Daire]", AnnotationEngine::Circle, "Circle"));
+    m_layout->addWidget(createToolButton(":/icons/circle.svg", "Çember (C) [Shift=Tam Daire]", AnnotationEngine::Circle, "Circle"));
     m_layout->addWidget(createToolButton(":/icons/text.svg", "Metin (T)", AnnotationEngine::Text, "Text"));
     m_layout->addWidget(createToolButton(":/icons/highlighter.svg", "Vurgulayıcı (H)", AnnotationEngine::Highlighter, "Highlighter"));
     m_layout->addWidget(createToolButton(":/icons/blur.svg", "Bulanıklaştır (B)", AnnotationEngine::Blur, "Blur"));
-    m_layout->addWidget(createToolButton(":/icons/pen.svg", "Numara (#)", AnnotationEngine::Counter, "Counter"));
+    m_layout->addWidget(createToolButton(":/icons/counter.svg", "Numara (#)", AnnotationEngine::Counter, "Counter"));
 
     refreshTools(); // İlk görünürlük ayarını yap
 
@@ -117,7 +117,7 @@ void AnnotationToolbar::setupUI()
     m_layout->addStretch();
 
     // Pin
-    m_layout->addWidget(createActionButton(":/icons/pen.svg", "Ekrana Sabitle 📌", "pin"));
+    m_layout->addWidget(createActionButton(":/icons/pin.svg", "Ekrana Sabitle 📌", "pin"));
 
     m_layout->addWidget(createSeparator());
 
