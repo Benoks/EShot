@@ -102,6 +102,18 @@ void CaptureOverlay::performCapture()
     captureAllScreens();
     setGeometry(m_virtualDesktopRect);
     show();
+
+#ifdef Q_OS_WIN
+    // Force the overlay to the very top of the z-order, even above elevated windows.
+    // This works because EShot now runs with administrator privileges (see EShot.manifest).
+    HWND hwnd = reinterpret_cast<HWND>(winId());
+    ::SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                   SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+    // Bring it to the very front and give it keyboard focus
+    ::SetForegroundWindow(hwnd);
+    ::BringWindowToTop(hwnd);
+#endif
+
     activateWindow();
     setFocus();
     raise();
@@ -135,7 +147,8 @@ void CaptureOverlay::captureAllScreens()
     if (!hBmp) { DeleteDC(hMem); ReleaseDC(nullptr, hScreen); return; }
 
     HBITMAP hOld = (HBITMAP)SelectObject(hMem, hBmp);
-    BitBlt(hMem, 0, 0, vw, vh, hScreen, vx, vy, SRCCOPY);
+    // CAPTUREBLT ensures layered/translucent windows are included in the grab
+    BitBlt(hMem, 0, 0, vw, vh, hScreen, vx, vy, SRCCOPY | CAPTUREBLT);
     SelectObject(hMem, hOld);
 
     BITMAPINFOHEADER bi = {};

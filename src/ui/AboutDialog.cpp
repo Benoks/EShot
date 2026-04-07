@@ -43,7 +43,7 @@ void AboutDialog::setupUI()
     layout->addWidget(nameLabel);
 
     // 3. Sürüm
-    QLabel *verLabel = new QLabel("Sürüm 1.0.0");
+    QLabel *verLabel = new QLabel("Sürüm 1.1.0");
     verLabel->setAlignment(Qt::AlignCenter);
     verLabel->setStyleSheet("color: #888; font-size: 11px;");
     layout->addWidget(verLabel);

@@ -46,13 +46,17 @@ if(MINGW)
     file(WRITE ${RC_FILE} "1 24 \"${CMAKE_CURRENT_BINARY_DIR}/EShot.manifest\"\n")
     list(APPEND SOURCES ${RC_FILE})
 elseif(MSVC)
-    list(APPEND SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/EShot.manifest)
+    # list(APPEND SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/EShot.manifest)
 endif()
 
 qt_add_executable(${PROJECT_NAME} WIN32
     ${SOURCES}
     ${HEADERS}
     ${RESOURCES}
+)
+
+set_target_properties(${PROJECT_NAME} PROPERTIES
+    WIN32_EXECUTABLE FALSE
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE
@@ -71,6 +75,14 @@ target_include_directories(${PROJECT_NAME} PRIVATE
 set_target_properties(${PROJECT_NAME} PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
 )
+
+# Embed manifest after build
+if(MSVC)
+    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+        COMMAND mt.exe -manifest ${CMAKE_CURRENT_SOURCE_DIR}/EShot.manifest -outputresource:$<TARGET_FILE:${PROJECT_NAME}>\;1
+        COMMENT "Embedding manifest into executable"
+    )
+endif()
 
 install(TARGETS ${PROJECT_NAME}
     RUNTIME DESTINATION bin
