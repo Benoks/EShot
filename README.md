@@ -8,7 +8,7 @@ A fast, lightweight screenshot tool for Windows with annotation tools, pin-to-de
 [![Version](https://img.shields.io/badge/Version-2.1.2-orange.svg)]()
 
 <p align="center">
-  <img src="" alt="EShot Preview" width="700">
+  <img src="preview.png" alt="EShot Preview" width="700">
 </p>
 
 ## Features
