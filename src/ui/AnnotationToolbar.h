@@ -24,6 +24,7 @@ public:
     void setRedoEnabled(bool enabled);
     void setBlurIntensity(int intensity);
     void setColor(const QColor &color);
+    void setSelectionLocked(bool locked);
 
 signals:
     void toolSelected(int toolId);

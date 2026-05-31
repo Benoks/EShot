@@ -32,6 +32,7 @@ signals:
 protected:
     void paintEvent(QPaintEvent *event) override;
     void mousePressEvent(QMouseEvent *event) override;
+    void mouseDoubleClickEvent(QMouseEvent *event) override;
     void mouseMoveEvent(QMouseEvent *event) override;
     void mouseReleaseEvent(QMouseEvent *event) override;
     void keyPressEvent(QKeyEvent *event) override;
@@ -45,6 +46,8 @@ private:
     void finishCapture();
     void cancelCapture();
     QRect normalizedSelectionRect() const;
+    QRect monitorRectAt(const QPoint &pos) const;
+    void selectMonitorAt(const QPoint &pos);
     QPixmap getSelectedPixmap();
 
     // Dosya adı şablonu parse
@@ -56,6 +59,7 @@ private:
     QPoint m_selectionEnd;
     bool m_isSelecting;
     bool m_selectionComplete;
+    bool m_ignoreNextMouseRelease;
     QPoint m_moveOffset;
 
     QRect m_virtualDesktopRect;

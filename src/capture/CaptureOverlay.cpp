@@ -30,6 +30,7 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
     : QWidget(parent, Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint | Qt::Tool)
     , m_isSelecting(false)
     , m_selectionComplete(false)
+    , m_ignoreNextMouseRelease(false)
     , m_toolbar(nullptr)
     , m_actionPanel(nullptr)
     , m_annotationEngine(nullptr)
@@ -187,7 +188,9 @@ void CaptureOverlay::startCapture()
 {
     m_isSelecting = false;
     m_selectionComplete = false;
+    m_ignoreNextMouseRelease = false;
     m_resizeMode = ResNone;
+    m_selectionLocked = false;
     m_selectionStart = QPoint();
     m_selectionEnd = QPoint();
     m_eyedropperActive = false;
@@ -204,7 +207,10 @@ void CaptureOverlay::startCapture()
 
     // Ayarları yükle
     QSettings s("EShot", "EShot");
-    if (m_toolbar) m_toolbar->refreshTools();
+    if (m_toolbar) {
+        m_toolbar->refreshTools();
+        m_toolbar->setSelectionLocked(false);
+    }
 
     m_overlayOpacity = s.value("overlayOpacity", 100).toInt();
     m_crosshairStyle = s.value("crosshairStyle", "dash").toString();
@@ -542,7 +548,9 @@ void CaptureOverlay::mousePressEvent(QMouseEvent *event)
         if (m_selectionComplete) {
             m_selectionComplete = false;
             m_isSelecting = false;
+            m_selectionLocked = false;
             m_selectionStart = m_selectionEnd = QPoint();
+            if (m_toolbar) m_toolbar->setSelectionLocked(false);
             hideToolbar();
             if (m_annotationEngine) m_annotationEngine->clear();
             update();
@@ -550,6 +558,19 @@ void CaptureOverlay::mousePressEvent(QMouseEvent *event)
             onClose();
         }
     }
+}
+
+void CaptureOverlay::mouseDoubleClickEvent(QMouseEvent *event)
+{
+    if (event->button() != Qt::LeftButton || m_eyedropperActive || m_selectionLocked)
+        return;
+    if (m_toolbar && m_toolbar->isVisible() && m_toolbar->geometry().contains(event->pos()))
+        return;
+    if (m_actionPanel && m_actionPanel->isVisible() && m_actionPanel->geometry().contains(event->pos()))
+        return;
+
+    selectMonitorAt(event->pos());
+    m_ignoreNextMouseRelease = true;
 }
 
 void CaptureOverlay::mouseMoveEvent(QMouseEvent *event)
@@ -651,6 +672,11 @@ void CaptureOverlay::mouseMoveEvent(QMouseEvent *event)
 void CaptureOverlay::mouseReleaseEvent(QMouseEvent *event)
 {
     if (event->button() == Qt::LeftButton) {
+        if (m_ignoreNextMouseRelease) {
+            m_ignoreNextMouseRelease = false;
+            return;
+        }
+
         // Annotation taşıma sonlandır
         if (m_isDraggingAnnotation) {
             m_isDraggingAnnotation = false;
@@ -742,7 +768,9 @@ void CaptureOverlay::keyPressEvent(QKeyEvent *event)
         if (m_selectionComplete) {
             m_selectionComplete = false;
             m_isSelecting = false;
+            m_selectionLocked = false;
             m_selectionStart = m_selectionEnd = QPoint();
+            if (m_toolbar) m_toolbar->setSelectionLocked(false);
             hideToolbar();
             if (m_annotationEngine) m_annotationEngine->clear();
             update();
@@ -1027,6 +1055,71 @@ void CaptureOverlay::onBlurIntensityChanged(int intensity)
 QRect CaptureOverlay::normalizedSelectionRect() const
 {
     return QRect(m_selectionStart, m_selectionEnd).normalized();
+}
+
+QRect CaptureOverlay::monitorRectAt(const QPoint &pos) const
+{
+#ifdef Q_OS_WIN
+    POINT nativePoint = {
+        pos.x() + m_virtualDesktopRect.x(),
+        pos.y() + m_virtualDesktopRect.y()
+    };
+    HMONITOR monitor = MonitorFromPoint(nativePoint, MONITOR_DEFAULTTONULL);
+    if (!monitor) return QRect();
+
+    MONITORINFO info = {};
+    info.cbSize = sizeof(info);
+    if (!GetMonitorInfoW(monitor, &info)) return QRect();
+
+    return QRect(
+        info.rcMonitor.left - m_virtualDesktopRect.x(),
+        info.rcMonitor.top - m_virtualDesktopRect.y(),
+        info.rcMonitor.right - info.rcMonitor.left,
+        info.rcMonitor.bottom - info.rcMonitor.top
+    ).intersected(rect());
+#else
+    for (QScreen *screen : QGuiApplication::screens()) {
+        QRect geometry = screen->geometry();
+        qreal dpr = screen->devicePixelRatio();
+        QRect localRect(
+            qRound(geometry.x() * dpr) - m_virtualDesktopRect.x(),
+            qRound(geometry.y() * dpr) - m_virtualDesktopRect.y(),
+            qRound(geometry.width() * dpr),
+            qRound(geometry.height() * dpr)
+        );
+        if (localRect.contains(pos))
+            return localRect.intersected(rect());
+    }
+    return QRect();
+#endif
+}
+
+void CaptureOverlay::selectMonitorAt(const QPoint &pos)
+{
+    QRect monitorRect = monitorRectAt(pos);
+    if (monitorRect.isEmpty()) return;
+
+    if (m_textEdit) m_textEdit->hide();
+    if (m_annotationEngine) m_annotationEngine->clear();
+
+    m_isSelecting = false;
+    m_selectionComplete = true;
+    m_isDraggingAnnotation = false;
+    m_resizeMode = ResNone;
+    m_selectionStart = monitorRect.topLeft();
+    m_selectionEnd = monitorRect.bottomRight();
+
+    showToolbar();
+    updateUndoRedoState();
+    updateCursor(pos);
+
+    if (m_copyAfterCapture) {
+        QPixmap result = getSelectedPixmap();
+        if (!result.isNull())
+            QGuiApplication::clipboard()->setPixmap(result);
+    }
+
+    update();
 }
 
 void CaptureOverlay::onToolSelected(int toolId)

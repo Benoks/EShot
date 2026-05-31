@@ -507,11 +507,18 @@ void AnnotationToolbar::onEyedropperClicked()
     emit eyedropperRequested();
 }
 
+void AnnotationToolbar::setSelectionLocked(bool locked)
+{
+    m_selectionLocked = locked;
+    if (m_lockButton) {
+        m_lockButton->setIcon(QIcon(m_selectionLocked ? ":/icons/lock.svg" : ":/icons/lock_open.svg"));
+        m_lockButton->setChecked(m_selectionLocked);
+    }
+}
+
 void AnnotationToolbar::onLockClicked()
 {
-    m_selectionLocked = !m_selectionLocked;
-    m_lockButton->setIcon(QIcon(m_selectionLocked ? ":/icons/lock.svg" : ":/icons/lock_open.svg"));
-    m_lockButton->setChecked(m_selectionLocked);
+    setSelectionLocked(!m_selectionLocked);
     emit lockToggled(m_selectionLocked);
 }
 
