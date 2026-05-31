@@ -12,7 +12,7 @@
 class AnnotationToolbar;
 class AnnotationEngine;
 class PinnedWindow;
-class OCREngine;
+
 
 class CaptureOverlay : public QWidget {
     Q_OBJECT
@@ -95,8 +95,7 @@ private:
     // Pinned pencereler listesi (ömür yönetimi için)
     QList<QPointer<QWidget>> m_pinnedWindows;
 
-    // OCR
-    OCREngine *m_ocrEngine;
+
 
 private slots:
     void onToolSelected(int toolId);
@@ -104,7 +103,7 @@ private slots:
     void onSave();
     void onClose();
     void onPinToDesktop();
-    void onExtractText();
+
     void performCapture();
 };
 

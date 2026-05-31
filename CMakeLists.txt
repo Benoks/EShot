@@ -19,7 +19,6 @@ set(SOURCES
     src/ui/AnnotationToolbar.cpp
     src/ui/SettingsDialog.cpp
     src/ui/AboutDialog.cpp
-    src/ui/OCREngine.cpp
     src/ui/FirstRunWizard.cpp
 )
 
@@ -32,7 +31,6 @@ set(HEADERS
     src/ui/AnnotationToolbar.h
     src/ui/SettingsDialog.h
     src/ui/AboutDialog.h
-    src/ui/OCREngine.h
     src/ui/FirstRunWizard.h
 )
 

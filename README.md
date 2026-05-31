@@ -1,6 +1,6 @@
 # EShot
 
-A fast, lightweight screenshot tool for Windows with annotation tools, pin-to-desktop, OCR, and multi-monitor support.
+A fast, lightweight screenshot tool for Windows with annotation tools, pin-to-desktop, and multi-monitor support.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows%2010%2F11-blue.svg)]()
@@ -43,11 +43,6 @@ A fast, lightweight screenshot tool for Windows with annotation tools, pin-to-de
 - **Shift+Scroll** — Zoom in/out
 - **Save As** — Right-click to save pinned image
 - **Close All** — Tray menu option to close all pinned windows
-
-### OCR (Text Extraction)
-- Extract text from captured images using Windows.Media.Ocr API
-- Supports all languages installed on your system
-- Result automatically copied to clipboard
 
 ### Settings (5 Tabs)
 - **General** — Language, save directory, filename pattern, auto-start, notifications, sound
@@ -128,7 +123,7 @@ Output: `installer_output/EShot_Setup_v2.1.0.exe`
 - **Language:** C++17
 - **UI Framework:** Qt 6.8 (Widgets)
 - **Build System:** CMake
-- **Platform API:** Win32 (`BitBlt`, `RegisterHotKey`, `GetSystemMetrics`, `Windows.Media.Ocr`)
+- **Platform API:** Win32 (`BitBlt`, `RegisterHotKey`, `GetSystemMetrics`)
 - **Packaging:** Inno Setup 6
 
 ## Project Structure
@@ -150,9 +145,7 @@ EShot/
 │       ├── AnnotationToolbar.cpp   # Floating toolbar with tools
 │       ├── SettingsDialog.cpp      # Settings (5 tabs, export/import)
 │       ├── AboutDialog.cpp         # About window
-│       ├── OCREngine.cpp           # Windows OCR via PowerShell/WinRT
-│       ├── FirstRunWizard.cpp      # First-run setup wizard
-│       └── ImgurUploader.cpp       # (removed in v2.1)
+│       └── FirstRunWizard.cpp      # First-run setup wizard
 ├── icons/                          # SVG icons for tools & UI
 ├── resources/                      # Qt resource files, stylesheet
 ├── EShot_Setup.iss                 # Inno Setup installer script

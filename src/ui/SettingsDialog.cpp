@@ -490,8 +490,10 @@ void SettingsDialog::loadSettings()
     m_playSoundCheck->setChecked(m_settings->value("playSound", false).toBool());
     m_copyPathAfterSaveCheck->setChecked(m_settings->value("copyPathAfterSave", false).toBool());
 
-    // Dil
-    QString lang = m_settings->value("language", TranslationManager::langCode()).toString();
+    // Dil (int olarak kaydediliyor, string'e çevir)
+    int langInt = m_settings->value("language", 1).toInt(); // 1=English default
+    static const char* langCodes[] = {"tr","en","de","fr","es","ja","zh"};
+    QString lang = (langInt >= 0 && langInt <= 6) ? langCodes[langInt] : "en";
     int li = m_langCombo->findData(lang);
     if (li >= 0) m_langCombo->setCurrentIndex(li);
 

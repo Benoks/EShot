@@ -18,6 +18,5 @@
         <file alias="icons/gear.svg">../icons/gear.svg</file>
         <file alias="icons/eraser.svg">../icons/eraser.svg</file>
         <file alias="icons/line.svg">../icons/line.svg</file>
-        <file alias="icons/ocr.svg">../icons/ocr.svg</file>
     </qresource>
 </RCC>

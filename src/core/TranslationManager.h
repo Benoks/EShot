@@ -169,7 +169,6 @@ public:
     static QString actionCopy()       { return tr("actionCopy"); }
     static QString actionSave()       { return tr("actionSave"); }
     static QString actionClose()      { return tr("actionClose"); }
-    static QString actionOCR()        { return tr("actionOCR"); }
 
     // ─── Araç listesi ───
     static QString toolListPen()      { return tr("toolListPen"); }
@@ -348,7 +347,6 @@ private:
         {"actionCopy",     {"Kopyala (Ctrl+C)", "Copy (Ctrl+C)", "Kopieren (Strg+C)", "Copier (Ctrl+C)", "Copiar (Ctrl+C)", "コピー (Ctrl+C)", "复制 (Ctrl+C)"}},
         {"actionSave",     {"Kaydet (Ctrl+S)", "Save (Ctrl+S)", "Speichern (Strg+S)", "Enregistrer (Ctrl+S)", "Guardar (Ctrl+S)", "保存 (Ctrl+S)", "保存 (Ctrl+S)"}},
         {"actionClose",    {"Kapat (Esc)", "Close (Esc)", "Schließen (Esc)", "Fermer (Esc)", "Cerrar (Esc)", "閉じる (Esc)", "关闭 (Esc)"}},
-        {"actionOCR",      {"Metin Çıkar", "Extract Text", "Text extrahieren", "Extraire le texte", "Extraer texto", "テキスト抽出", "提取文本"}},
 
         // ─── Araç listesi ───
         {"toolListPen",    {"✏️ Kalem", "✏️ Pen", "✏️ Stift", "✏️ Stylo", "✏️ Lápiz", "✏️ ペン", "✏️ 画笔"}},

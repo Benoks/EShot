@@ -2,7 +2,7 @@
 #include "PinnedWindow.h"
 #include "annotation/AnnotationEngine.h"
 #include "ui/AnnotationToolbar.h"
-#include "ui/OCREngine.h"
+
 #include "../core/TranslationManager.h"
 
 #include <QPainter>
@@ -111,10 +111,7 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
             [this]() { onClose(); });
         closeBtn->setStyleSheet("QPushButton { background-color: #C42B1C; border: none; border-radius: 6px; }"
                                 "QPushButton:hover { background-color: #d43c2d; }");
-        QPushButton *ocrBtn = addBtn(":/icons/ocr.svg", TranslationManager::actionOCR(),
-            [this]() { onExtractText(); });
-        ocrBtn->setStyleSheet("QPushButton { background-color: #6B4C9A; border: none; border-radius: 6px; }"
-                              "QPushButton:hover { background-color: #7D5CB5; }");
+
     }
     m_actionPanel->setFixedSize(m_actionPanel->sizeHint());
     m_actionPanel->hide();
@@ -130,14 +127,7 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
     m_captureDelayTimer->setSingleShot(true);
     connect(m_captureDelayTimer, &QTimer::timeout, this, &CaptureOverlay::performCapture);
 
-    m_ocrEngine = new OCREngine(this);
-    connect(m_ocrEngine, &OCREngine::textExtracted, this, [this](const QString &text) {
-        QGuiApplication::clipboard()->setText(text);
-        qDebug() << "[CaptureOverlay] OCR result copied to clipboard:" << text.left(100);
-    });
-    connect(m_ocrEngine, &OCREngine::ocrError, this, [](const QString &err) {
-        qDebug() << "[CaptureOverlay] OCR failed:" << err;
-    });
+
 }
 
 CaptureOverlay::~CaptureOverlay() {}
@@ -902,14 +892,7 @@ void CaptureOverlay::onPinToDesktop()
     qDebug() << "[CaptureOverlay] Pinned to desktop at" << screenPos;
 }
 
-void CaptureOverlay::onExtractText()
-{
-    QPixmap result = getSelectedPixmap();
-    if (result.isNull()) return;
-    if (m_ocrEngine && !m_ocrEngine->isProcessing()) {
-        m_ocrEngine->extractText(result);
-    }
-}
+
 
 CaptureOverlay::ResizeMode CaptureOverlay::getResizeMode(const QPoint &pos)
 {

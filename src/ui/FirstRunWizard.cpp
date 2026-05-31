@@ -174,6 +174,7 @@ void FirstRunWizard::onFinish()
     else if (lang == "zh") langEnum = TranslationManager::Chinese;
     TranslationManager::setLanguage(langEnum);
     s.setValue("language", static_cast<int>(langEnum));
+    s.setValue("wizardCompleted", true);
 
     // Kısayol kaydet
     s.setValue("hotkeyModifiers", 0);
