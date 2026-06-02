@@ -95,6 +95,8 @@ Name: "ocrengine\lang_ita"; Description: "{cm:OcrLangItalian}"; GroupDescription
 [Files]
 ; Main application
 Source: "{#ReleaseDir}\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
+Source: "LICENSE"; DestDir: "{app}"; Flags: ignoreversion
+Source: "THIRD_PARTY_NOTICES.md"; DestDir: "{app}"; Flags: ignoreversion
 
 ; Qt runtime DLLs
 Source: "{#ReleaseDir}\Qt6Core.dll";        DestDir: "{app}"; Flags: ignoreversion

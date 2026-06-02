@@ -65,7 +65,7 @@ Annotations snap to selection edges where useful, and toolbars reposition automa
 
 ### GIF Recording
 
-Record a selected part of the screen as a GIF. Recording settings include FPS, maximum duration, and loop behavior. EShot keeps the recording indicator outside the captured output so it does not appear in the final GIF.
+Record a selected part of the screen as a GIF. Recording settings include FPS, maximum duration, and loop behavior.
 
 ### OCR
 
@@ -170,3 +170,5 @@ EShot/
 ## License
 
 This project is released under the MIT License. See [LICENSE](LICENSE) for details.
+
+EShot uses Tesseract OCR for text recognition. Tesseract OCR and the official tessdata language files are licensed under the Apache License 2.0. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for third-party notices.
