@@ -1,6 +1,5 @@
 #include "UploadDialog.h"
 #include "core/ImageUploader.h"
-#include "core/ImgurUploader.h"
 #include "core/CatboxUploader.h"
 #include "core/TranslationManager.h"
 #include <QVBoxLayout>
@@ -29,8 +28,6 @@ UploadDialog::UploadDialog(QWidget *parent) : QDialog(parent)
                               static_cast<int>(ImageUploader::Provider::Catbox));
     m_providerCombo->addItem(QStringLiteral("Uguu.se (3 hours)"),
                               static_cast<int>(ImageUploader::Provider::Uguu));
-    m_providerCombo->addItem(QStringLiteral("Imgur"),
-                              static_cast<int>(ImageUploader::Provider::Imgur));
     providerRow->addWidget(providerLabel);
     providerRow->addWidget(m_providerCombo, 1);
     layout->addLayout(providerRow);
@@ -153,10 +150,10 @@ void UploadDialog::rebuildAuthSection()
     if (m_uploader->needsAuth()) {
         m_authEdit->setVisible(true);
         m_saveAuthBtn->setVisible(true);
-        QSettings s("EShot", "EShot");
-        if (auto *imgur = qobject_cast<ImgurUploader *>(m_uploader)) {
-            m_authEdit->setText(s.value("imgurClientId").toString());
-            m_authEdit->setPlaceholderText(TranslationManager::imgurClientIdDesc());
+        if (auto *catbox = qobject_cast<CatboxUploader *>(m_uploader)) {
+            QSettings s("EShot", "EShot");
+            m_authEdit->setText(s.value("catboxUserHash").toString());
+            m_authEdit->setPlaceholderText(TranslationManager::catboxUserHashDesc());
         }
     } else {
         m_authEdit->setVisible(false);
@@ -167,9 +164,7 @@ void UploadDialog::rebuildAuthSection()
 void UploadDialog::onSaveAuth()
 {
     if (!m_uploader) return;
-    if (auto *imgur = qobject_cast<ImgurUploader *>(m_uploader)) {
-        imgur->setClientId(m_authEdit->text());
-    } else if (auto *catbox = qobject_cast<CatboxUploader *>(m_uploader)) {
+    if (auto *catbox = qobject_cast<CatboxUploader *>(m_uploader)) {
         catbox->setUserHash(m_authEdit->text());
     }
     m_statusLabel->setText(TranslationManager::exportSuccess());

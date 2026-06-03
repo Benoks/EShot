@@ -31,6 +31,9 @@
 #include <QEventLoop>
 #include <QLabel>
 #include <QVersionNumber>
+#include <QDialog>
+#include <QLocalServer>
+#include <QLocalSocket>
 
 #include "core/HotkeyManager.h"
 #include "core/TranslationManager.h"
@@ -72,6 +75,10 @@ public:
 public slots:
     void onCaptureRequested()
     {
+        if (closeBlockingDialogs()) {
+            QTimer::singleShot(80, this, &EShotApp::onCaptureRequested);
+            return;
+        }
         if (m_overlay && m_overlay->isVisible()) return;
         ensureOverlay();
         m_overlay->startCapture();
@@ -168,10 +175,13 @@ public slots:
         if (m_trayIcon) {
             m_trayIcon->showMessage(
                 QStringLiteral("EShot"),
-                QStringLiteral("Windows Print Screen Snipping Tool shortcut disabled. Print Screen should now open EShot."),
+                QStringLiteral("Windows Print Screen Snipping Tool shortcut disabled. If Print Screen does not open EShot immediately, restart Windows once."),
                 QSystemTrayIcon::Information,
                 4000);
         }
+        HotkeyManager::instance().reRegisterCaptureHotkey(
+            HotkeyManager::instance().captureModifiers(),
+            HotkeyManager::instance().captureVirtualKey());
         rebuildTrayMenu();
     }
 
@@ -261,17 +271,27 @@ private:
         m_showNotifications = s.value("showNotifications", true).toBool();
     }
 
+    static QIcon trayIcon(const QString &path, const QSize &size = QSize(16, 16))
+    {
+        QIcon src(path);
+        if (src.isNull()) return src;
+        QPixmap pm = src.pixmap(size, QIcon::Normal, QIcon::On);
+        QIcon out;
+        out.addPixmap(pm);
+        return out;
+    }
+
     void rebuildTrayMenu()
     {
         if (!m_trayMenu) return;
         m_trayMenu->clear();
 
-        QAction *captureAction = m_trayMenu->addAction(QIcon(":/icons/copy.svg"), TranslationManager::trayCapture());
+        QAction *captureAction = m_trayMenu->addAction(trayIcon(":/icons/copy.svg"), TranslationManager::trayCapture());
         connect(captureAction, &QAction::triggered, this, &EShotApp::onCaptureRequested);
 
         if (hasPrintScreenConflict()) {
             QAction *fixPrintScreenAction = m_trayMenu->addAction(
-                QIcon(":/icons/gear.svg"),
+                trayIcon(":/icons/gear.svg"),
                 QStringLiteral("Fix Print Screen shortcut"));
             connect(fixPrintScreenAction, &QAction::triggered,
                     this, &EShotApp::onFixPrintScreenConflict);
@@ -280,24 +300,17 @@ private:
 
         if (m_updateAvailable) {
             QAction *updateAction = m_trayMenu->addAction(
-                QIcon(":/icons/upload.svg"),
+                trayIcon(":/icons/upload.svg"),
                 QString("%1 v%2").arg(TranslationManager::updateTitle(), m_latestVersion));
             connect(updateAction, &QAction::triggered, this, &EShotApp::onUpdateRequested);
             m_trayMenu->addSeparator();
         }
 
-        QAction *settingsAction = m_trayMenu->addAction(QIcon(":/icons/gear.svg"), TranslationManager::traySettings());
+        QAction *settingsAction = m_trayMenu->addAction(trayIcon(":/icons/gear.svg"), TranslationManager::traySettings());
         connect(settingsAction, &QAction::triggered, this, &EShotApp::onSettingsRequested);
-        QAction *aboutAction = m_trayMenu->addAction(QIcon(":/icons/pen.svg"), TranslationManager::trayAbout());
+        QAction *aboutAction = m_trayMenu->addAction(trayIcon(":/icons/pen.svg"), TranslationManager::trayAbout());
         connect(aboutAction, &QAction::triggered, this, &EShotApp::onAboutRequested);
-        m_trayMenu->addSeparator();
-
-        // Close all pinned windows
-        QAction *closeAllAction = m_trayMenu->addAction(QIcon(":/icons/close.svg"), TranslationManager::pinnedCloseAll());
-        connect(closeAllAction, &QAction::triggered, this, &EShotApp::onCloseAllPins);
-        m_trayMenu->addSeparator();
-
-        QAction *quitAction = m_trayMenu->addAction(QIcon(":/icons/close.svg"), TranslationManager::trayQuit());
+        QAction *quitAction = m_trayMenu->addAction(trayIcon(":/icons/close.svg"), TranslationManager::trayQuit());
         connect(quitAction, &QAction::triggered, this, &EShotApp::onQuitAction);
 
         m_trayIcon->setToolTip(QString("%1 v%2").arg(TranslationManager::appTitle(), QCoreApplication::applicationVersion()));
@@ -307,24 +320,7 @@ private:
     {
         m_trayIcon = new QSystemTrayIcon(this);
 
-        QSettings s("EShot", "EShot");
-        QString iconStyle = s.value("trayIconStyle", "dark").toString();
-
-        // Tray icon style
-        QIcon trayIcon;
-        if (iconStyle == "light") {
-            // Light theme icon - white pen
-            QPixmap pix(":/icons/pen.svg");
-            if (!pix.isNull()) {
-                QPixmap colored(pix.size());
-                colored.fill(Qt::white);
-                colored.setMask(pix.createMaskFromColor(Qt::transparent));
-                trayIcon = QIcon(colored);
-            }
-        } else {
-            trayIcon = QIcon(":/icons/pen.svg");
-        }
-
+        QIcon trayIcon(":/icons/pen.svg");
         if (trayIcon.isNull()) {
             QPixmap pix(32, 32); pix.fill(Qt::blue);
             trayIcon = QIcon(pix);
@@ -333,6 +329,23 @@ private:
         m_trayIcon->setToolTip(QString("%1 v%2").arg(TranslationManager::appTitle(), QCoreApplication::applicationVersion()));
 
         m_trayMenu = new QMenu();
+        m_trayMenu->setStyleSheet(QStringLiteral(
+            "QMenu {"
+            "  background: #2b2b2b;"
+            "  color: #ffffff;"
+            "  border: 1px solid #4a4a4a;"
+            "  border-radius: 3px;"
+            "  padding: 3px;"
+            "}"
+            "QMenu::item {"
+            "  min-height: 22px;"
+            "  padding: 3px 28px 3px 28px;"
+            "  border-radius: 2px;"
+            "}"
+            "QMenu::item:selected { background: #3a3a3a; }"
+            "QMenu::item:disabled { color: #8a8a8a; }"
+            "QMenu::icon { width: 16px; height: 16px; left: 7px; }"
+            "QMenu::separator { height: 1px; background: #424242; margin: 4px 5px; }"));
         rebuildTrayMenu();
 
         m_trayIcon->setContextMenu(m_trayMenu);
@@ -362,6 +375,24 @@ private:
     {
         connect(&HotkeyManager::instance(), &HotkeyManager::captureRequested,
                 this, &EShotApp::onCaptureRequested);
+    }
+
+    bool closeBlockingDialogs()
+    {
+        bool closed = false;
+        const auto widgets = QApplication::topLevelWidgets();
+        for (QWidget *widget : widgets) {
+            if (!widget || widget == m_overlay || !widget->isVisible())
+                continue;
+            auto *dialog = qobject_cast<QDialog *>(widget);
+            if (!dialog)
+                continue;
+            dialog->reject();
+            closed = true;
+        }
+        if (closed)
+            QApplication::processEvents();
+        return closed;
     }
 
     bool hasPrintScreenConflict() const
@@ -453,20 +484,7 @@ private:
     void setTrayIconNormal()
     {
         if (!m_trayIcon) return;
-        QSettings s("EShot", "EShot");
-        QString iconStyle = s.value("trayIconStyle", "dark").toString();
-        QIcon trayIcon;
-        if (iconStyle == "light") {
-            QPixmap pix(":/icons/pen.svg");
-            if (!pix.isNull()) {
-                QPixmap colored(pix.size());
-                colored.fill(Qt::white);
-                colored.setMask(pix.createMaskFromColor(Qt::transparent));
-                trayIcon = QIcon(colored);
-            }
-        } else {
-            trayIcon = QIcon(":/icons/pen.svg");
-        }
+        QIcon trayIcon(":/icons/pen.svg");
         if (trayIcon.isNull()) {
             QPixmap pix(32, 32); pix.fill(Qt::blue);
             trayIcon = QIcon(pix);
@@ -783,6 +801,26 @@ int main(int argc, char *argv[])
         qWarning() << "[EShot] System tray is not available!";
         return 1;
     }
+
+    const QString instanceName = QStringLiteral("EShot.SingleInstance");
+    QLocalSocket instanceSocket;
+    instanceSocket.connectToServer(instanceName);
+    if (instanceSocket.waitForConnected(150)) {
+        qDebug() << "[EShot] Another instance is already running.";
+        return 0;
+    }
+
+    QLocalServer::removeServer(instanceName);
+    QLocalServer instanceServer;
+    if (!instanceServer.listen(instanceName)) {
+        qWarning() << "[EShot] Could not create single-instance lock:" << instanceServer.errorString();
+    }
+    QObject::connect(&instanceServer, &QLocalServer::newConnection, [&instanceServer]() {
+        while (QLocalSocket *socket = instanceServer.nextPendingConnection()) {
+            socket->disconnectFromServer();
+            socket->deleteLater();
+        }
+    });
 
     EShotApp eshotApp;
 

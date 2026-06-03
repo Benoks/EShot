@@ -284,6 +284,9 @@ void FirstRunWizard::onDisableWindowsPrintScreenSnipping()
         QMessageBox::warning(this, QStringLiteral("EShot"), TranslationManager::errTitle());
         return;
     }
+    HotkeyManager::instance().reRegisterCaptureHotkey(
+        HotkeyManager::instance().captureModifiers(),
+        HotkeyManager::instance().captureVirtualKey());
     updatePrintScreenConflictUi();
 }
 

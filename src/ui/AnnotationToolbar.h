@@ -27,6 +27,7 @@ public:
     void setBlurIntensity(int intensity);
     void setColor(const QColor &color);
     void setSelectionLocked(bool locked);
+    bool hasVisibleTools() const;
 
 signals:
     void toolSelected(int toolId);

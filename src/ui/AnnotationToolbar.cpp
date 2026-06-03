@@ -74,6 +74,15 @@ void AnnotationToolbar::refreshTools()
     adjustSize();
 }
 
+bool AnnotationToolbar::hasVisibleTools() const
+{
+    for (auto btn : m_toolButtons) {
+        if (btn && btn->isVisible())
+            return true;
+    }
+    return false;
+}
+
 void AnnotationToolbar::selectTool(int toolId)
 {
     for (auto it = m_toolButtons.begin(); it != m_toolButtons.end(); ++it) {
@@ -393,7 +402,7 @@ void AnnotationToolbar::setupUI()
     m_uploadButton->setIcon(QIcon(":/icons/upload.svg"));
     m_uploadButton->setIconSize(QSize(18, 18));
     m_uploadButton->setFixedSize(34, 34);
-    m_uploadButton->setToolTip(TranslationManager::uploadToImgur());
+    m_uploadButton->setToolTip(TranslationManager::uploadToService());
     m_uploadButton->setCursor(Qt::PointingHandCursor);
     m_uploadButton->setProperty("action", "upload");
     m_uploadButton->setStyleSheet(R"(
@@ -661,6 +670,6 @@ void AnnotationToolbar::refreshToolTips()
     if (m_eyedropperButton) m_eyedropperButton->setToolTip(TranslationManager::toolEyedropper());
     if (m_lockButton) m_lockButton->setToolTip(TranslationManager::actionLock());
     if (m_ocrButton) m_ocrButton->setToolTip(TranslationManager::actionOcr());
-    if (m_uploadButton) m_uploadButton->setToolTip(TranslationManager::uploadToImgur());
+    if (m_uploadButton) m_uploadButton->setToolTip(TranslationManager::uploadToService());
     if (m_gifButton) m_gifButton->setToolTip(TranslationManager::recordingStartTitle());
 }

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(EShot VERSION 2.4.2 LANGUAGES CXX)
+project(EShot VERSION 2.4.3 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -20,7 +20,6 @@ set(SOURCES
     src/core/HotkeyManager.cpp
     src/core/OcrEngine.cpp
     src/core/ImageUploader.cpp
-    src/core/ImgurUploader.cpp
     src/core/CatboxUploader.cpp
     src/core/UguuUploader.cpp
     src/capture/CaptureOverlay.cpp
@@ -42,7 +41,6 @@ set(HEADERS
     src/core/HotkeyManager.h
     src/core/OcrEngine.h
     src/core/ImageUploader.h
-    src/core/ImgurUploader.h
     src/core/CatboxUploader.h
     src/core/UguuUploader.h
     src/capture/CaptureOverlay.h

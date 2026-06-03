@@ -330,16 +330,6 @@ QWidget* SettingsDialog::createGeneralTab()
     accessLayout->addWidget(m_highContrastCheck);
     layout->addWidget(accessGroup);
 
-    // Tray icon
-    QGroupBox *trayGroup = new QGroupBox(TranslationManager::trayIcon());
-    QVBoxLayout *trayLayout = new QVBoxLayout(trayGroup);
-    m_trayIconCombo = new QComboBox();
-    m_trayIconCombo->addItem(TranslationManager::trayIconDark(), "dark");
-    m_trayIconCombo->addItem(TranslationManager::trayIconLight(), "light");
-    m_trayIconCombo->setToolTip(TranslationManager::tipTrayIcon());
-    trayLayout->addWidget(m_trayIconCombo);
-    layout->addWidget(trayGroup);
-
     // Import/export settings
     QGroupBox *impExpGroup = new QGroupBox(TranslationManager::settingsExportImport());
     QHBoxLayout *impExpLayout = new QHBoxLayout(impExpGroup);
@@ -454,7 +444,7 @@ QWidget* SettingsDialog::createRecordingTab()
     QFormLayout *recForm = new QFormLayout(recGroup);
 
     m_recordingFpsSpin = new QSpinBox();
-    m_recordingFpsSpin->setRange(5, 15);
+    m_recordingFpsSpin->setRange(1, 30);
     m_recordingFpsSpin->setSuffix(QStringLiteral(" fps"));
     m_recordingFpsSpin->setValue(10);
     recForm->addRow(TranslationManager::recordingFps(), m_recordingFpsSpin);
@@ -466,23 +456,16 @@ QWidget* SettingsDialog::createRecordingTab()
     m_recordingMaxSecSpin->setValue(30);
     recForm->addRow(TranslationManager::recordingMaxTime(), m_recordingMaxSecSpin);
 
-    m_recordingLoopSpin = new QSpinBox();
-    m_recordingLoopSpin->setRange(0, 99);
-    m_recordingLoopSpin->setSpecialValueText(TranslationManager::recordingLoopInfinite());
-    m_recordingLoopSpin->setValue(0);
-    recForm->addRow(TranslationManager::recordingLoop(), m_recordingLoopSpin);
+    m_recordingLoopCombo = new QComboBox();
+    m_recordingLoopCombo->addItem(TranslationManager::recordingLoopInfinite(), 0);
+    m_recordingLoopCombo->addItem(QStringLiteral("1"), 1);
+    m_recordingLoopCombo->addItem(QStringLiteral("2"), 2);
+    m_recordingLoopCombo->addItem(QStringLiteral("3"), 3);
+    m_recordingLoopCombo->addItem(QStringLiteral("5"), 5);
+    m_recordingLoopCombo->addItem(QStringLiteral("10"), 10);
+    recForm->addRow(TranslationManager::recordingLoop(), m_recordingLoopCombo);
 
     layout->addWidget(recGroup);
-
-    QGroupBox *imgGroup = new QGroupBox(TranslationManager::uploadToImgur());
-    QFormLayout *imgForm = new QFormLayout(imgGroup);
-
-    m_imgurClientIdEdit = new QLineEdit();
-    m_imgurClientIdEdit->setEchoMode(QLineEdit::Password);
-    m_imgurClientIdEdit->setPlaceholderText(TranslationManager::imgurClientIdDesc());
-    imgForm->addRow(TranslationManager::imgurClientId(), m_imgurClientIdEdit);
-
-    layout->addWidget(imgGroup);
 
     layout->addStretch();
     return tab;
@@ -647,10 +630,12 @@ void SettingsDialog::loadSettings()
         m_recordingFpsSpin->setValue(m_settings->value("recordingFps", 10).toInt());
     if (m_recordingMaxSecSpin)
         m_recordingMaxSecSpin->setValue(m_settings->value("recordingMaxSeconds", 30).toInt());
-    if (m_recordingLoopSpin)
-        m_recordingLoopSpin->setValue(m_settings->value("recordingLoop", 0).toInt());
-    if (m_imgurClientIdEdit)
-        m_imgurClientIdEdit->setText(m_settings->value("imgurClientId").toString());
+    if (m_recordingLoopCombo) {
+        const int loop = m_settings->value("recordingLoop", 0).toInt();
+        int idx = m_recordingLoopCombo->findData(loop);
+        if (idx < 0) idx = 0;
+        m_recordingLoopCombo->setCurrentIndex(idx);
+    }
 
     bool jpeg = (fmt == "JPEG");
     m_qualitySlider->setEnabled(jpeg);
@@ -664,9 +649,6 @@ void SettingsDialog::loadSettings()
     if (ci >= 0) m_crosshairStyleCombo->setCurrentIndex(ci);
 
     m_highContrastCheck->setChecked(m_settings->value("highContrast", false).toBool());
-    QString trayIcon = m_settings->value("trayIconStyle", "dark").toString();
-    int ti = m_trayIconCombo->findData(trayIcon);
-    if (ti >= 0) m_trayIconCombo->setCurrentIndex(ti);
 
     QStringList visibleTools = m_settings->value("visibleTools",
         QStringList{"Pen","Arrow","Line","Rectangle","Circle","Text","Highlighter","SemiRect","Blur","Counter","Eraser"})
@@ -683,6 +665,9 @@ void SettingsDialog::loadSettings()
     m_hotkeyStatusLabel->setText(TranslationManager::hotkeyValid());
     m_hotkeyStatusLabel->setStyleSheet("color: #4caf50; font-size: 12px;");
     updatePrintScreenConflictUi();
+    HotkeyManager::instance().reRegisterCaptureHotkey(
+        HotkeyManager::instance().captureModifiers(),
+        HotkeyManager::instance().captureVirtualKey());
 }
 
 void SettingsDialog::onHotkeyChanged(const QKeySequence &seq)
@@ -825,7 +810,6 @@ void SettingsDialog::onSave()
     m_settings->setValue("overlayOpacity",     m_opacitySlider->value());
     m_settings->setValue("crosshairStyle",     m_crosshairStyleCombo->currentData().toString());
     m_settings->setValue("highContrast",       m_highContrastCheck->isChecked());
-    m_settings->setValue("trayIconStyle",      m_trayIconCombo->currentData().toString());
 
     QStringList visibleTools;
     for (int i = 0; i < m_toolVisibilityList->count(); ++i) {
@@ -842,10 +826,8 @@ void SettingsDialog::onSave()
         m_settings->setValue("recordingFps", m_recordingFpsSpin->value());
     if (m_recordingMaxSecSpin)
         m_settings->setValue("recordingMaxSeconds", m_recordingMaxSecSpin->value());
-    if (m_recordingLoopSpin)
-        m_settings->setValue("recordingLoop", m_recordingLoopSpin->value());
-    if (m_imgurClientIdEdit)
-        m_settings->setValue("imgurClientId", m_imgurClientIdEdit->text().trimmed());
+    if (m_recordingLoopCombo)
+        m_settings->setValue("recordingLoop", m_recordingLoopCombo->currentData().toInt());
 
     if (!setAutoStartTask(m_autoStartCheck->isChecked())) {
         QMessageBox::warning(this, TranslationManager::errTitle(),
@@ -893,7 +875,6 @@ void SettingsDialog::onExportSettings()
     obj["overlayOpacity"] = m_opacitySlider->value();
     obj["crosshairStyle"] = m_crosshairStyleCombo->currentData().toString();
     obj["highContrast"] = m_highContrastCheck->isChecked();
-    obj["trayIconStyle"] = m_trayIconCombo->currentData().toString();
 
     QJsonArray tools;
     for (int i = 0; i < m_toolVisibilityList->count(); ++i) {
@@ -914,10 +895,8 @@ void SettingsDialog::onExportSettings()
         obj["recordingFps"] = m_recordingFpsSpin->value();
     if (m_recordingMaxSecSpin)
         obj["recordingMaxSeconds"] = m_recordingMaxSecSpin->value();
-    if (m_recordingLoopSpin)
-        obj["recordingLoop"] = m_recordingLoopSpin->value();
-    if (m_imgurClientIdEdit)
-        obj["imgurClientId"] = m_imgurClientIdEdit->text().trimmed();
+    if (m_recordingLoopCombo)
+        obj["recordingLoop"] = m_recordingLoopCombo->currentData().toInt();
 
     QFile file(path);
     if (file.open(QIODevice::WriteOnly)) {
@@ -978,10 +957,6 @@ void SettingsDialog::onImportSettings()
         if (ci >= 0) m_crosshairStyleCombo->setCurrentIndex(ci);
     }
     if (obj.contains("highContrast")) m_highContrastCheck->setChecked(obj["highContrast"].toBool());
-    if (obj.contains("trayIconStyle")) {
-        int ti = m_trayIconCombo->findData(obj["trayIconStyle"].toString());
-        if (ti >= 0) m_trayIconCombo->setCurrentIndex(ti);
-    }
     if (obj.contains("visibleTools")) {
         QJsonArray tools = obj["visibleTools"].toArray();
         QStringList visibleTools;
@@ -1000,10 +975,11 @@ void SettingsDialog::onImportSettings()
         m_recordingFpsSpin->setValue(obj["recordingFps"].toInt());
     if (m_recordingMaxSecSpin && obj.contains("recordingMaxSeconds"))
         m_recordingMaxSecSpin->setValue(obj["recordingMaxSeconds"].toInt());
-    if (m_recordingLoopSpin && obj.contains("recordingLoop"))
-        m_recordingLoopSpin->setValue(obj["recordingLoop"].toInt());
-    if (m_imgurClientIdEdit && obj.contains("imgurClientId"))
-        m_imgurClientIdEdit->setText(obj["imgurClientId"].toString());
+    if (m_recordingLoopCombo && obj.contains("recordingLoop")) {
+        int idx = m_recordingLoopCombo->findData(obj["recordingLoop"].toInt());
+        if (idx < 0) idx = 0;
+        m_recordingLoopCombo->setCurrentIndex(idx);
+    }
 
     QMessageBox::information(this, TranslationManager::importSettings(), TranslationManager::importSuccess());
 }

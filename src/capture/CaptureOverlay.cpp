@@ -432,6 +432,12 @@ void CaptureOverlay::paintEvent(QPaintEvent *event)
             int th = fm.height() + 8;
             int lx = selRect.left();
             int ly = selRect.top() - th - 4;
+            if (ly < 4)
+                ly = selRect.top() + 4;
+            if (lx + tw > width() - 4)
+                lx = width() - tw - 4;
+            if (lx < 4)
+                lx = 4;
 
             painter.setPen(Qt::NoPen);
             painter.setBrush(QColor(0,0,0,180));
@@ -701,7 +707,7 @@ void CaptureOverlay::mouseMoveEvent(QMouseEvent *event)
         if (selRect.contains(event->pos())) {
             QPoint rel = event->pos() - selRect.topLeft();
             if (m_annotationEngine->currentTool() == AnnotationEngine::Eraser) {
-                if (m_annotationEngine->eraseAnnotationAt(rel))
+                if ((event->buttons() & Qt::LeftButton) && m_annotationEngine->eraseAnnotationAt(rel))
                     update();
             } else {
                 m_annotationEngine->continueDraw(rel);
@@ -762,10 +768,7 @@ void CaptureOverlay::mouseReleaseEvent(QMouseEvent *event)
             rel.setY(qBound(0, rel.y(), selRect.height()));
 
             if (m_annotationEngine && m_annotationEngine->currentTool() == AnnotationEngine::Eraser) {
-                if (selRect.contains(event->pos())) {
-                    if (m_annotationEngine->eraseAnnotationAt(rel))
-                        update();
-                }
+                updateUndoRedoState();
             } else if (m_annotationEngine && m_annotationEngine->currentTool() == AnnotationEngine::Text) {
                 if (selRect.contains(event->pos())) {
                     m_textEditPosition = event->pos();
@@ -970,6 +973,12 @@ void CaptureOverlay::showToolbar()
     QRect selRect = normalizedSelectionRect();
     int margin = 12;
 
+    m_toolbar->refreshTools();
+    if (!m_toolbar->hasVisibleTools()) {
+        hideToolbar();
+        return;
+    }
+
     // --- Bottom toolbar: below the selection, centered ---
     m_toolbar->adjustSize();
     int th = m_toolbar->height();
@@ -1004,19 +1013,26 @@ void CaptureOverlay::showToolbar()
         int px = selRect.right() + margin;
         int py = selRect.center().y() - ph / 2;
 
-        // If it does not fit to the right, try left
-        if (px + pw > width() - 5)
-            px = selRect.left() - pw - margin;
-
-        // If it also does not fit left, dock to right inside the frame
-        if (px < 5) {
+        // If it does not fit to the right, dock inside the selected frame.
+        if (px + pw > width() - 5 || px + pw > selRect.right()) {
             px = selRect.right() - pw - 2;
-            py = selRect.top() + 5;
         }
 
-        // Check top/bottom bounds (when inside the frame)
-        if (py < selRect.top() + 2) py = selRect.top() + 2;
-        if (py + ph > selRect.bottom() - 2) py = selRect.bottom() - ph - 2;
+        if (px < selRect.left() + 2)
+            px = selRect.left() + 2;
+        if (px + pw > width() - 5)
+            px = width() - pw - 5;
+        if (px < 5)
+            px = 5;
+
+        if (py < selRect.top() + 2)
+            py = selRect.top() + 2;
+        if (py + ph > selRect.bottom() - 2)
+            py = selRect.bottom() - ph - 2;
+        if (py < 5)
+            py = 5;
+        if (py + ph > height() - 5)
+            py = height() - ph - 5;
 
         m_actionPanel->move(px, py);
         m_actionPanel->show();

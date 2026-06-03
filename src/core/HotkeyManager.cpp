@@ -92,7 +92,7 @@ void HotkeyManager::unregisterAllHotkeys()
 
 bool HotkeyManager::reRegisterCaptureHotkey(UINT modifiers, UINT virtualKey)
 {
-    if (modifiers == m_captureModifiers && virtualKey == m_captureVirtualKey)
+    if (modifiers == m_captureModifiers && virtualKey == m_captureVirtualKey && m_registeredHotkeys.contains(HOTKEY_CAPTURE))
         return true;
 
     unregisterHotkey(HOTKEY_CAPTURE);

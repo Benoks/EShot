@@ -2,7 +2,7 @@
 
 Fast, lightweight screenshot and annotation tool for Windows.
 
-[![Version](https://img.shields.io/badge/version-2.4.2-blue.svg)](https://github.com/Benoks/EShot/releases)
+[![Version](https://img.shields.io/badge/version-2.4.3-blue.svg)](https://github.com/Benoks/EShot/releases)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-lightgrey.svg)](#)
 [![Qt](https://img.shields.io/badge/Qt-6.x-green.svg)](https://www.qt.io/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
@@ -19,7 +19,7 @@ EShot is built for quick captures, clean annotations, OCR, uploads, pinned scree
 - Annotation tools: pen, arrow, line, rectangle, ellipse, text, blur, crop, eyedropper, and semi-transparent highlight
 - GIF recording for selected screen areas
 - OCR with bundled Tesseract support and optional language packs
-- Upload support for Catbox, Uguu, and Imgur
+- Upload support for Catbox and Uguu
 - Pin screenshots on top of the desktop
 - Custom global hotkeys
 - Start with Windows through Task Scheduler
@@ -77,9 +77,8 @@ Upload screenshots directly from the capture toolbar. Supported services:
 
 - Catbox
 - Uguu
-- Imgur
 
-Catbox and Uguu work without an API key. Imgur requires a Client ID.
+Catbox and Uguu work without an API key.
 
 ### Pin to Desktop
 

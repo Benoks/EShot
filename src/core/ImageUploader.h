@@ -13,7 +13,6 @@ class ImageUploader : public QObject {
 public:
     enum class Provider {
         Catbox,
-        Imgur,
         Uguu,
     };
 

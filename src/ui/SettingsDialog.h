@@ -83,9 +83,6 @@ private:
     // Accessibility
     QCheckBox *m_highContrastCheck = nullptr;
 
-    // Tray icon
-    QComboBox *m_trayIconCombo = nullptr;
-
     // UI - Tool visibility
     QListWidget *m_toolVisibilityList = nullptr;
 
@@ -98,8 +95,7 @@ private:
     // Recording
     QSpinBox *m_recordingFpsSpin = nullptr;
     QSpinBox *m_recordingMaxSecSpin = nullptr;
-    QSpinBox *m_recordingLoopSpin = nullptr;
-    QLineEdit *m_imgurClientIdEdit = nullptr;
+    QComboBox *m_recordingLoopCombo = nullptr;
 
     // Language
     QComboBox *m_langCombo = nullptr;

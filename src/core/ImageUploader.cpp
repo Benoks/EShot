@@ -82,10 +82,6 @@ ImageUploader *ImageUploader::create(Provider p, QObject *parent)
         extern ImageUploader *createCatboxUploader(QObject *parent);
         return createCatboxUploader(parent);
     }
-    case Provider::Imgur: {
-        extern ImageUploader *createImgurUploader(QObject *parent);
-        return createImgurUploader(parent);
-    }
     case Provider::Uguu: {
         extern ImageUploader *createUguuUploader(QObject *parent);
         return createUguuUploader(parent);

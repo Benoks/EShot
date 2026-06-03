@@ -14,6 +14,9 @@
 #include <QVersionNumber>
 #include <QNetworkRequest>
 #include <QUrl>
+#include <QDateTime>
+#include <QList>
+#include <algorithm>
 
 static bool isNewerVersion(const QString &latest, const QString &current)
 {
@@ -161,6 +164,20 @@ void AboutDialog::setupUI()
 void AboutDialog::onCheckForUpdates()
 {
     if (!m_checkUpdateBtn) return;
+
+    static QList<QDateTime> recentChecks;
+    const QDateTime now = QDateTime::currentDateTimeUtc();
+    recentChecks.erase(std::remove_if(recentChecks.begin(), recentChecks.end(),
+        [now](const QDateTime &dt) { return dt.secsTo(now) > 600; }), recentChecks.end());
+    if (recentChecks.size() >= 3) {
+        setUpdateStatus(
+            TranslationManager::currentLanguage() == TranslationManager::Turkish
+                ? QString::fromUtf8("GÃ¼ncelleme kontrolÃ¼ sÄ±nÄ±rÄ±na ulaÅŸÄ±ldÄ±. BirkaÃ§ dakika sonra tekrar deneyin.")
+                : QStringLiteral("Update check limit reached. Try again in a few minutes."),
+            QStringLiteral("#ff9800"));
+        return;
+    }
+    recentChecks.append(now);
 
     m_checkUpdateBtn->setEnabled(false);
     m_checkUpdateBtn->setText(QStringLiteral("..."));
