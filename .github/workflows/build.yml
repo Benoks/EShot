@@ -105,10 +105,37 @@ jobs:
 
       # Bundle the Qt runtime + the MSVC redistributable DLLs next to the exe so
       # the artifact (and installer) is self-contained.
+      #
+      # For the cross-compiled arm64 Qt, windeployqt is not in the target's bin
+      # (it's a host-only x64 tool installed by --autodesktop). We locate it and
+      # point it at the target Qt via --qtpaths so it deploys arm64 DLLs, per
+      # Qt's documented cross-deployment flow.
       - name: Deploy Qt runtime
-        run: >
-          windeployqt --release --no-translations
-          "${{ env.DIST_DIR }}/bin/EShot.exe"
+        shell: pwsh
+        run: |
+          $exe   = "${{ env.DIST_DIR }}/bin/EShot.exe"
+          $qtBin = Join-Path $env:QT_ROOT_DIR 'bin'
+          $wdq   = Join-Path $qtBin 'windeployqt.exe'
+          $extra = @()
+
+          if (-not (Test-Path $wdq)) {
+            # Cross build: find the host windeployqt under the autodesktop Qt.
+            $verRoot = Split-Path $env:QT_ROOT_DIR -Parent
+            $wdq = (Get-ChildItem $verRoot -Recurse -Filter windeployqt.exe |
+                    Select-Object -First 1).FullName
+            if (-not $wdq) { throw "windeployqt.exe not found under $verRoot" }
+
+            # The target bin ships qtpaths as a .bat wrapper that invokes the
+            # host x64 qtpaths with -qtconf target_qt.conf (so it reports arm64
+            # paths). windeployqt accepts the .bat and deploys arm64 DLLs.
+            $qtpaths = Get-ChildItem $qtBin -Filter 'qtpaths6.bat' |
+                       Select-Object -First 1
+            if (-not $qtpaths) { throw "target qtpaths6.bat not found in $qtBin" }
+            $extra = @('--qtpaths', $qtpaths.FullName)
+          }
+
+          Write-Host "Using $wdq $extra"
+          & $wdq --release --no-translations @extra $exe
 
       - name: Upload portable build
         uses: actions/upload-artifact@v4
