@@ -35,6 +35,8 @@
 #include <QLocalServer>
 #include <QLocalSocket>
 #include <QProcess>
+#include <QEvent>
+#include <QCursor>
 
 #include "core/HotkeyManager.h"
 #include "core/TranslationManager.h"
@@ -848,6 +850,56 @@ static void runOcrTest(const QString &imagePath)
     loop.exec();
 }
 
+namespace {
+
+// Keeps top-level dialogs fully on-screen. Qt's default window placement can
+// drop a dialog's title bar above the top of the screen on Windows-on-ARM,
+// leaving the window impossible to move, minimize or close. This global filter
+// recenters any dialog that would otherwise appear (partly) off the available
+// screen area, and leaves correctly-placed dialogs untouched.
+class DialogPlacementFilter : public QObject {
+public:
+    using QObject::QObject;
+
+protected:
+    bool eventFilter(QObject *obj, QEvent *ev) override
+    {
+        if (ev->type() == QEvent::Show) {
+            if (QDialog *dlg = qobject_cast<QDialog *>(obj)) {
+                if (dlg->isWindow() && !dlg->property("eshotPlaced").toBool()) {
+                    dlg->setProperty("eshotPlaced", true);
+                    placeOnScreen(dlg);
+                }
+            }
+        }
+        return QObject::eventFilter(obj, ev);
+    }
+
+private:
+    static void placeOnScreen(QWidget *w)
+    {
+        QScreen *scr = w->screen();
+        if (!scr) scr = QGuiApplication::screenAt(QCursor::pos());
+        if (!scr) scr = QGuiApplication::primaryScreen();
+        if (!scr) return;
+
+        const QRect work = scr->availableGeometry();
+        QRect frame = w->frameGeometry();   // includes the title bar
+        if (work.contains(frame))
+            return;                         // already fully visible
+
+        frame.moveCenter(work.center());
+        // Clamp so the frame (and thus the title bar) stays within the work area.
+        if (frame.left()   < work.left())   frame.moveLeft(work.left());
+        if (frame.top()    < work.top())    frame.moveTop(work.top());
+        if (frame.right()  > work.right())  frame.moveRight(work.right());
+        if (frame.bottom() > work.bottom()) frame.moveBottom(work.bottom());
+        w->move(frame.topLeft());           // move() positions the frame for top-level windows
+    }
+};
+
+} // namespace
+
 int main(int argc, char *argv[])
 {
 #ifdef Q_OS_WIN
@@ -860,6 +912,11 @@ int main(int argc, char *argv[])
         Qt::HighDpiScaleFactorRoundingPolicy::PassThrough);
 
     QApplication app(argc, argv);
+
+    // Keep dialogs on-screen regardless of Qt's default placement (see filter).
+    static DialogPlacementFilter dialogPlacementFilter;
+    app.installEventFilter(&dialogPlacementFilter);
+
     app.setApplicationName("EShot");
     app.setApplicationVersion(ESHOT_VERSION_STRING);
     app.setOrganizationName("EShot");

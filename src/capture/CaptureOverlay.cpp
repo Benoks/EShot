@@ -1244,8 +1244,10 @@ void CaptureOverlay::performCapture()
     captureAllScreens();
 
     // Pass screenshot to annotation engine (for blur effect)
-    if (m_annotationEngine)
+    if (m_annotationEngine) {
         m_annotationEngine->setScreenSnapshot(m_screenSnapshot);
+        m_annotationEngine->setSnapshotScale(m_dpr);
+    }
 
     setGeometry(m_virtualDesktopRect);
     show();
@@ -1274,17 +1276,25 @@ void CaptureOverlay::captureAllScreens()
     int vw = GetSystemMetrics(SM_CXVIRTUALSCREEN);
     int vh = GetSystemMetrics(SM_CYVIRTUALSCREEN);
 
+    QScreen *primary = QGuiApplication::primaryScreen();
+    m_dpr = primary ? primary->devicePixelRatio() : 1.0;
+
     if (vw <= 0 || vh <= 0) {
-        QScreen *p = QGuiApplication::primaryScreen();
-        if (p) {
-            m_virtualDesktopRect = p->geometry();
-            m_screenSnapshot = p->grabWindow(0);
+        if (primary) {
+            m_dpr = primary->devicePixelRatio();
+            m_virtualDesktopRect = primary->geometry();   // logical
+            m_screenSnapshot = primary->grabWindow(0);     // physical pixels
             m_screenSnapshot.setDevicePixelRatio(1.0);
         }
         return;
     }
 
-    m_virtualDesktopRect = QRect(vx, vy, vw, vh);
+    // GetSystemMetrics returns physical pixels (the process is per-monitor DPI
+    // aware), but the overlay window and all selection math run in logical
+    // pixels. Keep the snapshot at full physical resolution and store the
+    // virtual desktop in logical coordinates, bridged by m_dpr.
+    m_virtualDesktopRect = QRect(qRound(vx / m_dpr), qRound(vy / m_dpr),
+                                 qRound(vw / m_dpr), qRound(vh / m_dpr));
 
     HDC hScreen = GetDC(nullptr);
     if (!hScreen) return;
@@ -1352,7 +1362,8 @@ void CaptureOverlay::paintEvent(QPaintEvent *event)
     if (!selRect.isEmpty()) {
         // Clean area
         painter.setCompositionMode(QPainter::CompositionMode_Source);
-        painter.drawPixmap(selRect, m_screenSnapshot, selRect);
+        // selRect is logical (overlay space); the snapshot is physical pixels.
+        painter.drawPixmap(selRect, m_screenSnapshot, logicalToSnapshot(selRect));
         painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
 
         // Annotation
@@ -1441,9 +1452,10 @@ void CaptureOverlay::paintEvent(QPaintEvent *event)
         QPoint cur = mapFromGlobal(QCursor::pos());
         if (rect().contains(cur)) {
             QColor pixelColor;
-            if (m_screenSnapshot.rect().contains(cur)) {
+            const QPoint curDev = logicalToSnapshot(cur);
+            if (m_screenSnapshot.rect().contains(curDev)) {
                 QImage img = m_screenSnapshot.toImage();
-                pixelColor = QColor(img.pixel(cur));
+                pixelColor = QColor(img.pixel(curDev));
             }
             if (pixelColor.isValid()) {
                 // Circle
@@ -1485,9 +1497,10 @@ void CaptureOverlay::mousePressEvent(QMouseEvent *event)
 
         // Eyedropper click — pick color and return to normal mode
         if (m_eyedropperActive) {
-            if (m_screenSnapshot.rect().contains(event->pos())) {
+            const QPoint pickDev = logicalToSnapshot(event->pos());
+            if (m_screenSnapshot.rect().contains(pickDev)) {
                 QImage img = m_screenSnapshot.toImage();
-                QColor c = QColor(img.pixel(event->pos()));
+                QColor c = QColor(img.pixel(pickDev));
                 if (c.isValid()) {
                     if (m_annotationEngine) m_annotationEngine->setColor(c);
                     // Update color button in toolbar
@@ -1664,7 +1677,7 @@ void CaptureOverlay::mouseMoveEvent(QMouseEvent *event)
             
             int w = oldSel.width();
             int h = oldSel.height();
-            QRect bounds = m_screenSnapshot.rect();
+            QRect bounds = rect();   // logical overlay bounds
             newTopLeft.setX(qBound(bounds.left(), newTopLeft.x(), bounds.right() - w + 1));
             newTopLeft.setY(qBound(bounds.top(), newTopLeft.y(), bounds.bottom() - h + 1));
             m_selectionStart = newTopLeft;
@@ -1908,11 +1921,15 @@ QPixmap CaptureOverlay::getSelectedPixmap()
 {
     QRect selRect = normalizedSelectionRect();
     if (selRect.isEmpty()) return QPixmap();
-    QPixmap result = m_screenSnapshot.copy(selRect);
+    // Crop at full physical resolution (selRect is logical).
+    QPixmap result = m_screenSnapshot.copy(logicalToSnapshot(selRect));
     if (m_annotationEngine && m_annotationEngine->hasAnnotations()) {
         m_annotationEngine->setSelectionRect(selRect);
         QPainter p(&result);
         p.setRenderHint(QPainter::Antialiasing, true);
+        // Annotations are authored in logical coordinates; scale them up to the
+        // physical-resolution result.
+        p.scale(m_dpr, m_dpr);
         m_annotationEngine->render(&p, QPoint(0,0));
         p.end();
     }
@@ -2341,9 +2358,10 @@ QRect CaptureOverlay::normalizedSelectionRect() const
 QRect CaptureOverlay::monitorRectAt(const QPoint &pos) const
 {
 #ifdef Q_OS_WIN
+    // pos is logical (widget-local); Win32 monitor APIs work in physical pixels.
     POINT nativePoint = {
-        pos.x() + m_virtualDesktopRect.x(),
-        pos.y() + m_virtualDesktopRect.y()
+        (LONG)qRound((pos.x() + m_virtualDesktopRect.x()) * m_dpr),
+        (LONG)qRound((pos.y() + m_virtualDesktopRect.y()) * m_dpr)
     };
     HMONITOR monitor = MonitorFromPoint(nativePoint, MONITOR_DEFAULTTONULL);
     if (!monitor) return QRect();
@@ -2352,11 +2370,12 @@ QRect CaptureOverlay::monitorRectAt(const QPoint &pos) const
     info.cbSize = sizeof(info);
     if (!GetMonitorInfoW(monitor, &info)) return QRect();
 
+    // rcMonitor is physical; return a logical, widget-local rect.
     return QRect(
-        info.rcMonitor.left - m_virtualDesktopRect.x(),
-        info.rcMonitor.top - m_virtualDesktopRect.y(),
-        info.rcMonitor.right - info.rcMonitor.left,
-        info.rcMonitor.bottom - info.rcMonitor.top
+        qRound(info.rcMonitor.left / m_dpr) - m_virtualDesktopRect.x(),
+        qRound(info.rcMonitor.top / m_dpr) - m_virtualDesktopRect.y(),
+        qRound((info.rcMonitor.right - info.rcMonitor.left) / m_dpr),
+        qRound((info.rcMonitor.bottom - info.rcMonitor.top) / m_dpr)
     ).intersected(rect());
 #else
     for (QScreen *screen : QGuiApplication::screens()) {

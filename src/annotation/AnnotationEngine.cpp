@@ -568,10 +568,12 @@ void AnnotationEngine::drawBlurEffect(QPainter *painter, const QRect &rect, cons
         return;
     }
 
-    // Final capture: painter draws on a QPixmap
+    // Final capture: painter draws on a QPixmap (the cropped result). The
+    // painter may carry a scale transform on high-DPI displays, so map the blur
+    // target into the device's physical pixels before sampling it back.
     QPixmap *dev = dynamic_cast<QPixmap*>(painter->device());
     if (dev) {
-        QRect clamped = target.intersected(dev->rect());
+        QRect clamped = painter->transform().mapRect(target).intersected(dev->rect());
         if (!clamped.isEmpty()) {
             QPixmap region = dev->copy(clamped);
             if (!region.isNull()) {
@@ -581,16 +583,23 @@ void AnnotationEngine::drawBlurEffect(QPainter *painter, const QRect &rect, cons
                                            Qt::IgnoreAspectRatio, Qt::FastTransformation);
                 QImage mosaic = scaled.scaled(img.width(), img.height(),
                                               Qt::IgnoreAspectRatio, Qt::FastTransformation);
+                // clamped is in device pixels; draw it back bypassing the transform.
+                painter->save();
+                painter->resetTransform();
                 painter->drawPixmap(clamped.topLeft(), QPixmap::fromImage(mosaic));
+                painter->restore();
                 painter->restore();
                 return;
             }
         }
     }
 
-    // Live preview: take from m_screenSnapshot
+    // Live preview: take from m_screenSnapshot. target is in logical overlay
+    // coordinates; the snapshot is physical pixels scaled by m_snapshotScale.
     if (!m_screenSnapshot.isNull()) {
-        QRect sourceRect = target;
+        const qreal s = m_snapshotScale;
+        QRect sourceRect(qRound(target.x() * s), qRound(target.y() * s),
+                         qRound(target.width() * s), qRound(target.height() * s));
         QRect clamped = sourceRect.intersected(m_screenSnapshot.rect());
         if (!clamped.isEmpty()) {
             QPixmap region = m_screenSnapshot.copy(clamped);
@@ -601,7 +610,10 @@ void AnnotationEngine::drawBlurEffect(QPainter *painter, const QRect &rect, cons
                                            Qt::IgnoreAspectRatio, Qt::FastTransformation);
                 QImage mosaic = scaled.scaled(img.width(), img.height(),
                                               Qt::IgnoreAspectRatio, Qt::FastTransformation);
-                painter->drawPixmap(clamped.topLeft(), QPixmap::fromImage(mosaic));
+                // Map the clamped physical region back to its logical destination.
+                QRectF dst(clamped.x() / s, clamped.y() / s,
+                           clamped.width() / s, clamped.height() / s);
+                painter->drawPixmap(dst, QPixmap::fromImage(mosaic), QRectF(mosaic.rect()));
                 painter->restore();
                 return;
             }
