@@ -852,11 +852,10 @@ static void runOcrTest(const QString &imagePath)
 
 namespace {
 
-// Keeps top-level dialogs fully on-screen. Qt's default window placement can
-// drop a dialog's title bar above the top of the screen on Windows-on-ARM,
-// leaving the window impossible to move, minimize or close. This global filter
-// recenters any dialog that would otherwise appear (partly) off the available
-// screen area, and leaves correctly-placed dialogs untouched.
+// Keeps top-level dialogs on-screen. Qt's default window placement can drop a
+// dialog's title bar above the top of the screen on Windows-on-ARM, leaving the
+// window impossible to move, minimize or close. This global filter centers each
+// dialog in the active screen's work area on first show.
 class DialogPlacementFilter : public QObject {
 public:
     using QObject::QObject;
@@ -868,7 +867,10 @@ protected:
             if (QDialog *dlg = qobject_cast<QDialog *>(obj)) {
                 if (dlg->isWindow() && !dlg->property("eshotPlaced").toBool()) {
                     dlg->setProperty("eshotPlaced", true);
-                    placeOnScreen(dlg);
+                    // Defer until the window is mapped so frameGeometry() (which
+                    // includes the title bar) reflects the real decorated size.
+                    QPointer<QDialog> ptr(dlg);
+                    QTimer::singleShot(0, dlg, [ptr]() { if (ptr) placeOnScreen(ptr); });
                 }
             }
         }
@@ -884,9 +886,9 @@ private:
         if (!scr) return;
 
         const QRect work = scr->availableGeometry();
-        QRect frame = w->frameGeometry();   // includes the title bar
-        if (work.contains(frame))
-            return;                         // already fully visible
+        QRect frame = w->frameGeometry();   // includes the title bar once mapped
+        if (frame.size().isEmpty())
+            frame.setSize(w->size());
 
         frame.moveCenter(work.center());
         // Clamp so the frame (and thus the title bar) stays within the work area.
