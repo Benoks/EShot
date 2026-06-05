@@ -9,7 +9,9 @@
 #define MyAppPublisher "EShot"
 #define MyAppURL       "https://github.com/Benoks/EShot"
 #define MyAppExeName   "EShot.exe"
+#ifndef ReleaseDir
 #define ReleaseDir     "EShot_Release"
+#endif
 
 [Setup]
 AppId={{E5H0T-SCAP-2024-GUID-000000000001}
