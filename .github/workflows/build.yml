@@ -76,13 +76,23 @@ jobs:
           restore-keys: vcpkg-tesseract-${{ matrix.vcpkg_triplet }}-
 
       - name: Stage Tesseract (${{ matrix.arch }}, vcpkg native)
+        shell: pwsh
         run: |
           & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install tesseract:${{ matrix.vcpkg_triplet }}
+          if ($LASTEXITCODE -ne 0) { throw "vcpkg install failed" }
           $inst = "$env:VCPKG_INSTALLATION_ROOT\installed\${{ matrix.vcpkg_triplet }}"
-          New-Item -ItemType Directory -Force third_party/tesseract | Out-Null
-          # tesseract.exe lives in tools/; its runtime DLLs (leptonica, curl, ...) are in bin/
-          Copy-Item "$inst\tools\tesseract\tesseract.exe" third_party/tesseract/ -Force
-          Copy-Item "$inst\bin\*.dll"                      third_party/tesseract/ -Force
+          $dst  = "third_party/tesseract"
+          New-Item -ItemType Directory -Force $dst | Out-Null
+          # vcpkg_copy_tools makes tools/tesseract self-contained (exe + its
+          # dependency DLLs: tesseract55, leptonica, libcurl, archive, zlib, ...).
+          Copy-Item "$inst\tools\tesseract\*" $dst -Recurse -Force
+          # Belt-and-suspenders: also pull any shared release DLLs from bin.
+          Copy-Item "$inst\bin\*.dll" $dst -Force -ErrorAction SilentlyContinue
+          Write-Host "=== staged tesseract files ==="
+          Get-ChildItem $dst -File | Select-Object -ExpandProperty Name
+          # Validate the DLL closure by launching the binary natively on the runner.
+          & "$dst/tesseract.exe" --version
+          if ($LASTEXITCODE -ne 0) { throw "tesseract.exe failed to launch (incomplete DLL closure)" }
 
       # Visual Studio 2022 generator with -A picks the target architecture, so
       # no separate MSVC/Ninja setup is needed (VS2022 is preinstalled on both
@@ -136,6 +146,24 @@ jobs:
 
           Write-Host "Using $wdq $extra"
           & $wdq --release --no-translations @extra $exe
+
+      # On arm64 windeployqt drops vc_redist.arm64.exe instead of the loose CRT
+      # DLLs (which it does deploy on x64). Copy the arm64 MSVC runtime next to
+      # the exe so the app-local layout — and the installer — matches x64.
+      - name: Bundle MSVC runtime (arm64)
+        if: matrix.arch == 'arm64'
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vs = & $vswhere -latest -property installationPath
+          $crt = Get-ChildItem -Path "$vs\VC\Redist\MSVC" -Recurse -Directory -Filter 'Microsoft.VC*.CRT' |
+                 Where-Object { $_.FullName -match '\\arm64\\' } |
+                 Sort-Object FullName -Descending | Select-Object -First 1
+          if (-not $crt) { throw "arm64 MSVC CRT redist not found under $vs" }
+          Write-Host "Copying CRT from $($crt.FullName)"
+          Copy-Item "$($crt.FullName)\*.dll" "${{ env.DIST_DIR }}/bin/" -Force
+          # vc_redist.arm64.exe is no longer needed once the DLLs are app-local.
+          Remove-Item "${{ env.DIST_DIR }}/bin/vc_redist.arm64.exe" -ErrorAction SilentlyContinue
 
       - name: Upload portable build
         uses: actions/upload-artifact@v4
