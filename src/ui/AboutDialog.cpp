@@ -32,7 +32,8 @@ AboutDialog::AboutDialog(QWidget *parent) : QDialog(parent)
     setWindowTitle(TranslationManager::aboutTitle());
     setWindowIcon(QIcon(":/icons/pen.svg"));
     setFixedSize(380, 370);
-    setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);
+    // Strip context help and maximize button (to prevent ARM64 Snap Layouts crash)
+    setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint & ~Qt::WindowMaximizeButtonHint);
 
     setupUI();
 }

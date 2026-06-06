@@ -20,6 +20,8 @@
 FirstRunWizard::FirstRunWizard(QWidget *parent)
     : QDialog(parent)
 {
+    // Strip maximize button to prevent Windows 11 ARM64 Snap Layouts crash
+    setWindowFlags(windowFlags() & ~Qt::WindowMaximizeButtonHint);
     setWindowTitle(TranslationManager::wizardTitle());
     setWindowIcon(QIcon(":/icons/pen.svg"));
     setFixedSize(560, 430);
