@@ -164,11 +164,12 @@ QStringList windowsAudioInputDevices()
 
 SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent)
 {
-    setWindowFlags((windowFlags() & ~Qt::Dialog) | Qt::Window);
+    // Strip maximize button to prevent Windows 11 ARM64 Snap Layouts crash when dragging near top edge
+    setWindowFlags(windowFlags() & ~Qt::WindowMaximizeButtonHint);
     setWindowTitle(TranslationManager::settingsTitle());
     setWindowIcon(QIcon(":/icons/pen.svg"));
-    setMinimumSize(560, 580);
-    setMaximumSize(750, 720);
+    setMinimumSize(560, 400); // Small enough to fit on 150% scaled 768p screens
+    setMaximumSize(750, 800);
 
     m_settings = new QSettings("EShot", "EShot", this);
     setupUI();
@@ -176,24 +177,6 @@ SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent)
 }
 
 SettingsDialog::~SettingsDialog() {}
-
-void SettingsDialog::showEvent(QShowEvent *event)
-{
-    QDialog::showEvent(event);
-    
-#ifdef Q_OS_WIN
-    if (QScreen *screen = QGuiApplication::primaryScreen()) {
-        QRect avail = screen->availableGeometry();
-        QRect geom = frameGeometry();
-        // Center the window if its titlebar is off-screen (y < avail.y()) or if it's completely out of bounds
-        if (geom.y() < avail.y() || !avail.intersects(geom)) {
-            int x = avail.center().x() - width() / 2;
-            int y = avail.center().y() - height() / 2;
-            move(x, y);
-        }
-    }
-#endif
-}
 
 QString SettingsDialog::resolvePatternPreview(const QString &pattern) const
 {

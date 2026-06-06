@@ -39,9 +39,6 @@ private slots:
     void onImportSettings();
     void onThemeChanged();
 
-protected:
-    void showEvent(QShowEvent *event) override;
-
 private:
     void loadSettings();
     void setupUI();

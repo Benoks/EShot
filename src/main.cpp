@@ -172,6 +172,16 @@ public slots:
     void onSettingsRequested()
     {
         SettingsDialog dlg;
+        dlg.show();
+        QApplication::processEvents(); // Let ARM64 DWM finalize frame geometry
+        if (QScreen *screen = QGuiApplication::screenAt(QCursor::pos())) {
+            if (!screen) screen = QGuiApplication::primaryScreen();
+            QRect avail = screen->availableGeometry();
+            int nx = avail.center().x() - dlg.width() / 2;
+            int ny = avail.center().y() - dlg.height() / 2;
+            ny = qMax(avail.top() + 40, ny); // GUARANTEE title bar is grabbable
+            dlg.move(nx, ny);
+        }
         if (dlg.exec() == QDialog::Accepted) {
             loadSettings();
             if (!m_updateAvailable)
@@ -210,6 +220,16 @@ public slots:
     void onAboutRequested()
     {
         AboutDialog dlg;
+        dlg.show();
+        QApplication::processEvents();
+        if (QScreen *screen = QGuiApplication::screenAt(QCursor::pos())) {
+            if (!screen) screen = QGuiApplication::primaryScreen();
+            QRect avail = screen->availableGeometry();
+            int nx = avail.center().x() - dlg.width() / 2;
+            int ny = avail.center().y() - dlg.height() / 2;
+            ny = qMax(avail.top() + 40, ny);
+            dlg.move(nx, ny);
+        }
         dlg.exec();
     }
 
@@ -850,15 +870,7 @@ static void runOcrTest(const QString &imagePath)
 
 int main(int argc, char *argv[])
 {
-#ifdef Q_OS_WIN
-    SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-#endif
-    QCoreApplication::setAttribute(Qt::AA_UseHighDpiPixmaps, true);
-    QCoreApplication::setAttribute(Qt::AA_UseDesktopOpenGL, true);
-
-    QGuiApplication::setHighDpiScaleFactorRoundingPolicy(
-        Qt::HighDpiScaleFactorRoundingPolicy::PassThrough);
-
+    // Qt 6 handles High-DPI automatically. Legacy overrides removed to prevent Windows ARM DWM corruption.
     QApplication app(argc, argv);
     app.setApplicationName("EShot");
     app.setApplicationVersion(ESHOT_VERSION_STRING);
@@ -972,6 +984,16 @@ int main(int argc, char *argv[])
         // First-run wizard
     if (!silent && FirstRunWizard::shouldShow()) {
         FirstRunWizard wizard;
+        wizard.show();
+        QApplication::processEvents();
+        if (QScreen *screen = QGuiApplication::screenAt(QCursor::pos())) {
+            if (!screen) screen = QGuiApplication::primaryScreen();
+            QRect avail = screen->availableGeometry();
+            int nx = avail.center().x() - wizard.width() / 2;
+            int ny = avail.center().y() - wizard.height() / 2;
+            ny = qMax(avail.top() + 40, ny);
+            wizard.move(nx, ny);
+        }
         if (wizard.exec() == QDialog::Accepted) {
             // Wizard completed
         }
