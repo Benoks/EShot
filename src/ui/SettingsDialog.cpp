@@ -25,6 +25,8 @@
 #include <QIcon>
 #include <QGridLayout>
 #include <QScrollArea>
+#include <QScreen>
+#include <QShowEvent>
 #include <QFrame>
 #include <algorithm>
 
@@ -162,6 +164,7 @@ QStringList windowsAudioInputDevices()
 
 SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent)
 {
+    setWindowFlags((windowFlags() & ~Qt::Dialog) | Qt::Window);
     setWindowTitle(TranslationManager::settingsTitle());
     setWindowIcon(QIcon(":/icons/pen.svg"));
     setMinimumSize(560, 580);
@@ -173,6 +176,24 @@ SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent)
 }
 
 SettingsDialog::~SettingsDialog() {}
+
+void SettingsDialog::showEvent(QShowEvent *event)
+{
+    QDialog::showEvent(event);
+    
+#ifdef Q_OS_WIN
+    if (QScreen *screen = QGuiApplication::primaryScreen()) {
+        QRect avail = screen->availableGeometry();
+        QRect geom = frameGeometry();
+        // Center the window if its titlebar is off-screen (y < avail.y()) or if it's completely out of bounds
+        if (geom.y() < avail.y() || !avail.intersects(geom)) {
+            int x = avail.center().x() - width() / 2;
+            int y = avail.center().y() - height() / 2;
+            move(x, y);
+        }
+    }
+#endif
+}
 
 QString SettingsDialog::resolvePatternPreview(const QString &pattern) const
 {
