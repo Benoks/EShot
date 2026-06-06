@@ -854,6 +854,7 @@ int main(int argc, char *argv[])
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 #endif
     QCoreApplication::setAttribute(Qt::AA_UseHighDpiPixmaps, true);
+    QCoreApplication::setAttribute(Qt::AA_UseDesktopOpenGL, true);
 
     QGuiApplication::setHighDpiScaleFactorRoundingPolicy(
         Qt::HighDpiScaleFactorRoundingPolicy::PassThrough);
