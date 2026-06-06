@@ -147,23 +147,25 @@ jobs:
           Write-Host "Using $wdq $extra"
           & $wdq --release --no-translations @extra $exe
 
-      # On arm64 windeployqt drops vc_redist.arm64.exe instead of the loose CRT
-      # DLLs (which it does deploy on x64). Copy the arm64 MSVC runtime next to
-      # the exe so the app-local layout — and the installer — matches x64.
-      - name: Bundle MSVC runtime (arm64)
-        if: matrix.arch == 'arm64'
+      # windeployqt doesn't reliably deploy the loose MSVC CRT DLLs in CI: on
+      # arm64 it emits vc_redist.arm64.exe instead, and on x64 it skips them when
+      # it can't locate the redist (no vcvars env in this step). Copy the matching
+      # arch's MSVC runtime next to the exe so the app-local layout — and the
+      # installer — is complete on both architectures. (matrix.arch values "x64"
+      # and "arm64" match the VS redist folder names.)
+      - name: Bundle MSVC runtime
         shell: pwsh
         run: |
           $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
           $vs = & $vswhere -latest -property installationPath
           $crt = Get-ChildItem -Path "$vs\VC\Redist\MSVC" -Recurse -Directory -Filter 'Microsoft.VC*.CRT' |
-                 Where-Object { $_.FullName -match '\\arm64\\' } |
+                 Where-Object { $_.FullName -match '\\${{ matrix.arch }}\\' } |
                  Sort-Object FullName -Descending | Select-Object -First 1
-          if (-not $crt) { throw "arm64 MSVC CRT redist not found under $vs" }
+          if (-not $crt) { throw "${{ matrix.arch }} MSVC CRT redist not found under $vs" }
           Write-Host "Copying CRT from $($crt.FullName)"
           Copy-Item "$($crt.FullName)\*.dll" "${{ env.DIST_DIR }}/bin/" -Force
-          # vc_redist.arm64.exe is no longer needed once the DLLs are app-local.
-          Remove-Item "${{ env.DIST_DIR }}/bin/vc_redist.arm64.exe" -ErrorAction SilentlyContinue
+          # The redist bootstrapper isn't needed once the DLLs are app-local.
+          Remove-Item "${{ env.DIST_DIR }}/bin/vc_redist.*.exe" -ErrorAction SilentlyContinue
 
       - name: Upload portable build
         uses: actions/upload-artifact@v4

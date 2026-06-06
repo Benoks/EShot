@@ -25,6 +25,8 @@
 #include <QIcon>
 #include <QGridLayout>
 #include <QScrollArea>
+#include <QScreen>
+#include <QShowEvent>
 #include <QFrame>
 #include <algorithm>
 
@@ -162,10 +164,12 @@ QStringList windowsAudioInputDevices()
 
 SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent)
 {
+    // Strip maximize button to prevent Windows 11 ARM64 Snap Layouts crash when dragging near top edge
+    setWindowFlags(windowFlags() & ~Qt::WindowMaximizeButtonHint);
     setWindowTitle(TranslationManager::settingsTitle());
     setWindowIcon(QIcon(":/icons/pen.svg"));
-    setMinimumSize(560, 580);
-    setMaximumSize(750, 720);
+    setMinimumSize(560, 400); // Small enough to fit on 150% scaled 768p screens
+    setMaximumSize(750, 800);
 
     m_settings = new QSettings("EShot", "EShot", this);
     setupUI();

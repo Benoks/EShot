@@ -16,14 +16,20 @@
 #include <QFont>
 #include <QDir>
 #include <QMessageBox>
+#include <QTimer>
+#include <QGuiApplication>
+#include <QScreen>
+#include <QCursor>
 
 FirstRunWizard::FirstRunWizard(QWidget *parent)
     : QDialog(parent)
 {
+    // Strip maximize button to prevent Windows 11 ARM64 Snap Layouts crash
+    setWindowFlags(windowFlags() & ~Qt::WindowMaximizeButtonHint);
     setWindowTitle(TranslationManager::wizardTitle());
     setWindowIcon(QIcon(":/icons/pen.svg"));
-    setFixedSize(560, 430);
-    setModal(true);
+    setMinimumSize(560, 300); // Small enough to fit highly scaled low-res screens
+    setMaximumSize(750, 600);
 
     setupUi();
     loadDefaults();
