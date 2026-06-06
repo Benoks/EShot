@@ -7,7 +7,6 @@
 #include <QRect>
 #include <QTimer>
 #include <QList>
-#include <QVector>
 #include <QTextEdit>
 #include <QPointer>
 
@@ -73,26 +72,22 @@ private:
     QPixmap m_screenSnapshot;
     QPoint m_selectionStart;
     QPoint m_selectionEnd;
-    QRect m_selectionAnchorScreenRect;
     bool m_isSelecting;
     bool m_selectionComplete;
     bool m_ignoreNextMouseRelease;
     QPoint m_moveOffset;
 
     QRect m_virtualDesktopRect;
-    struct ScreenMapping {
-        QRect logicalRect;
-        QRect snapshotRect;
-        qreal dpr = 1.0;
-    };
-
-    QVector<ScreenMapping> m_screenMappings;
-    // Fallback device-pixel ratio bridging the overlay's logical coordinate
-    // system to the physical-pixel m_screenSnapshot.
+    // Device-pixel ratio bridging the overlay's logical coordinate system
+    // (window geometry, mouse, selection) to the physical-pixel m_screenSnapshot.
     qreal m_dpr = 1.0;
-    QRect logicalToSnapshot(const QRect &r) const;
-    QPoint logicalToSnapshot(const QPoint &p) const;
-    qreal snapshotScaleForRect(const QRect &r) const;
+    QRect logicalToSnapshot(const QRect &r) const {
+        return QRect(qRound(r.x() * m_dpr), qRound(r.y() * m_dpr),
+                     qRound(r.width() * m_dpr), qRound(r.height() * m_dpr));
+    }
+    QPoint logicalToSnapshot(const QPoint &p) const {
+        return QPoint(qRound(p.x() * m_dpr), qRound(p.y() * m_dpr));
+    }
 
     AnnotationToolbar *m_toolbar;
     QWidget *m_actionPanel;

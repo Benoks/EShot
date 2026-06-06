@@ -52,35 +52,6 @@
 #endif
 
 namespace {
-#ifdef Q_OS_WIN
-QRect physicalMonitorRectForDeviceName(const QString &deviceName)
-{
-    struct EnumData {
-        QString target;
-        QRect rect;
-    } data{deviceName, QRect()};
-
-    EnumDisplayMonitors(nullptr, nullptr, [](HMONITOR monitor, HDC, LPRECT, LPARAM param) -> BOOL {
-        auto *data = reinterpret_cast<EnumData*>(param);
-        MONITORINFOEXW info = {};
-        info.cbSize = sizeof(info);
-        if (GetMonitorInfoW(monitor, &info)) {
-            const QString name = QString::fromWCharArray(info.szDevice);
-            if (name.compare(data->target, Qt::CaseInsensitive) == 0) {
-                data->rect = QRect(info.rcMonitor.left,
-                                   info.rcMonitor.top,
-                                   info.rcMonitor.right - info.rcMonitor.left,
-                                   info.rcMonitor.bottom - info.rcMonitor.top);
-                return FALSE;
-            }
-        }
-        return TRUE;
-    }, reinterpret_cast<LPARAM>(&data));
-
-    return data.rect;
-}
-#endif
-
 class SideTabButton : public QPushButton
 {
 public:
@@ -927,12 +898,7 @@ void CaptureOverlay::updateToolSettingsDrawerPosition()
         return;
 
     QRect selRect = normalizedSelectionRect();
-    QRect monitorRect = m_selectionAnchorScreenRect.isValid()
-        ? m_selectionAnchorScreenRect
-        : monitorRectAt(selRect.center());
-    if (monitorRect.isEmpty())
-        monitorRect = rect();
-    monitorRect = monitorRect.intersected(rect());
+    QRect monitorRect = monitorRectAt(selRect.center());
     if (monitorRect.isEmpty())
         monitorRect = rect();
 
@@ -942,12 +908,10 @@ void CaptureOverlay::updateToolSettingsDrawerPosition()
     int bx = drawerOpen
         ? monitorRect.left() + m_toolSettingsDrawer->width() - 1
         : monitorRect.left();
-    const int buttonMaxX = qMax(monitorRect.left(), monitorRect.right() + 1 - m_toolSettingsButton->width());
-    const int buttonMaxY = qMax(monitorRect.top() + 32, monitorRect.bottom() - m_toolSettingsButton->height() - 32);
-    bx = qBound(monitorRect.left(), bx, buttonMaxX);
+    bx = qBound(0, bx, width() - m_toolSettingsButton->width());
     int by = qBound(monitorRect.top() + 32,
                     selRect.center().y() - m_toolSettingsButton->height() / 2,
-                    buttonMaxY);
+                    monitorRect.bottom() - m_toolSettingsButton->height() - 32);
     m_toolSettingsButton->move(bx, by);
     m_toolSettingsButton->show();
     m_toolSettingsButton->raise();
@@ -960,8 +924,7 @@ void CaptureOverlay::updateToolSettingsDrawerPosition()
 
     int dx = monitorRect.left();
     int dy = m_toolSettingsButton->y() - 26;
-    const int drawerMaxY = qMax(monitorRect.top() + 5, monitorRect.bottom() + 1 - m_toolSettingsDrawer->height() - 5);
-    dy = qBound(monitorRect.top() + 5, dy, drawerMaxY);
+    dy = qBound(5, dy, height() - m_toolSettingsDrawer->height() - 5);
     m_toolSettingsDrawer->move(dx, dy);
     m_toolSettingsDrawer->raise();
     m_toolSettingsButton->raise();
@@ -973,12 +936,7 @@ void CaptureOverlay::setToolSettingsDrawerVisible(bool visible)
         return;
 
     QRect selRect = normalizedSelectionRect();
-    QRect monitorRect = m_selectionAnchorScreenRect.isValid()
-        ? m_selectionAnchorScreenRect
-        : monitorRectAt(selRect.center());
-    if (monitorRect.isEmpty())
-        monitorRect = rect();
-    monitorRect = monitorRect.intersected(rect());
+    QRect monitorRect = monitorRectAt(selRect.center());
     if (monitorRect.isEmpty())
         monitorRect = rect();
 
@@ -987,17 +945,14 @@ void CaptureOverlay::setToolSettingsDrawerVisible(bool visible)
     const int drawerH = m_toolSettingsDrawer->height();
     const int drawerVisibleX = monitorRect.left();
     const int drawerHiddenX = monitorRect.left() - drawerW;
-    const int buttonMaxX = qMax(monitorRect.left(), monitorRect.right() + 1 - m_toolSettingsButton->width());
-    const int buttonMaxY = qMax(monitorRect.top() + 32, monitorRect.bottom() - m_toolSettingsButton->height() - 32);
-    const int drawerMaxY = qMax(monitorRect.top() + 5, monitorRect.bottom() + 1 - drawerH - 5);
-    const int buttonClosedX = qBound(monitorRect.left(), monitorRect.left(), buttonMaxX);
-    const int buttonOpenX = qBound(monitorRect.left(), monitorRect.left() + drawerW - 1, buttonMaxX);
-    const int drawerY = qBound(monitorRect.top() + 5,
+    const int buttonClosedX = qBound(0, monitorRect.left(), width() - m_toolSettingsButton->width());
+    const int buttonOpenX = qBound(0, monitorRect.left() + drawerW - 1, width() - m_toolSettingsButton->width());
+    const int drawerY = qBound(5,
                                m_toolSettingsButton->y() - 26,
-                               drawerMaxY);
+                               height() - drawerH - 5);
     const int buttonY = qBound(monitorRect.top() + 32,
                                m_toolSettingsButton->y(),
-                               buttonMaxY);
+                               monitorRect.bottom() - m_toolSettingsButton->height() - 32);
 
     if (m_toolSettingsAnimation)
         m_toolSettingsAnimation->stop();
@@ -1234,7 +1189,6 @@ void CaptureOverlay::startCapture()
     m_selectionLocked = false;
     m_selectionStart = QPoint();
     m_selectionEnd = QPoint();
-    m_selectionAnchorScreenRect = QRect();
     m_eyedropperActive = false;
 
     if (m_textEdit) m_textEdit->hide();
@@ -1323,26 +1277,24 @@ void CaptureOverlay::captureAllScreens()
     int vh = GetSystemMetrics(SM_CYVIRTUALSCREEN);
 
     QScreen *primary = QGuiApplication::primaryScreen();
-    m_dpr = 1.0;
-    m_screenMappings.clear();
-
-    const auto screens = QGuiApplication::screens();
+    m_dpr = primary ? primary->devicePixelRatio() : 1.0;
 
     if (vw <= 0 || vh <= 0) {
         if (primary) {
-            m_screenSnapshot = primary->grabWindow(0);
+            m_dpr = primary->devicePixelRatio();
+            m_virtualDesktopRect = primary->geometry();   // logical
+            m_screenSnapshot = primary->grabWindow(0);     // physical pixels
             m_screenSnapshot.setDevicePixelRatio(1.0);
-            m_virtualDesktopRect = QRect(primary->geometry().topLeft(), m_screenSnapshot.size());
-            const QRect localRect(QPoint(0, 0), m_screenSnapshot.size());
-            m_screenMappings.append({localRect, localRect, 1.0});
         }
         return;
     }
 
-    // The Win32 capture and the overlay selection are kept in physical pixels.
-    // This avoids selecting only the logical-size portion of a scaled monitor
-    // (for example 1536x864 on a 1920x1080 display at 125%).
-    m_virtualDesktopRect = QRect(vx, vy, vw, vh);
+    // GetSystemMetrics returns physical pixels (the process is per-monitor DPI
+    // aware), but the overlay window and all selection math run in logical
+    // pixels. Keep the snapshot at full physical resolution and store the
+    // virtual desktop in logical coordinates, bridged by m_dpr.
+    m_virtualDesktopRect = QRect(qRound(vx / m_dpr), qRound(vy / m_dpr),
+                                 qRound(vw / m_dpr), qRound(vh / m_dpr));
 
     HDC hScreen = GetDC(nullptr);
     if (!hScreen) return;
@@ -1370,23 +1322,10 @@ void CaptureOverlay::captureAllScreens()
     m_screenSnapshot = QPixmap::fromImage(img);
     m_screenSnapshot.setDevicePixelRatio(1.0);
 
-    for (QScreen *screen : screens) {
-        const QRect physicalRect = physicalMonitorRectForDeviceName(screen->name());
-        if (physicalRect.isEmpty())
-            continue;
-
-        const QRect snapshotRect = physicalRect.translated(-vx, -vy).intersected(m_screenSnapshot.rect());
-        if (snapshotRect.isEmpty())
-            continue;
-
-        m_screenMappings.append({snapshotRect, snapshotRect, 1.0});
-    }
-
     DeleteObject(hBmp);
     DeleteDC(hMem);
     ReleaseDC(nullptr, hScreen);
 #else
-    m_screenMappings.clear();
     QRect vr;
     auto screens = QGuiApplication::screens();
     for (auto *s : screens) {
@@ -1409,70 +1348,13 @@ void CaptureOverlay::captureAllScreens()
 #endif
 }
 
-QRect CaptureOverlay::logicalToSnapshot(const QRect &rect) const
-{
-    if (rect.isEmpty())
-        return QRect();
-
-    QRect mapped;
-    for (const auto &screen : m_screenMappings) {
-        const QRect logicalPart = rect.intersected(screen.logicalRect);
-        if (logicalPart.isEmpty())
-            continue;
-
-        const QPointF offset(logicalPart.x() - screen.logicalRect.x(),
-                             logicalPart.y() - screen.logicalRect.y());
-        const QRect snapshotPart(
-            screen.snapshotRect.x() + qRound(offset.x() * screen.dpr),
-            screen.snapshotRect.y() + qRound(offset.y() * screen.dpr),
-            qRound(logicalPart.width() * screen.dpr),
-            qRound(logicalPart.height() * screen.dpr));
-        mapped = mapped.united(snapshotPart);
-    }
-
-    if (!mapped.isEmpty())
-        return mapped.intersected(m_screenSnapshot.rect());
-
-    return QRect(qRound(rect.x() * m_dpr), qRound(rect.y() * m_dpr),
-                 qRound(rect.width() * m_dpr), qRound(rect.height() * m_dpr))
-        .intersected(m_screenSnapshot.rect());
-}
-
-QPoint CaptureOverlay::logicalToSnapshot(const QPoint &point) const
-{
-    for (const auto &screen : m_screenMappings) {
-        if (!screen.logicalRect.contains(point))
-            continue;
-
-        const QPoint offset = point - screen.logicalRect.topLeft();
-        return QPoint(screen.snapshotRect.x() + qRound(offset.x() * screen.dpr),
-                      screen.snapshotRect.y() + qRound(offset.y() * screen.dpr));
-    }
-
-    return QPoint(qRound(point.x() * m_dpr), qRound(point.y() * m_dpr));
-}
-
-qreal CaptureOverlay::snapshotScaleForRect(const QRect &rect) const
-{
-    for (const auto &screen : m_screenMappings) {
-        if (screen.logicalRect.intersects(rect))
-            return screen.dpr;
-    }
-    return m_dpr;
-}
-
 void CaptureOverlay::paintEvent(QPaintEvent *event)
 {
     Q_UNUSED(event);
     QPainter painter(this);
     painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
 
-    if (m_screenMappings.isEmpty()) {
-        painter.drawPixmap(0, 0, width(), height(), m_screenSnapshot);
-    } else {
-        for (const auto &mapping : m_screenMappings)
-            painter.drawPixmap(mapping.logicalRect, m_screenSnapshot, mapping.snapshotRect);
-    }
+    painter.drawPixmap(0, 0, width(), height(), m_screenSnapshot);
     painter.fillRect(rect(), QColor(0, 0, 0, m_overlayOpacity));
 
     QRect selRect = normalizedSelectionRect();
@@ -1487,7 +1369,6 @@ void CaptureOverlay::paintEvent(QPaintEvent *event)
         // Annotation
         if (m_annotationEngine && m_selectionComplete) {
             painter.setClipRect(selRect);
-            m_annotationEngine->setSnapshotScale(snapshotScaleForRect(selRect));
             m_annotationEngine->render(&painter, selRect.topLeft());
             if (m_annotationEngine->selectedIndex() >= 0) {
                 QRect annotationRect = m_annotationEngine->boundingRectOf(m_annotationEngine->selectedIndex())
@@ -1682,7 +1563,6 @@ void CaptureOverlay::mousePressEvent(QMouseEvent *event)
                 m_resizeMode = ResNewSelection;
                 m_selectionStart = event->pos();
                 m_selectionEnd = event->pos();
-                m_selectionAnchorScreenRect = monitorRectAt(event->pos());
                 hideToolbar();
                 if (m_annotationEngine) m_annotationEngine->clear();
                 update();
@@ -1711,7 +1591,6 @@ void CaptureOverlay::mousePressEvent(QMouseEvent *event)
             m_isSelecting = true;
             m_selectionStart = event->pos();
             m_selectionEnd = event->pos();
-            m_selectionAnchorScreenRect = monitorRectAt(event->pos());
             hideToolbar();
             update();
         }
@@ -1728,7 +1607,6 @@ void CaptureOverlay::mousePressEvent(QMouseEvent *event)
             m_isSelecting = false;
             m_selectionLocked = false;
             m_selectionStart = m_selectionEnd = QPoint();
-            m_selectionAnchorScreenRect = QRect();
             if (m_toolbar) m_toolbar->setSelectionLocked(false);
             hideToolbar();
             if (m_annotationEngine) m_annotationEngine->clear();
@@ -1942,7 +1820,6 @@ void CaptureOverlay::keyPressEvent(QKeyEvent *event)
             m_isSelecting = false;
             m_selectionLocked = false;
             m_selectionStart = m_selectionEnd = QPoint();
-            m_selectionAnchorScreenRect = QRect();
             if (m_toolbar) m_toolbar->setSelectionLocked(false);
             hideToolbar();
             if (m_annotationEngine) m_annotationEngine->clear();
@@ -2052,7 +1929,7 @@ QPixmap CaptureOverlay::getSelectedPixmap()
         p.setRenderHint(QPainter::Antialiasing, true);
         // Annotations are authored in logical coordinates; scale them up to the
         // physical-resolution result.
-        p.scale(snapshotScaleForRect(selRect), snapshotScaleForRect(selRect));
+        p.scale(m_dpr, m_dpr);
         m_annotationEngine->render(&p, QPoint(0,0));
         p.end();
     }
@@ -2100,14 +1977,6 @@ void CaptureOverlay::showToolbar()
     if (!m_toolbar) return;
     QRect selRect = normalizedSelectionRect();
     int margin = 12;
-    QRect toolbarBounds = m_selectionAnchorScreenRect.isValid()
-        ? m_selectionAnchorScreenRect
-        : monitorRectAt(selRect.center());
-    if (!toolbarBounds.isValid())
-        toolbarBounds = rect();
-    toolbarBounds = toolbarBounds.intersected(rect()).adjusted(5, 5, -5, -5);
-    if (!toolbarBounds.isValid())
-        toolbarBounds = rect().adjusted(5, 5, -5, -5);
 
     m_toolbar->refreshTools();
 
@@ -2121,27 +1990,17 @@ void CaptureOverlay::showToolbar()
         int tx = selRect.center().x() - toolbarWidth / 2;
         int ty = selRect.bottom() + margin;
 
-        // Keep the toolbar on the monitor where the selection started. This
-        // avoids unusable buttons when a selection spans multiple displays.
-        if (toolbarWidth <= toolbarBounds.width()) {
-            if (tx < toolbarBounds.left()) tx = toolbarBounds.left();
-            if (tx + toolbarWidth > toolbarBounds.right() + 1)
-                tx = toolbarBounds.right() + 1 - toolbarWidth;
-        } else {
-            tx = toolbarBounds.left();
-        }
-        if (ty + th > toolbarBounds.bottom() + 1) {
+        // Check screen bounds
+        if (tx < 5) tx = 5;
+        if (tx + toolbarWidth > width() - 5) tx = width() - toolbarWidth - 5;
+        if (ty + th > height() - 5) {
             // If it does not fit below, try above
             ty = selRect.top() - th - margin;
         }
-        if (ty < toolbarBounds.top()) {
+        if (ty < 5) {
             // If it also does not fit above, dock to bottom inside the frame
             ty = selRect.bottom() - th - 2;
         }
-        if (ty + th > toolbarBounds.bottom() + 1)
-            ty = toolbarBounds.bottom() + 1 - th;
-        if (ty < toolbarBounds.top())
-            ty = toolbarBounds.top();
 
         m_toolbar->setFixedWidth(toolbarWidth);
         m_toolbar->move(tx, ty);
@@ -2161,9 +2020,9 @@ void CaptureOverlay::showToolbar()
         int py = selRect.center().y() - ph / 2;
         bool dockedInside = false;
 
-        if (px + pw > toolbarBounds.right() + 1) {
+        if (px + pw > width() - 5) {
             int leftOutside = selRect.left() - margin - pw;
-            if (leftOutside >= toolbarBounds.left()) {
+            if (leftOutside >= 5) {
                 px = leftOutside;
             } else {
                 px = selRect.right() - pw - 2;
@@ -2173,19 +2032,19 @@ void CaptureOverlay::showToolbar()
 
         if (dockedInside && px < selRect.left() + 2)
             px = selRect.left() + 2;
-        if (px + pw > toolbarBounds.right() + 1)
-            px = toolbarBounds.right() + 1 - pw;
-        if (px < toolbarBounds.left())
-            px = toolbarBounds.left();
+        if (px + pw > width() - 5)
+            px = width() - pw - 5;
+        if (px < 5)
+            px = 5;
 
         if (dockedInside && py < selRect.top() + 2)
             py = selRect.top() + 2;
         if (dockedInside && py + ph > selRect.bottom() - 2)
             py = selRect.bottom() - ph - 2;
-        if (py < toolbarBounds.top())
-            py = toolbarBounds.top();
-        if (py + ph > toolbarBounds.bottom() + 1)
-            py = toolbarBounds.bottom() + 1 - ph;
+        if (py < 5)
+            py = 5;
+        if (py + ph > height() - 5)
+            py = height() - ph - 5;
 
         if (toolbarRect.isValid()) {
             auto panelRectAt = [&](int y) {
@@ -2194,7 +2053,7 @@ void CaptureOverlay::showToolbar()
             auto inBounds = [&](int y) {
                 if (dockedInside)
                     return y >= selRect.top() + 2 && y + ph <= selRect.bottom() - 2;
-                return y >= toolbarBounds.top() && y + ph <= toolbarBounds.bottom() + 1;
+                return y >= 5 && y + ph <= height() - 5;
             };
             auto tryY = [&](int candidate, int &outY) {
                 if (!inBounds(candidate))
@@ -2241,7 +2100,6 @@ void CaptureOverlay::finishCapture()
     hide();
     m_selectionComplete = false;
     m_isSelecting = false;
-    m_selectionAnchorScreenRect = QRect();
     hideToolbar();
     cancelTextEdit();
 
@@ -2269,7 +2127,6 @@ void CaptureOverlay::cancelCapture()
     hide();
     m_selectionComplete = false;
     m_isSelecting = false;
-    m_selectionAnchorScreenRect = QRect();
     hideToolbar();
     cancelTextEdit();
     emit captureCancelled();
@@ -2501,27 +2358,25 @@ QRect CaptureOverlay::normalizedSelectionRect() const
 QRect CaptureOverlay::monitorRectAt(const QPoint &pos) const
 {
 #ifdef Q_OS_WIN
-    for (const auto &screen : m_screenMappings) {
-        if (screen.logicalRect.contains(pos))
-            return screen.logicalRect.intersected(rect());
-    }
+    // pos is logical (widget-local); Win32 monitor APIs work in physical pixels.
     POINT nativePoint = {
-        static_cast<LONG>(pos.x() + m_virtualDesktopRect.x()),
-        static_cast<LONG>(pos.y() + m_virtualDesktopRect.y())
+        (LONG)qRound((pos.x() + m_virtualDesktopRect.x()) * m_dpr),
+        (LONG)qRound((pos.y() + m_virtualDesktopRect.y()) * m_dpr)
     };
     HMONITOR monitor = MonitorFromPoint(nativePoint, MONITOR_DEFAULTTONULL);
-    if (!monitor)
-        return QRect();
+    if (!monitor) return QRect();
 
     MONITORINFO info = {};
     info.cbSize = sizeof(info);
-    if (!GetMonitorInfoW(monitor, &info))
-        return QRect();
+    if (!GetMonitorInfoW(monitor, &info)) return QRect();
 
-    return QRect(info.rcMonitor.left - m_virtualDesktopRect.x(),
-                 info.rcMonitor.top - m_virtualDesktopRect.y(),
-                 info.rcMonitor.right - info.rcMonitor.left,
-                 info.rcMonitor.bottom - info.rcMonitor.top).intersected(rect());
+    // rcMonitor is physical; return a logical, widget-local rect.
+    return QRect(
+        qRound(info.rcMonitor.left / m_dpr) - m_virtualDesktopRect.x(),
+        qRound(info.rcMonitor.top / m_dpr) - m_virtualDesktopRect.y(),
+        qRound((info.rcMonitor.right - info.rcMonitor.left) / m_dpr),
+        qRound((info.rcMonitor.bottom - info.rcMonitor.top) / m_dpr)
+    ).intersected(rect());
 #else
     for (QScreen *screen : QGuiApplication::screens()) {
         QRect geometry = screen->geometry();
@@ -2553,7 +2408,6 @@ void CaptureOverlay::selectMonitorAt(const QPoint &pos)
     m_resizeMode = ResNone;
     m_selectionStart = monitorRect.topLeft();
     m_selectionEnd = monitorRect.bottomRight();
-    m_selectionAnchorScreenRect = monitorRect;
 
     if (m_captureMode == ModeRecording) {
         finishCapture();
