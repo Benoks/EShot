@@ -78,6 +78,16 @@ private:
     QPoint m_moveOffset;
 
     QRect m_virtualDesktopRect;
+    // Device-pixel ratio bridging the overlay's logical coordinate system
+    // (window geometry, mouse, selection) to the physical-pixel m_screenSnapshot.
+    qreal m_dpr = 1.0;
+    QRect logicalToSnapshot(const QRect &r) const {
+        return QRect(qRound(r.x() * m_dpr), qRound(r.y() * m_dpr),
+                     qRound(r.width() * m_dpr), qRound(r.height() * m_dpr));
+    }
+    QPoint logicalToSnapshot(const QPoint &p) const {
+        return QPoint(qRound(p.x() * m_dpr), qRound(p.y() * m_dpr));
+    }
 
     AnnotationToolbar *m_toolbar;
     QWidget *m_actionPanel;

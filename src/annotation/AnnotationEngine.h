@@ -78,6 +78,9 @@ public:
     QRect boundingRectOf(int index) const;
 
     void setScreenSnapshot(const QPixmap &snapshot);
+    // Ratio of physical snapshot pixels to logical annotation coordinates, so
+    // the blur tool samples the correct snapshot region on high-DPI displays.
+    void setSnapshotScale(qreal scale) { m_snapshotScale = scale; }
     void setSelectionRect(const QRect &rect);
     QPixmap screenSnapshot() const { return m_screenSnapshot; }
 
@@ -128,6 +131,7 @@ private:
     int m_selectedIndex;
     QPixmap m_screenSnapshot;
     QRect m_selectionRect;
+    qreal m_snapshotScale = 1.0;
 };
 
 #endif

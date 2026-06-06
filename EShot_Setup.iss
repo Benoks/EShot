@@ -9,7 +9,9 @@
 #define MyAppPublisher "EShot"
 #define MyAppURL       "https://github.com/Benoks/EShot"
 #define MyAppExeName   "EShot.exe"
+#ifndef ReleaseDir
 #define ReleaseDir     "EShot_Release"
+#endif
 
 [Setup]
 AppId={{E5H0T-SCAP-2024-GUID-000000000001}
@@ -152,7 +154,7 @@ Source: "{#ReleaseDir}\ffmpeg\*";             DestDir: "{app}\ffmpeg";          
 
 ; Tesseract OCR engine (only when ocrengine task is selected)
 Source: "{#ReleaseDir}\tesseract\tesseract.exe";       DestDir: "{app}\tesseract";       Flags: ignoreversion; Tasks: ocrengine; Check: ShouldInstallOcrEngine
-Source: "{#ReleaseDir}\tesseract\winpath.exe";         DestDir: "{app}\tesseract";       Flags: ignoreversion; Tasks: ocrengine; Check: ShouldInstallOcrEngine
+Source: "{#ReleaseDir}\tesseract\winpath.exe";         DestDir: "{app}\tesseract";       Flags: ignoreversion skipifsourcedoesntexist; Tasks: ocrengine; Check: ShouldInstallOcrEngine
 Source: "{#ReleaseDir}\tesseract\*.dll";               DestDir: "{app}\tesseract";       Flags: ignoreversion; Tasks: ocrengine; Check: ShouldInstallOcrEngine
 Source: "{#ReleaseDir}\tesseract\tessdata\eng.traineddata"; DestDir: "{app}\tesseract\tessdata"; Flags: ignoreversion; Tasks: ocrengine\lang_eng; Check: ShouldInstallOcrLangEng
 Source: "{#ReleaseDir}\tesseract\tessdata\tur.traineddata"; DestDir: "{app}\tesseract\tessdata"; Flags: ignoreversion; Tasks: ocrengine\lang_tur; Check: ShouldInstallOcrLangTur
@@ -183,6 +185,10 @@ Filename: "{cmd}"; Parameters: "/C taskkill /F /IM {#MyAppExeName}"; Flags: runh
 Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command ""Unregister-ScheduledTask -TaskName '{#MyAppName}' -Confirm:$false -ErrorAction SilentlyContinue"""; Flags: runhidden; RunOnceId: "DeleteEShotStartupTask"
 
 [Code]
+var
+  GOcrPreinstalled: Boolean;
+  GInstallStateFrozen: Boolean;
+
 function IsInstalledFile(RelativePath: String): Boolean;
 begin
   Result := FileExists(ExpandConstant('{app}\' + RelativePath));
@@ -212,7 +218,13 @@ end;
 
 function ShouldInstallOcrEngine: Boolean;
 begin
-  Result := not IsInstalledFile('tesseract\tesseract.exe');
+  // Once installation begins, use the state frozen before any files were copied.
+  // Otherwise installing tesseract.exe (an earlier [Files] entry) makes this
+  // return False and the following tesseract\*.dll entry gets skipped.
+  if GInstallStateFrozen then
+    Result := not GOcrPreinstalled
+  else
+    Result := not IsInstalledFile('tesseract\tesseract.exe');
 end;
 
 function ShouldInstallFfmpeg: Boolean;
@@ -335,6 +347,10 @@ var
   ResultCode: Integer;
 begin
   Result := '';
+  // Freeze the "already installed" state before any files are copied
+  // (see ShouldInstallOcrEngine).
+  GOcrPreinstalled := IsInstalledFile('tesseract\tesseract.exe');
+  GInstallStateFrozen := True;
   // Close EShot if it is running
   Exec(ExpandConstant('{cmd}'), '/C taskkill /F /IM {#MyAppExeName}', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   // Brief wait so the file lock is released

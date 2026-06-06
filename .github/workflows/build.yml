@@ -1,0 +1,192 @@
+name: Build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+env:
+  APP_VERSION: '3.0.0'
+  QT_VERSION: '6.8.2'
+
+jobs:
+  build:
+    name: Build ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # x64 build on the standard Windows runner
+          - arch: x64
+            runner: windows-latest
+            cmake_arch: x64
+            qt_arch: win64_msvc2022_64
+            vcpkg_triplet: x64-windows
+            ffmpeg_url: 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip'
+
+          # ARM64 build on the native Windows 11 Arm runner (FFmpeg is native Arm)
+          - arch: arm64
+            runner: windows-11-arm
+            cmake_arch: ARM64
+            qt_arch: win64_msvc2022_arm64_cross_compiled
+            vcpkg_triplet: arm64-windows
+            ffmpeg_url: 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-winarm64-gpl.zip'
+
+    env:
+      BUILD_DIR: ${{ github.workspace }}/build
+      DIST_DIR: ${{ github.workspace }}/dist
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Qt 6 (qtbase covers Core/Gui/Widgets/Network — no extra modules needed).
+      # The arm64 arch is Qt's cross-compiled WoA package; --autodesktop pulls in
+      # the companion x64 host Qt that provides the build/deploy tools (moc, rcc,
+      # windeployqt), which run on the Arm runner via emulation. The flag is a
+      # documented no-op for the x64 arch.
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          host: windows
+          target: desktop
+          arch: ${{ matrix.qt_arch }}
+          extra: --autodesktop
+          cache: true
+
+      # Stage the bundled third-party binaries into the locations CMake's
+      # EXISTS() checks look for, so they get copied + installed automatically.
+      # tessdata/*.traineddata is already committed under third_party/tesseract.
+      - name: Stage FFmpeg (${{ matrix.arch }}, native)
+        run: |
+          curl -L -o ffmpeg.zip "${{ matrix.ffmpeg_url }}"
+          Expand-Archive ffmpeg.zip -DestinationPath ffmpeg_extract -Force
+          New-Item -ItemType Directory -Force third_party/ffmpeg/bin | Out-Null
+          Copy-Item (Get-ChildItem -Recurse ffmpeg_extract/*/bin/*.exe) third_party/ffmpeg/bin/ -Force
+
+      # Build Tesseract natively from source with vcpkg for both arches.
+      # Cache the binary archives so we don't recompile leptonica/tesseract every run.
+      - name: Cache vcpkg archives
+        uses: actions/cache@v4
+        with:
+          path: ~/AppData/Local/vcpkg/archives
+          key: vcpkg-tesseract-${{ matrix.vcpkg_triplet }}-v1
+          restore-keys: vcpkg-tesseract-${{ matrix.vcpkg_triplet }}-
+
+      - name: Stage Tesseract (${{ matrix.arch }}, vcpkg native)
+        shell: pwsh
+        run: |
+          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install tesseract:${{ matrix.vcpkg_triplet }}
+          if ($LASTEXITCODE -ne 0) { throw "vcpkg install failed" }
+          $inst = "$env:VCPKG_INSTALLATION_ROOT\installed\${{ matrix.vcpkg_triplet }}"
+          $dst  = "third_party/tesseract"
+          New-Item -ItemType Directory -Force $dst | Out-Null
+          # vcpkg_copy_tools makes tools/tesseract self-contained (exe + its
+          # dependency DLLs: tesseract55, leptonica, libcurl, archive, zlib, ...).
+          Copy-Item "$inst\tools\tesseract\*" $dst -Recurse -Force
+          # Belt-and-suspenders: also pull any shared release DLLs from bin.
+          Copy-Item "$inst\bin\*.dll" $dst -Force -ErrorAction SilentlyContinue
+          Write-Host "=== staged tesseract files ==="
+          Get-ChildItem $dst -File | Select-Object -ExpandProperty Name
+          # Validate the DLL closure by launching the binary natively on the runner.
+          & "$dst/tesseract.exe" --version
+          if ($LASTEXITCODE -ne 0) { throw "tesseract.exe failed to launch (incomplete DLL closure)" }
+
+      # Visual Studio 2022 generator with -A picks the target architecture, so
+      # no separate MSVC/Ninja setup is needed (VS2022 is preinstalled on both
+      # the windows-latest and windows-11-arm images).
+      - name: Configure
+        run: >
+          cmake -S . -B "${{ env.BUILD_DIR }}"
+          -G "Visual Studio 17 2022"
+          -A ${{ matrix.cmake_arch }}
+          -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build "${{ env.BUILD_DIR }}" --config Release --parallel
+
+      - name: Install
+        run: >
+          cmake --install "${{ env.BUILD_DIR }}"
+          --config Release
+          --prefix "${{ env.DIST_DIR }}"
+
+      # Bundle the Qt runtime + the MSVC redistributable DLLs next to the exe so
+      # the artifact (and installer) is self-contained.
+      #
+      # For the cross-compiled arm64 Qt, windeployqt is not in the target's bin
+      # (it's a host-only x64 tool installed by --autodesktop). We locate it and
+      # point it at the target Qt via --qtpaths so it deploys arm64 DLLs, per
+      # Qt's documented cross-deployment flow.
+      - name: Deploy Qt runtime
+        shell: pwsh
+        run: |
+          $exe   = "${{ env.DIST_DIR }}/bin/EShot.exe"
+          $qtBin = Join-Path $env:QT_ROOT_DIR 'bin'
+          $wdq   = Join-Path $qtBin 'windeployqt.exe'
+          $extra = @()
+
+          if (-not (Test-Path $wdq)) {
+            # Cross build: find the host windeployqt under the autodesktop Qt.
+            $verRoot = Split-Path $env:QT_ROOT_DIR -Parent
+            $wdq = (Get-ChildItem $verRoot -Recurse -Filter windeployqt.exe |
+                    Select-Object -First 1).FullName
+            if (-not $wdq) { throw "windeployqt.exe not found under $verRoot" }
+
+            # The target bin ships qtpaths as a .bat wrapper that invokes the
+            # host x64 qtpaths with -qtconf target_qt.conf (so it reports arm64
+            # paths). windeployqt accepts the .bat and deploys arm64 DLLs.
+            $qtpaths = Get-ChildItem $qtBin -Filter 'qtpaths6.bat' |
+                       Select-Object -First 1
+            if (-not $qtpaths) { throw "target qtpaths6.bat not found in $qtBin" }
+            $extra = @('--qtpaths', $qtpaths.FullName)
+          }
+
+          Write-Host "Using $wdq $extra"
+          & $wdq --release --no-translations @extra $exe
+
+      # On arm64 windeployqt drops vc_redist.arm64.exe instead of the loose CRT
+      # DLLs (which it does deploy on x64). Copy the arm64 MSVC runtime next to
+      # the exe so the app-local layout — and the installer — matches x64.
+      - name: Bundle MSVC runtime (arm64)
+        if: matrix.arch == 'arm64'
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vs = & $vswhere -latest -property installationPath
+          $crt = Get-ChildItem -Path "$vs\VC\Redist\MSVC" -Recurse -Directory -Filter 'Microsoft.VC*.CRT' |
+                 Where-Object { $_.FullName -match '\\arm64\\' } |
+                 Sort-Object FullName -Descending | Select-Object -First 1
+          if (-not $crt) { throw "arm64 MSVC CRT redist not found under $vs" }
+          Write-Host "Copying CRT from $($crt.FullName)"
+          Copy-Item "$($crt.FullName)\*.dll" "${{ env.DIST_DIR }}/bin/" -Force
+          # vc_redist.arm64.exe is no longer needed once the DLLs are app-local.
+          Remove-Item "${{ env.DIST_DIR }}/bin/vc_redist.arm64.exe" -ErrorAction SilentlyContinue
+
+      - name: Upload portable build
+        uses: actions/upload-artifact@v4
+        with:
+          name: EShot-${{ matrix.arch }}
+          path: ${{ env.DIST_DIR }}/bin
+          if-no-files-found: error
+
+      # Build the Inno Setup installer from the assembled dist/bin tree.
+      # ISCC is x86; on the Arm runner it runs under emulation and still
+      # packages the native Arm payload. /F overrides the output basename so
+      # the two arch installers don't collide.
+      - name: Build installer
+        run: |
+          choco install innosetup -y --no-progress
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" `
+            "/DReleaseDir=${{ env.DIST_DIR }}\bin" `
+            "/FEShot_Setup_v${{ env.APP_VERSION }}_${{ matrix.arch }}" `
+            EShot_Setup.iss
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: EShot-Setup-${{ matrix.arch }}
+          path: installer_output/*.exe
+          if-no-files-found: error
