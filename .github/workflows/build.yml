@@ -94,13 +94,16 @@ jobs:
           & "$dst/tesseract.exe" --version
           if ($LASTEXITCODE -ne 0) { throw "tesseract.exe failed to launch (incomplete DLL closure)" }
 
-      # Visual Studio 2022 generator with -A picks the target architecture, so
-      # no separate MSVC/Ninja setup is needed (VS2022 is preinstalled on both
-      # the windows-latest and windows-11-arm images).
+      # Let CMake pick the default (newest installed) Visual Studio generator
+      # and select the target arch with -A. We deliberately don't pin the
+      # generator version: the windows-latest image migrated to VS 2026 (gen
+      # "Visual Studio 18 2026") in June 2026, dropping VS 2022, while the
+      # windows-11-arm image still ships VS 2022 ("Visual Studio 17 2022").
+      # Omitting -G keeps both runners working across image migrations; -A is
+      # valid with any VS generator.
       - name: Configure
         run: >
           cmake -S . -B "${{ env.BUILD_DIR }}"
-          -G "Visual Studio 17 2022"
           -A ${{ matrix.cmake_arch }}
           -DCMAKE_BUILD_TYPE=Release
 
