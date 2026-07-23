@@ -34,6 +34,11 @@
   <url type="homepage">https://github.com/Benoks/EShot</url>
   <url type="bugtracker">https://github.com/Benoks/EShot/issues</url>
   <releases>
+    <release version="4.1.5" date="2026-07-23">
+      <description>
+        <p>Eliminates subtle capture preview flickering while moving regions on fractionally scaled displays.</p>
+      </description>
+    </release>
     <release version="4.1.4" date="2026-07-23">
       <description>
         <p>Keeps the physical selection size stable while moving a capture region on fractionally scaled displays.</p>

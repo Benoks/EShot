@@ -2012,10 +2012,13 @@ void CaptureOverlay::paintEvent(QPaintEvent *event)
 
     if (!selRect.isEmpty()) {
         // Clean area
+        painter.save();
+        painter.setClipRect(selRect);
         painter.setCompositionMode(QPainter::CompositionMode_Source);
-        // selRect is logical (overlay space); the snapshot is physical pixels.
-        painter.drawPixmap(selRect, m_screenSnapshot, logicalToSnapshot(selRect));
-        painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
+        // Keep the preview aligned to the full canvas. Cropping and rescaling
+        // the selection itself causes subpixel shimmer at fractional DPI.
+        painter.drawPixmap(rect(), m_screenSnapshot, m_screenSnapshot.rect());
+        painter.restore();
 
         // Annotation
         if (m_annotationEngine && m_selectionComplete) {

@@ -31,7 +31,7 @@ grep -F 'release-assets/EShot-Setup-x64/*.exe' "${workflow}" >/dev/null
 grep -F 'release-assets/EShot-Setup-arm64/*.exe' "${workflow}" >/dev/null
 grep -F '      - linux-build' "${workflow}" >/dev/null
 grep -F 'release-assets/EShot-linux-packages/EShot-${{ github.ref_name }}-x86_64.AppImage' "${workflow}" >/dev/null
-grep -F 'body_path: packaging/release-notes/v4.1.4.md' "${workflow}" >/dev/null
+grep -F 'body_path: packaging/release-notes/v4.1.5.md' "${workflow}" >/dev/null
 grep -F "TESSERACT_RUNTIME_RELEASE: 'v4.1.2'" "${workflow}" >/dev/null
 grep -F 'releases/download/$release/$archive' "${workflow}" >/dev/null
 grep -F 'EShot-$release-${{ matrix.arch }}-portable.zip' "${workflow}" >/dev/null
@@ -72,6 +72,7 @@ grep -F '#include "../core/LinuxAutoStartPolicy.h"' "${repo_root}/src/ui/Setting
 grep -F 'Icon=io.github.benoks.EShot-v4' "${repo_root}/src/ui/SettingsDialog.cpp" >/dev/null
 grep -F 'm_textFocusProxy = new QTextEdit(nullptr);' "${repo_root}/src/capture/CaptureOverlay.cpp" >/dev/null
 grep -F 'm_textFocusProxy->activateWindow();' "${repo_root}/src/capture/CaptureOverlay.cpp" >/dev/null
+grep -F 'painter.drawPixmap(rect(), m_screenSnapshot, m_screenSnapshot.rect());' "${repo_root}/src/capture/CaptureOverlay.cpp" >/dev/null
 grep -F ':/icons/drag.svg' "${repo_root}/src/capture/CaptureOverlay.cpp" >/dev/null
 grep -F ':/icons/chevron_down.svg' "${repo_root}/src/capture/CaptureOverlay.cpp" >/dev/null
 grep -F ':/icons/chevron_up.svg' "${repo_root}/src/capture/CaptureOverlay.cpp" >/dev/null
