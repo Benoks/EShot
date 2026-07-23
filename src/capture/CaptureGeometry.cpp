@@ -56,11 +56,10 @@ QRect snapshotRectFromLogical(const QRect &logicalRect,
     const qreal sy = logicalCanvasSize.height() > 0 && snapshotSize.height() > 0
         ? snapshotSize.height() / static_cast<qreal>(logicalCanvasSize.height())
         : fallbackScale;
-    const int x1 = qRound(logicalRect.x() * sx);
-    const int y1 = qRound(logicalRect.y() * sy);
-    const int x2 = qRound((logicalRect.x() + logicalRect.width()) * sx);
-    const int y2 = qRound((logicalRect.y() + logicalRect.height()) * sy);
-    return QRect(x1, y1, qMax(0, x2 - x1), qMax(0, y2 - y1));
+    return QRect(qRound(logicalRect.x() * sx),
+                 qRound(logicalRect.y() * sy),
+                 qMax(0, qRound(logicalRect.width() * sx)),
+                 qMax(0, qRound(logicalRect.height() * sy)));
 }
 
 QRect portalCropRect(const QRect &screenPhysicalRect, const QRect &virtualPhysicalRect)

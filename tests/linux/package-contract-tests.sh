@@ -31,7 +31,7 @@ grep -F 'release-assets/EShot-Setup-x64/*.exe' "${workflow}" >/dev/null
 grep -F 'release-assets/EShot-Setup-arm64/*.exe' "${workflow}" >/dev/null
 grep -F '      - linux-build' "${workflow}" >/dev/null
 grep -F 'release-assets/EShot-linux-packages/EShot-${{ github.ref_name }}-x86_64.AppImage' "${workflow}" >/dev/null
-grep -F 'body_path: packaging/release-notes/v4.1.3.md' "${workflow}" >/dev/null
+grep -F 'body_path: packaging/release-notes/v4.1.4.md' "${workflow}" >/dev/null
 grep -F "TESSERACT_RUNTIME_RELEASE: 'v4.1.2'" "${workflow}" >/dev/null
 grep -F 'releases/download/$release/$archive' "${workflow}" >/dev/null
 grep -F 'EShot-$release-${{ matrix.arch }}-portable.zip' "${workflow}" >/dev/null
