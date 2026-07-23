@@ -2,7 +2,7 @@
 
 Native screenshot, annotation, OCR, visual-search, upload, GIF, and video capture for Windows and Linux.
 
-[![Latest release](https://img.shields.io/github/v/release/Benoks/EShot?label=release)](https://github.com/Benoks/EShot/releases/latest)
+[![Latest release](https://img.shields.io/github/v/tag/Benoks/EShot?label=release&sort=semver)](https://github.com/Benoks/EShot/releases/latest)
 [![Build](https://github.com/Benoks/EShot/actions/workflows/build.yml/badge.svg)](https://github.com/Benoks/EShot/actions/workflows/build.yml)
 [![Platforms](https://img.shields.io/badge/platform-Windows%2010%2F11%20%7C%20Linux-4b8bbe)](#platform-support)
 [![Qt](https://img.shields.io/badge/Qt-6.x-41cd52)](https://www.qt.io/)
@@ -81,6 +81,8 @@ KDE Plasma 6 Wayland is the primary tested Linux target. GNOME Wayland support i
 5. Use **Use Print Screen for EShot** to assign `Print Screen`. KDE keeps Spectacle's other shortcuts. GNOME uses the Global Shortcuts portal when available and an EShot-only custom shortcut on older GNOME releases.
 
 The AppImage bundles EShot and Qt. Optional media, OCR, and desktop-integration packages remain system packages. Skipped dependencies can be installed later from **Settings → Open Linux dependency setup**.
+
+Each release also includes `EShot-v<version>-linux-x64.tar.gz` for users who prefer an unpacked build. Unlike the AppImage, this archive relies on compatible Qt and runtime libraries installed by the Linux distribution.
 
 Integrated AppImages are stored for the current user under `~/.local/opt/EShot`. When an update is available, EShot downloads the matching AppImage release asset, verifies its GitHub SHA-256 digest, replaces the installed AppImage, and restarts it. Native package builds should be updated through their package manager.
 

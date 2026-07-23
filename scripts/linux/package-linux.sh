@@ -6,7 +6,7 @@ dist_dir="${repo_root}/dist-linux"
 package_dir="${repo_root}/packages"
 version="$(sed -n 's/^project(EShot VERSION \([0-9][0-9.]*\).*/\1/p' "${repo_root}/CMakeLists.txt" | head -n1)"
 version="${version:-0.0.0}"
-tar_path="${package_dir}/EShot-linux-x64.tar.gz"
+tar_path="${package_dir}/EShot-v${version}-linux-x64.tar.gz"
 deb_root="${package_dir}/deb/eshot_${version}_amd64"
 deb_path="${package_dir}/eshot_${version}_amd64.deb"
 

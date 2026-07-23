@@ -385,3 +385,4 @@ jobs:
             release-assets/EShot-${{ github.ref_name }}-x64-portable.zip
             release-assets/EShot-${{ github.ref_name }}-arm64-portable.zip
             release-assets/EShot-linux-packages/EShot-${{ github.ref_name }}-x86_64.AppImage
+            release-assets/EShot-linux-packages/EShot-${{ github.ref_name }}-linux-x64.tar.gz

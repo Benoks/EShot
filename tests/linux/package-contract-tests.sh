@@ -19,6 +19,8 @@ grep -F 'appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage'
 grep -F 'packaging/linux/AppRun' "${build_script}" >/dev/null
 grep -F -- '--appimage-extract-and-run' "${workflow}" >/dev/null
 grep -F 'packages/EShot-v${APP_VERSION}-x86_64.AppImage' "${workflow}" >/dev/null
+grep -F 'release-assets/EShot-linux-packages/EShot-${{ github.ref_name }}-linux-x64.tar.gz' "${workflow}" >/dev/null
+grep -F 'EShot-v${version}-linux-x64.tar.gz' "${linux_package_script}" >/dev/null
 if grep -F 'if: false # Linux releases are built and published locally.' "${workflow}" >/dev/null; then
   echo 'portable Linux release artifacts must be built on the baseline CI runner' >&2
   exit 1
@@ -32,6 +34,7 @@ grep -F 'release-assets/EShot-Setup-arm64/*.exe' "${workflow}" >/dev/null
 grep -F '      - linux-build' "${workflow}" >/dev/null
 grep -F 'release-assets/EShot-linux-packages/EShot-${{ github.ref_name }}-x86_64.AppImage' "${workflow}" >/dev/null
 grep -F 'body_path: packaging/release-notes/v4.1.5.md' "${workflow}" >/dev/null
+grep -F 'https://img.shields.io/github/v/tag/Benoks/EShot?label=release&sort=semver' "${repo_root}/README.md" >/dev/null
 grep -F "TESSERACT_RUNTIME_RELEASE: 'v4.1.2'" "${workflow}" >/dev/null
 grep -F 'releases/download/$release/$archive' "${workflow}" >/dev/null
 grep -F 'EShot-$release-${{ matrix.arch }}-portable.zip' "${workflow}" >/dev/null
