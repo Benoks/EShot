@@ -1126,9 +1126,9 @@ void CaptureOverlay::setupToolSettingsDrawer()
     micDeviceRow->addWidget(microphoneDeviceLabel);
     m_quickMicrophoneDeviceCombo = new QComboBox(m_toolSettingsDrawer);
     if (activeInputDevices.isEmpty() && audioDevices.isEmpty()) {
-        m_quickMicrophoneDeviceCombo->addItem(QStringLiteral("Default"), QStringLiteral("default"));
+        m_quickMicrophoneDeviceCombo->addItem(TranslationManager::tr("defaultAudioDevice"), QStringLiteral("default"));
     } else {
-        m_quickMicrophoneDeviceCombo->addItem(QStringLiteral("Default"), activeInputDevices.isEmpty() ? QStringLiteral("default") : activeInputDevices.first().second);
+        m_quickMicrophoneDeviceCombo->addItem(TranslationManager::tr("defaultAudioDevice"), activeInputDevices.isEmpty() ? QStringLiteral("default") : activeInputDevices.first().second);
     }
     for (const auto &device : activeInputDevices) {
         if (m_quickMicrophoneDeviceCombo->findData(device.second) >= 0)
@@ -1310,7 +1310,7 @@ void CaptureOverlay::setupRecordingDrawer()
     m_recordingMicrophoneDeviceCombo = new QComboBox(m_recordingVideoOptions);
     const auto inputDevices = microphoneAudioDevices();
     m_recordingMicrophoneDeviceCombo->addItem(
-        QStringLiteral("Default"),
+        TranslationManager::tr("defaultAudioDevice"),
         inputDevices.isEmpty() ? QStringLiteral("default") : inputDevices.first().second);
     for (const auto &device : inputDevices) {
         if (m_recordingMicrophoneDeviceCombo->findData(device.second) < 0)

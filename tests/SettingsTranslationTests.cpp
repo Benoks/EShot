@@ -8,6 +8,7 @@ class SettingsTranslationTests : public QObject
 
 private slots:
     void issue15SettingsTextExistsInEveryLanguage();
+    void v416TextExistsInEveryLanguage();
 };
 
 void SettingsTranslationTests::issue15SettingsTextExistsInEveryLanguage()
@@ -47,6 +48,39 @@ void SettingsTranslationTests::issue15SettingsTextExistsInEveryLanguage()
         QStringLiteral("visualSearchTempPrepareError"),
         QStringLiteral("visualSearchUploaderCreateError"),
         QStringLiteral("visualSearchUploadUnavailable"),
+    };
+
+    for (int language = 0; language < TranslationManager::LangCount; ++language) {
+        TranslationManager::setLanguage(static_cast<TranslationManager::Language>(language), false);
+        for (const QString &key : keys) {
+            const QString translated = TranslationManager::tr(key.toUtf8().constData());
+            QVERIFY2(translated != key,
+                     qPrintable(QStringLiteral("Missing translation for %1 in language %2")
+                                    .arg(key).arg(language)));
+        }
+    }
+}
+
+void SettingsTranslationTests::v416TextExistsInEveryLanguage()
+{
+    const QStringList keys = {
+        QStringLiteral("trayCancelRecording"),
+        QStringLiteral("actionLock"),
+        QStringLiteral("quickGifRecording"),
+        QStringLiteral("videoRecordingTitle"),
+        QStringLiteral("gifFpsLabel"),
+        QStringLiteral("videoFpsLabel"),
+        QStringLiteral("quickMaxSeconds"),
+        QStringLiteral("recordingUnlimited"),
+        QStringLiteral("recordingLoop"),
+        QStringLiteral("recordingLoopInfinite"),
+        QStringLiteral("videoQualityCrf"),
+        QStringLiteral("audioDesktop"),
+        QStringLiteral("audioMicrophone"),
+        QStringLiteral("audioMicrophoneDevice"),
+        QStringLiteral("defaultAudioDevice"),
+        QStringLiteral("recordingStart"),
+        QStringLiteral("recordingCancel"),
     };
 
     for (int language = 0; language < TranslationManager::LangCount; ++language) {
