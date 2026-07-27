@@ -34,6 +34,11 @@
   <url type="homepage">https://github.com/Benoks/EShot</url>
   <url type="bugtracker">https://github.com/Benoks/EShot/issues</url>
   <releases>
+    <release version="4.1.6" date="2026-07-27">
+      <description>
+        <p>Adds free text and shape rotation, a focused recording setup panel with microphone selection, and recording-border lock and tray cancellation controls.</p>
+      </description>
+    </release>
     <release version="4.1.5" date="2026-07-23">
       <description>
         <p>Eliminates subtle capture preview flickering while moving regions on fractionally scaled displays.</p>

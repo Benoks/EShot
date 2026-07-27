@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 env:
-  APP_VERSION: '4.1.5'
+  APP_VERSION: '4.1.6'
   QT_VERSION: '6.8.2'
   TESSERACT_RUNTIME_RELEASE: 'v4.1.2'
 
@@ -378,7 +378,7 @@ jobs:
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          body_path: packaging/release-notes/v4.1.5.md
+          body_path: packaging/release-notes/${{ github.ref_name }}.md
           files: |
             release-assets/EShot-Setup-x64/*.exe
             release-assets/EShot-Setup-arm64/*.exe

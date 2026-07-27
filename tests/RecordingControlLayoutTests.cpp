@@ -128,6 +128,12 @@ private slots:
         QCOMPARE(movedRecordingControlRect(current, QPoint(-2500, 1200), screen),
                  QRect(-1912, 1030, 310, 42));
     }
+
+    void keepsOnlyLockedRecordingBorderOnTop()
+    {
+        QVERIFY(recordingBorderStaysOnTop(true));
+        QVERIFY(!recordingBorderStaysOnTop(false));
+    }
 };
 
 QTEST_APPLESS_MAIN(RecordingControlLayoutTests)

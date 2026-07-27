@@ -12,6 +12,8 @@
 #include <QTextEdit>
 #include <QPointer>
 
+#include "recording/RecordingDrawerPolicy.h"
+
 #include "CaptureGeometry.h"
 #include "WindowSnapPolicy.h"
 
@@ -184,10 +186,30 @@ private:
     QSlider *m_quickMicrophoneVolumeSlider = nullptr;
     QLabel *m_quickMicrophoneVolumeLabel = nullptr;
     QComboBox *m_quickMicrophoneDeviceCombo = nullptr;
+    QWidget *m_recordingDrawer = nullptr;
+    QWidget *m_recordingGifOptions = nullptr;
+    QWidget *m_recordingVideoOptions = nullptr;
+    QLabel *m_recordingDrawerTitle = nullptr;
+    QSpinBox *m_recordingGifFpsSpin = nullptr;
+    QSpinBox *m_recordingGifSecondsSpin = nullptr;
+    QComboBox *m_recordingGifLoopCombo = nullptr;
+    QSpinBox *m_recordingVideoFpsSpin = nullptr;
+    QSpinBox *m_recordingVideoSecondsSpin = nullptr;
+    QSpinBox *m_recordingVideoCrfSpin = nullptr;
+    QCheckBox *m_recordingDesktopAudioCheck = nullptr;
+    QCheckBox *m_recordingMicrophoneCheck = nullptr;
+    QComboBox *m_recordingMicrophoneDeviceCombo = nullptr;
+    QPushButton *m_recordingStartButton = nullptr;
+    QPushButton *m_recordingCancelButton = nullptr;
+    RecordingDrawerMode m_recordingDrawerMode = RecordingDrawerMode::None;
     void setupToolSettingsDrawer();
     void updateToolSettingsDrawerPosition();
     void setToolSettingsDrawerVisible(bool visible);
     bool isToolSettingsUiAt(const QPoint &pos) const;
+    void setupRecordingDrawer();
+    void showRecordingDrawer(RecordingDrawerMode mode);
+    void hideRecordingDrawer(bool restoreToolbar = true);
+    void startRecordingFromDrawer();
 
     // Resize and move
     enum ResizeMode { ResNone, ResTopLeft, ResTopRight, ResBottomRight, ResBottomLeft, ResMove, ResNewSelection };
@@ -198,6 +220,10 @@ private:
     // Annotation move
     bool m_isDraggingAnnotation;
     QPoint m_dragAnnotationStart;
+    bool m_isRotatingAnnotation = false;
+    QPointF m_rotationCenter;
+    qreal m_rotationDragStartAngle = 0.0;
+    qreal m_rotationStartDegrees = 0.0;
 
     // Text confirm flag
     bool m_textJustCommitted;

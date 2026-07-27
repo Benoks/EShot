@@ -226,6 +226,27 @@ private slots:
 #endif
     }
 
+    void togglesBorderLockWithoutHidingTheBorder()
+    {
+        RecordingIndicator indicator(QRect(120, 120, 640, 360), nullptr, 2, true);
+        auto *lock = indicator.findChild<QToolButton *>(QStringLiteral("recordingBorderLockButton"));
+        QVERIFY(lock);
+        QWidget *border = nullptr;
+        for (QWidget *widget : QApplication::topLevelWidgets()) {
+            if (widget && widget->objectName() == QStringLiteral("recordingBorderOverlay")) {
+                border = widget;
+                break;
+            }
+        }
+        QVERIFY(border);
+        QVERIFY(border->isVisible());
+
+        QTest::mouseClick(lock, Qt::LeftButton);
+        QTRY_VERIFY(border->isVisible());
+        QTest::mouseClick(lock, Qt::LeftButton);
+        QTRY_VERIFY(border->isVisible());
+    }
+
 };
 
 QTEST_MAIN(RecordingIndicatorTests)

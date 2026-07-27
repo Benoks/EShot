@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(EShot VERSION 4.1.5 LANGUAGES CXX)
+project(EShot VERSION 4.1.6 LANGUAGES CXX)
 
 include(CTest)
 
@@ -58,6 +58,7 @@ set(SOURCES
     src/capture/PinnedWindow.cpp
     src/capture/PinManager.cpp
     src/annotation/AnnotationEngine.cpp
+    src/annotation/AnnotationRotationGeometry.cpp
     src/ui/AnnotationToolbar.cpp
     src/ui/ApplicationTheme.cpp
     src/ui/SettingsDialog.cpp
@@ -70,6 +71,7 @@ set(SOURCES
     src/recording/GifEncoder.cpp
     src/recording/LinuxRecordingSupport.cpp
     src/recording/RecordingSettingsPolicy.cpp
+    src/recording/RecordingDrawerPolicy.cpp
     src/recording/RecordingControlLayout.cpp
     src/recording/RecordingTimeline.cpp
     src/recording/ScreenRecorder.cpp
@@ -110,6 +112,7 @@ set(HEADERS
     src/capture/PinnedWindow.h
     src/capture/PinManager.h
     src/annotation/AnnotationEngine.h
+    src/annotation/AnnotationRotationGeometry.h
     src/ui/AnnotationToolbar.h
     src/ui/ApplicationTheme.h
     src/ui/SettingsDialog.h
@@ -122,6 +125,7 @@ set(HEADERS
     src/recording/GifEncoder.h
     src/recording/LinuxRecordingSupport.h
     src/recording/RecordingSettingsPolicy.h
+    src/recording/RecordingDrawerPolicy.h
     src/recording/RecordingControlLayout.h
     src/recording/RecordingTimeline.h
     src/recording/ScreenRecorder.h
@@ -236,6 +240,33 @@ install(TARGETS ${PROJECT_NAME}
 
 if(BUILD_TESTING)
     find_package(Qt6 REQUIRED COMPONENTS Test)
+
+    qt_add_executable(eshot_annotation_engine_tests
+        tests/AnnotationEngineTests.cpp
+        src/annotation/AnnotationEngine.cpp
+        src/annotation/AnnotationEngine.h
+    )
+    target_include_directories(eshot_annotation_engine_tests PRIVATE src)
+    target_link_libraries(eshot_annotation_engine_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Test)
+    add_test(NAME annotation_engine COMMAND eshot_annotation_engine_tests)
+
+    qt_add_executable(eshot_annotation_rotation_geometry_tests
+        tests/AnnotationRotationGeometryTests.cpp
+        src/annotation/AnnotationRotationGeometry.cpp
+        src/annotation/AnnotationRotationGeometry.h
+    )
+    target_include_directories(eshot_annotation_rotation_geometry_tests PRIVATE src)
+    target_link_libraries(eshot_annotation_rotation_geometry_tests PRIVATE Qt6::Core Qt6::Test)
+    add_test(NAME annotation_rotation_geometry COMMAND eshot_annotation_rotation_geometry_tests)
+
+    qt_add_executable(eshot_recording_drawer_policy_tests
+        tests/RecordingDrawerPolicyTests.cpp
+        src/recording/RecordingDrawerPolicy.cpp
+        src/recording/RecordingDrawerPolicy.h
+    )
+    target_include_directories(eshot_recording_drawer_policy_tests PRIVATE src)
+    target_link_libraries(eshot_recording_drawer_policy_tests PRIVATE Qt6::Core Qt6::Test)
+    add_test(NAME recording_drawer_policy COMMAND eshot_recording_drawer_policy_tests)
 
     qt_add_executable(eshot_application_instance_command_tests
         tests/ApplicationInstanceCommandTests.cpp

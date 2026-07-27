@@ -9,6 +9,7 @@
 #include <QTextBlock>
 #include <QTextCursor>
 #include <QTextCharFormat>
+#include <QTransform>
 
 namespace {
 double distanceToSegment(const QPointF &p, const QPointF &a, const QPointF &b)
@@ -137,6 +138,13 @@ void AnnotationEngine::drawAnnotation(QPainter *painter, const Annotation &ann, 
 {
     if (ann.points.isEmpty()) return;
     painter->save();
+
+    if (isRotatableTool(ann.tool) && !qFuzzyIsNull(ann.rotationDegrees)) {
+        const QPointF center = rawAnnotationBounds(ann, 0).center() + offset;
+        painter->translate(center);
+        painter->rotate(ann.rotationDegrees);
+        painter->translate(-center);
+    }
 
     switch (ann.tool) {
     case Pen: {
@@ -335,9 +343,11 @@ void AnnotationEngine::undo()
             m_annotations.removeAt(action.index);
         else if (!m_annotations.isEmpty())
             m_annotations.removeLast();
-    } else {
+    } else if (action.type == HistoryAction::Remove) {
         int insertAt = qBound(0, action.index, m_annotations.size());
         m_annotations.insert(insertAt, action.annotation);
+    } else if (action.index >= 0 && action.index < m_annotations.size()) {
+        m_annotations[action.index].rotationDegrees = action.previousRotationDegrees;
     }
     m_redoStack.append(action);
     recalculateCounterValue();
@@ -351,11 +361,13 @@ void AnnotationEngine::redo()
     if (action.type == HistoryAction::Add) {
         int insertAt = qBound(0, action.index, m_annotations.size());
         m_annotations.insert(insertAt, action.annotation);
-    } else {
+    } else if (action.type == HistoryAction::Remove) {
         if (action.index >= 0 && action.index < m_annotations.size())
             m_annotations.removeAt(action.index);
         else if (!m_annotations.isEmpty())
             m_annotations.removeLast();
+    } else if (action.index >= 0 && action.index < m_annotations.size()) {
+        m_annotations[action.index].rotationDegrees = action.rotationDegrees;
     }
     m_undoStack.append(action);
     recalculateCounterValue();
@@ -425,6 +437,44 @@ void AnnotationEngine::moveAnnotation(int index, const QPoint &delta)
     }
 }
 
+bool AnnotationEngine::isRotatableTool(Tool tool)
+{
+    return tool == Text || tool == Arrow || tool == Line || tool == Rectangle
+        || tool == Circle || tool == SemiRect;
+}
+
+bool AnnotationEngine::isRotatable(int index) const
+{
+    return index >= 0 && index < m_annotations.size()
+        && isRotatableTool(m_annotations[index].tool);
+}
+
+qreal AnnotationEngine::rotationDegreesOf(int index) const
+{
+    return index >= 0 && index < m_annotations.size()
+        ? m_annotations[index].rotationDegrees
+        : 0.0;
+}
+
+void AnnotationEngine::rotateAnnotation(int index, qreal degrees)
+{
+    if (!isRotatable(index))
+        return;
+
+    Annotation &ann = m_annotations[index];
+    if (qFuzzyCompare(ann.rotationDegrees + 1.0, degrees + 1.0))
+        return;
+
+    HistoryAction action;
+    action.type = HistoryAction::Rotate;
+    action.index = index;
+    action.previousRotationDegrees = ann.rotationDegrees;
+    action.rotationDegrees = degrees;
+    m_undoStack.append(action);
+    m_redoStack.clear();
+    ann.rotationDegrees = degrees;
+}
+
 void AnnotationEngine::setSelectedIndex(int index)
 {
     m_selectedIndex = index;
@@ -432,11 +482,17 @@ void AnnotationEngine::setSelectedIndex(int index)
 
 QRect AnnotationEngine::boundingRectOf(int index) const
 {
-    if (index < 0 || index >= m_annotations.size()) return QRect();
-    return annotationBounds(m_annotations[index], 0);
+    return rotatedBoundingRectOf(index).toAlignedRect();
 }
 
-QRect AnnotationEngine::annotationBounds(const Annotation &ann, int padding) const
+QRectF AnnotationEngine::rotatedBoundingRectOf(int index) const
+{
+    if (index < 0 || index >= m_annotations.size())
+        return QRectF();
+    return rotatedAnnotationBounds(m_annotations[index], 0);
+}
+
+QRect AnnotationEngine::rawAnnotationBounds(const Annotation &ann, int padding) const
 {
     if (ann.points.isEmpty()) return QRect();
 
@@ -472,10 +528,34 @@ QRect AnnotationEngine::annotationBounds(const Annotation &ann, int padding) con
     return bounds;
 }
 
+QRectF AnnotationEngine::rotatedAnnotationBounds(const Annotation &ann, int padding) const
+{
+    const QRectF bounds = rawAnnotationBounds(ann, padding);
+    if (!isRotatableTool(ann.tool) || qFuzzyIsNull(ann.rotationDegrees))
+        return bounds;
+
+    QTransform transform;
+    transform.translate(bounds.center().x(), bounds.center().y());
+    transform.rotate(ann.rotationDegrees);
+    transform.translate(-bounds.center().x(), -bounds.center().y());
+    return transform.mapRect(bounds);
+}
+
 bool AnnotationEngine::annotationContainsPoint(const Annotation &ann, const QPoint &pos, int padding) const
 {
     if (ann.points.isEmpty())
         return false;
+
+    QPointF transformedPos = pos;
+    if (isRotatableTool(ann.tool) && !qFuzzyIsNull(ann.rotationDegrees)) {
+        const QPointF center = rawAnnotationBounds(ann, 0).center();
+        QTransform inverseTransform;
+        inverseTransform.translate(center.x(), center.y());
+        inverseTransform.rotate(-ann.rotationDegrees);
+        inverseTransform.translate(-center.x(), -center.y());
+        transformedPos = inverseTransform.map(transformedPos);
+    }
+    const QPoint hitPos = transformedPos.toPoint();
 
     const int tolerance = qMax(padding, ann.penWidth + 5);
 
@@ -483,12 +563,12 @@ bool AnnotationEngine::annotationContainsPoint(const Annotation &ann, const QPoi
     case Pen:
     case Highlighter: {
         if (ann.points.size() == 1)
-            return QRect(ann.points.first() - QPoint(tolerance, tolerance), QSize(tolerance * 2, tolerance * 2)).contains(pos);
+            return QRect(ann.points.first() - QPoint(tolerance, tolerance), QSize(tolerance * 2, tolerance * 2)).contains(hitPos);
         const int strokeTolerance = ann.tool == Highlighter
             ? qMax(tolerance, ann.penWidth * 3)
             : tolerance;
         for (int i = 1; i < ann.points.size(); ++i) {
-            if (distanceToSegment(pos, ann.points[i - 1], ann.points[i]) <= strokeTolerance)
+            if (distanceToSegment(hitPos, ann.points[i - 1], ann.points[i]) <= strokeTolerance)
                 return true;
         }
         return false;
@@ -496,34 +576,34 @@ bool AnnotationEngine::annotationContainsPoint(const Annotation &ann, const QPoi
     case Line:
     case Arrow:
         if (ann.points.size() < 2)
-            return annotationBounds(ann, tolerance).contains(pos);
-        return distanceToSegment(pos, ann.points.first(), ann.points.last()) <= tolerance;
+            return rawAnnotationBounds(ann, tolerance).contains(hitPos);
+        return distanceToSegment(hitPos, ann.points.first(), ann.points.last()) <= tolerance;
 
     case Rectangle: {
         if (ann.points.size() < 2)
-            return annotationBounds(ann, tolerance).contains(pos);
+            return rawAnnotationBounds(ann, tolerance).contains(hitPos);
         const QRect r = QRect(ann.points.first(), ann.points.last()).normalized();
-        if (!r.adjusted(-tolerance, -tolerance, tolerance, tolerance).contains(pos))
+        if (!r.adjusted(-tolerance, -tolerance, tolerance, tolerance).contains(hitPos))
             return false;
-        const int left = qAbs(pos.x() - r.left());
-        const int right = qAbs(pos.x() - r.right());
-        const int top = qAbs(pos.y() - r.top());
-        const int bottom = qAbs(pos.y() - r.bottom());
+        const int left = qAbs(hitPos.x() - r.left());
+        const int right = qAbs(hitPos.x() - r.right());
+        const int top = qAbs(hitPos.y() - r.top());
+        const int bottom = qAbs(hitPos.y() - r.bottom());
         return qMin(qMin(left, right), qMin(top, bottom)) <= tolerance;
     }
     case Circle: {
         if (ann.points.size() < 2)
-            return annotationBounds(ann, tolerance).contains(pos);
+            return rawAnnotationBounds(ann, tolerance).contains(hitPos);
         const QRect r = QRect(ann.points.first(), ann.points.last()).normalized();
         if (r.width() <= 0 || r.height() <= 0)
-            return annotationBounds(ann, tolerance).contains(pos);
-        if (!r.adjusted(-tolerance, -tolerance, tolerance, tolerance).contains(pos))
+            return rawAnnotationBounds(ann, tolerance).contains(hitPos);
+        if (!r.adjusted(-tolerance, -tolerance, tolerance, tolerance).contains(hitPos))
             return false;
         const QPointF center = r.center();
         const double rx = r.width() / 2.0;
         const double ry = r.height() / 2.0;
-        const double nx = (pos.x() - center.x()) / rx;
-        const double ny = (pos.y() - center.y()) / ry;
+        const double nx = (hitPos.x() - center.x()) / rx;
+        const double ny = (hitPos.y() - center.y()) / ry;
         const double edge = qSqrt(nx * nx + ny * ny);
         const double normalizedTolerance = tolerance / qMax(1.0, qMin(rx, ry));
         return qAbs(edge - 1.0) <= normalizedTolerance;
@@ -532,10 +612,10 @@ bool AnnotationEngine::annotationContainsPoint(const Annotation &ann, const QPoi
     case Blur:
     case SemiRect:
     case Counter:
-        return annotationBounds(ann, padding).contains(pos);
+        return rawAnnotationBounds(ann, padding).contains(hitPos);
 
     default:
-        return annotationBounds(ann, padding).contains(pos);
+        return rawAnnotationBounds(ann, padding).contains(hitPos);
     }
 }
 

@@ -43,6 +43,7 @@ RecordingOverlayVisibility recordingOverlayVisibilityPolicy(
     const QRect &captureRect,
     bool platformCanExcludeOverlay);
 bool recordingCaptureBackendCanExcludeOverlay(RecordingCaptureBackend backend);
+bool recordingBorderStaysOnTop(bool locked);
 QRect movedRecordingControlRect(const QRect &currentControlRect,
                                 const QPoint &requestedTopLeft,
                                 const QRect &screenRect);

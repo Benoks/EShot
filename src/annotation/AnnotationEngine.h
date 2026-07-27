@@ -73,9 +73,13 @@ public:
     // Annotation move
     int findAnnotationAt(const QPoint &pos);
     void moveAnnotation(int index, const QPoint &delta);
+    bool isRotatable(int index) const;
+    qreal rotationDegreesOf(int index) const;
+    void rotateAnnotation(int index, qreal degrees);
     void setSelectedIndex(int index);
     int selectedIndex() const { return m_selectedIndex; }
     QRect boundingRectOf(int index) const;
+    QRectF rotatedBoundingRectOf(int index) const;
 
     void setScreenSnapshot(const QPixmap &snapshot);
     // Ratio of physical snapshot pixels to logical annotation coordinates, so
@@ -99,18 +103,23 @@ private:
         QRect boundingRect;
         int counterValue = 0;
         bool shiftConstrained = false;
+        qreal rotationDegrees = 0.0;
     };
 
     struct HistoryAction {
-        enum Type { Add, Remove } type = Add;
+        enum Type { Add, Remove, Rotate } type = Add;
         Annotation annotation;
         int index = -1;
+        qreal previousRotationDegrees = 0.0;
+        qreal rotationDegrees = 0.0;
     };
 
     void drawAnnotation(QPainter *painter, const Annotation &ann, const QPoint &offset);
     void drawBlurEffect(QPainter *painter, const QRect &rect, const QPoint &offset);
-    QRect annotationBounds(const Annotation &ann, int padding = 10) const;
+    QRect rawAnnotationBounds(const Annotation &ann, int padding = 10) const;
+    QRectF rotatedAnnotationBounds(const Annotation &ann, int padding = 10) const;
     bool annotationContainsPoint(const Annotation &ann, const QPoint &pos, int padding = 8) const;
+    static bool isRotatableTool(Tool tool);
     void pushHistory(HistoryAction::Type type, const Annotation &annotation, int index);
     void recalculateCounterValue();
 

@@ -99,6 +99,11 @@ bool recordingCaptureBackendCanExcludeOverlay(RecordingCaptureBackend backend)
     return backend == RecordingCaptureBackend::WindowsGraphicsCapture;
 }
 
+bool recordingBorderStaysOnTop(bool locked)
+{
+    return locked;
+}
+
 QRect movedRecordingControlRect(const QRect &currentControlRect,
                                 const QPoint &requestedTopLeft,
                                 const QRect &screenRect)

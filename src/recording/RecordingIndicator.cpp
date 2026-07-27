@@ -142,6 +142,10 @@ QString controlBarStyle()
             background-color: #3a3a3a;
             border: 1px solid #505050;
         }
+        QToolButton#recordingBorderLockButton:checked {
+            background-color: #244c70;
+            border-color: #3f98d5;
+        }
         QMenu {
             color: #F4F6F8;
             background-color: #2d2d2d;
@@ -158,6 +162,78 @@ QString controlBarStyle()
         }
     )");
 }
+
+class RecordingBorderOverlay final : public QWidget
+{
+public:
+    RecordingBorderOverlay(const QRect &captureRect, int borderWidth)
+        : QWidget(nullptr), m_borderWidth(qMax(1, borderWidth))
+    {
+        setObjectName(QStringLiteral("recordingBorderOverlay"));
+        setAttribute(Qt::WA_TranslucentBackground);
+        setAttribute(Qt::WA_NoSystemBackground);
+        setAttribute(Qt::WA_TransparentForMouseEvents);
+        setCaptureRect(captureRect);
+        setLocked(true);
+    }
+
+    void setCaptureRect(const QRect &captureRect)
+    {
+        const QRect windowRect = captureRect.adjusted(-m_borderWidth, -m_borderWidth,
+                                                       m_borderWidth, m_borderWidth);
+        setGeometry(windowRect);
+        m_borderRect = QRect(m_borderWidth, m_borderWidth,
+                             captureRect.width(), captureRect.height());
+        QRegion borderRegion;
+        borderRegion += QRect(m_borderRect.left(), m_borderRect.top() - m_borderWidth,
+                              m_borderRect.width(), m_borderWidth);
+        borderRegion += QRect(m_borderRect.left(), m_borderRect.bottom() + 1,
+                              m_borderRect.width(), m_borderWidth);
+        borderRegion += QRect(m_borderRect.left() - m_borderWidth, m_borderRect.top(),
+                              m_borderWidth, m_borderRect.height());
+        borderRegion += QRect(m_borderRect.right() + 1, m_borderRect.top(),
+                              m_borderWidth, m_borderRect.height());
+        setMask(borderRegion);
+    }
+
+    void setLocked(bool locked)
+    {
+        const bool wasVisible = isVisible();
+        m_locked = locked;
+        Qt::WindowFlags flags = Qt::Tool | Qt::FramelessWindowHint
+            | Qt::WindowDoesNotAcceptFocus;
+        if (recordingBorderStaysOnTop(locked))
+            flags |= Qt::WindowStaysOnTopHint;
+        setWindowFlags(flags);
+        if (wasVisible) {
+            show();
+            if (locked)
+                raise();
+        }
+    }
+
+protected:
+    void paintEvent(QPaintEvent *event) override
+    {
+        Q_UNUSED(event)
+        QPainter painter(this);
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(QColor(63, 156, 255, 235));
+        painter.drawRect(QRect(m_borderRect.left(), m_borderRect.top() - m_borderWidth,
+                               m_borderRect.width(), m_borderWidth));
+        painter.drawRect(QRect(m_borderRect.left(), m_borderRect.bottom() + 1,
+                               m_borderRect.width(), m_borderWidth));
+        painter.drawRect(QRect(m_borderRect.left() - m_borderWidth, m_borderRect.top(),
+                               m_borderWidth, m_borderRect.height()));
+        painter.drawRect(QRect(m_borderRect.right() + 1, m_borderRect.top(),
+                               m_borderWidth, m_borderRect.height()));
+    }
+
+private:
+    QRect m_borderRect;
+    int m_borderWidth = 2;
+    bool m_locked = false;
+};
 }
 
 RecordingIndicator::RecordingIndicator(const QRect &captureRect, QWidget *parent,
@@ -171,9 +247,6 @@ RecordingIndicator::RecordingIndicator(const QRect &captureRect, QWidget *parent
 {
     Qt::WindowFlags windowFlags = Qt::Tool | Qt::FramelessWindowHint
         | Qt::WindowDoesNotAcceptFocus;
-#if !defined(Q_OS_LINUX)
-    windowFlags |= Qt::WindowStaysOnTopHint;
-#endif
     setWindowFlags(windowFlags);
     setAttribute(Qt::WA_TranslucentBackground);
     setAttribute(Qt::WA_NoSystemBackground);
@@ -214,14 +287,12 @@ RecordingIndicator::RecordingIndicator(const QRect &captureRect, QWidget *parent
 
     const QRect paddedControlRect = m_layout.controlRect.adjusted(
         -WindowPadding, -WindowPadding, WindowPadding, WindowPadding);
-    const QRect globalWindowRect = isFullScreenRecordingRect(captureRect)
-        ? paddedControlRect
-        : captureRect.adjusted(-WindowPadding, -WindowPadding,
-                               WindowPadding, WindowPadding).united(paddedControlRect);
+    const QRect globalWindowRect = paddedControlRect;
     setGeometry(globalWindowRect);
-    m_borderRect = captureRect.translated(-globalWindowRect.topLeft());
     m_controlRect = m_layout.controlRect.translated(-globalWindowRect.topLeft());
 
+    m_borderOverlay = new RecordingBorderOverlay(m_captureRect, m_borderWidth);
+    setBorderLocked(true);
     createControlBar();
     // Windows GDI capture cannot reliably exclude this window. Hide
     // overlapping controls before the first mapped frame there.
@@ -232,10 +303,8 @@ RecordingIndicator::RecordingIndicator(const QRect &captureRect, QWidget *parent
     updatePauseButton();
 
     show();
-#if !defined(Q_OS_LINUX)
-    if (QGuiApplication::platformName() != QStringLiteral("offscreen"))
-        raise();
-#endif
+    if (m_borderOverlay)
+        m_borderOverlay->show();
     QTimer::singleShot(100, this, [this, globalWindowRect]() {
         qInfo() << "[RecordingIndicator] capture=" << m_captureRect
                 << "control=" << m_layout.controlRect
@@ -245,10 +314,16 @@ RecordingIndicator::RecordingIndicator(const QRect &captureRect, QWidget *parent
     });
 #ifdef Q_OS_WIN
     SetWindowDisplayAffinity(reinterpret_cast<HWND>(winId()), WDA_EXCLUDEFROMCAPTURE);
+    if (m_borderOverlay)
+        SetWindowDisplayAffinity(reinterpret_cast<HWND>(m_borderOverlay->winId()),
+                                 WDA_EXCLUDEFROMCAPTURE);
 #endif
 }
 
-RecordingIndicator::~RecordingIndicator() = default;
+RecordingIndicator::~RecordingIndicator()
+{
+    delete m_borderOverlay;
+}
 
 void RecordingIndicator::createControlBar()
 {
@@ -271,6 +346,18 @@ void RecordingIndicator::createControlBar()
     m_statusLabel->installEventFilter(this);
     m_controlBar->installEventFilter(this);
     layout->addWidget(m_statusLabel, 1);
+
+    m_borderLockButton = new QToolButton(m_controlBar);
+    m_borderLockButton->setObjectName(QStringLiteral("recordingBorderLockButton"));
+    m_borderLockButton->setFixedSize(30, 30);
+    m_borderLockButton->setIconSize(QSize(17, 17));
+    m_borderLockButton->setCheckable(true);
+    m_borderLockButton->setCursor(Qt::PointingHandCursor);
+    m_borderLockButton->setToolTip(TranslationManager::actionLock());
+    connect(m_borderLockButton, &QToolButton::toggled, this,
+            &RecordingIndicator::setBorderLocked);
+    layout->addWidget(m_borderLockButton);
+    setBorderLocked(true);
 
     m_pauseButton = new QToolButton(m_controlBar);
     m_pauseButton->setObjectName(QStringLiteral("recordingPauseButton"));
@@ -391,6 +478,8 @@ void RecordingIndicator::setShortcutHints(const QString &pauseResume, const QStr
 void RecordingIndicator::stop()
 {
     m_running = false;
+    if (m_borderOverlay)
+        m_borderOverlay->hide();
     close();
 }
 
@@ -459,17 +548,6 @@ void RecordingIndicator::updateControlMask()
         setMask(region);
         return;
     }
-    if (!isFullScreenRecordingRect(m_captureRect)) {
-        const int hitWidth = qMax(6, m_borderWidth + 4);
-        region += QRect(m_borderRect.left() - 2, m_borderRect.top() - 2,
-                        m_borderRect.width() + 4, hitWidth);
-        region += QRect(m_borderRect.left() - 2, m_borderRect.bottom() - hitWidth + 3,
-                        m_borderRect.width() + 4, hitWidth);
-        region += QRect(m_borderRect.left() - 2, m_borderRect.top() - 2,
-                        hitWidth, m_borderRect.height() + 4);
-        region += QRect(m_borderRect.right() - hitWidth + 3, m_borderRect.top() - 2,
-                        hitWidth, m_borderRect.height() + 4);
-    }
     region += m_controlRect.adjusted(-3, -3, 3, 3);
     setMask(region);
 }
@@ -483,8 +561,24 @@ void RecordingIndicator::setOverlayVisible(bool visible)
                  !visible && requiresCaptureSafePresentation());
     if (m_controlBar)
         m_controlBar->setVisible(visible);
+    if (m_borderOverlay)
+        m_borderOverlay->setVisible(visible);
     updateControlMask();
     update();
+}
+
+void RecordingIndicator::setBorderLocked(bool locked)
+{
+    m_borderLocked = locked;
+    if (m_borderOverlay)
+        static_cast<RecordingBorderOverlay *>(m_borderOverlay)->setLocked(locked);
+    if (m_borderLockButton) {
+        const QSignalBlocker blocker(m_borderLockButton);
+        m_borderLockButton->setChecked(locked);
+        m_borderLockButton->setIcon(QIcon(locked
+            ? QStringLiteral(":/icons/lock.svg")
+            : QStringLiteral(":/icons/lock_open.svg")));
+    }
 }
 
 void RecordingIndicator::updateCaptureSafetyPolicy()
@@ -531,12 +625,8 @@ void RecordingIndicator::moveControlBar(const QPoint &requestedTopLeft)
     m_layout.controlScreenRect = m_screenRect;
     const QRect paddedControlRect = globalControl.adjusted(
         -WindowPadding, -WindowPadding, WindowPadding, WindowPadding);
-    const QRect globalWindowRect = isFullScreenRecordingRect(m_captureRect)
-        ? paddedControlRect
-        : m_captureRect.adjusted(-WindowPadding, -WindowPadding,
-                                 WindowPadding, WindowPadding).united(paddedControlRect);
+    const QRect globalWindowRect = paddedControlRect;
     setGeometry(globalWindowRect);
-    m_borderRect = m_captureRect.translated(-globalWindowRect.topLeft());
     m_controlRect = globalControl.translated(-globalWindowRect.topLeft());
     if (m_controlBar)
         m_controlBar->setGeometry(m_controlRect);
@@ -581,25 +671,4 @@ bool RecordingIndicator::eventFilter(QObject *watched, QEvent *event)
         return true;
     }
     return QWidget::eventFilter(watched, event);
-}
-
-void RecordingIndicator::paintEvent(QPaintEvent *event)
-{
-    Q_UNUSED(event)
-    if (!m_overlayVisible || isFullScreenRecordingRect(m_captureRect))
-        return;
-    QPainter painter(this);
-    const QColor accent = m_mode == RecordingIndicatorMode::Video
-        ? QColor(63, 156, 255, 235)
-        : QColor(255, 76, 91, 235);
-    painter.setPen(Qt::NoPen);
-    painter.setBrush(accent);
-    painter.drawRect(QRect(m_borderRect.left(), m_borderRect.top() - m_borderWidth,
-                           m_borderRect.width(), m_borderWidth));
-    painter.drawRect(QRect(m_borderRect.left(), m_borderRect.bottom() + 1,
-                           m_borderRect.width(), m_borderWidth));
-    painter.drawRect(QRect(m_borderRect.left() - m_borderWidth, m_borderRect.top(),
-                           m_borderWidth, m_borderRect.height()));
-    painter.drawRect(QRect(m_borderRect.right() + 1, m_borderRect.top(),
-                           m_borderWidth, m_borderRect.height()));
 }

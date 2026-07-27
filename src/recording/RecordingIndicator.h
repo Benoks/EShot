@@ -48,7 +48,6 @@ signals:
     void cancelRequested();
 
 protected:
-    void paintEvent(QPaintEvent *event) override;
     bool eventFilter(QObject *watched, QEvent *event) override;
 
 private:
@@ -57,6 +56,7 @@ private:
     void updateStatusLabel();
     void updatePauseButton();
     void setOverlayVisible(bool visible);
+    void setBorderLocked(bool locked);
     void moveControlBar(const QPoint &requestedTopLeft);
     void updateCaptureSafetyPolicy();
 
@@ -68,8 +68,10 @@ private:
     RecordingOverlayVisibility m_visibilityPolicy = RecordingOverlayVisibility::AlwaysVisible;
     RecordingIndicatorMode m_mode = RecordingIndicatorMode::Gif;
     QFrame *m_controlBar = nullptr;
+    QWidget *m_borderOverlay = nullptr;
     QLabel *m_statusLabel = nullptr;
     QToolButton *m_pauseButton = nullptr;
+    QToolButton *m_borderLockButton = nullptr;
     QPushButton *m_stopButton = nullptr;
     QToolButton *m_cancelButton = nullptr;
     QToolButton *m_detailsButton = nullptr;
@@ -83,6 +85,7 @@ private:
     bool m_overlayVisible = true;
     bool m_captureSafePresentationStarted = false;
     bool m_platformCanExcludeOverlay = false;
+    bool m_borderLocked = true;
     bool m_dragging = false;
     QPoint m_dragOffset;
     bool m_compact = false;

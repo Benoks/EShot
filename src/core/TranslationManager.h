@@ -182,6 +182,7 @@ public:
     static QString trayScrollingCapture() { return tr("trayScrollingCapture"); }
     static QString trayRecordGif()    { return tr("trayRecordGif"); }
     static QString trayStopRecording() { return tr("trayStopRecording"); }
+    static QString trayCancelRecording() { return tr("trayCancelRecording"); }
     static QString traySettings()     { return tr("traySettings"); }
     static QString trayAbout()        { return tr("trayAbout"); }
     static QString trayQuit()         { return tr("trayQuit"); }
@@ -562,6 +563,7 @@ private:
         {"trayScrollingCapture",{"Kaydırmalı Yakala", "Scrolling Capture", "Scrollaufnahme", "Capture défilante", "Captura con desplazamiento", "スクロールキャプチャ", "滚动截图", "Захват с прокруткой"}},
         {"trayRecordGif",  {"GIF Kaydı Başlat", "Start GIF Recording", "GIF-Aufnahme starten", "Démarrer enregistrement GIF", "Iniciar grabación GIF", "GIF録画開始", "开始 GIF 录制", "Начать запись GIF"}},
         {"trayStopRecording",{"Kaydı Durdur", "Stop Recording", "Aufnahme stoppen", "Arrêter l'enregistrement", "Detener grabación", "録画停止", "停止录制", "Остановить запись"}},
+        {"trayCancelRecording",{"Kaydı İptal Et", "Cancel Recording", "Aufnahme abbrechen", "Annuler l'enregistrement", "Cancelar grabación", "録画をキャンセル", "取消录制", "Отменить запись"}},
         {"traySettings",   {"Ayarlar", "Settings", "Einstellungen", "Paramètres", "Configuración", "設定", "设置", "Настройки"}},
         {"trayAbout",      {"Hakkında", "About", "Über", "À propos", "Acerca de", "概要", "关于", "О программе"}},
         {"trayQuit",       {"Çıkış", "Quit", "Beenden", "Quitter", "Salir", "終了", "退出", "Выход"}},

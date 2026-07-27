@@ -4,6 +4,7 @@
 #include "WindowsWindowProvider.h"
 #include "PinnedWindow.h"
 #include "annotation/AnnotationEngine.h"
+#include "annotation/AnnotationRotationGeometry.h"
 #include "ui/AnnotationToolbar.h"
 #include "ui/OcrDialog.h"
 #include "ui/UploadDialog.h"
@@ -15,6 +16,7 @@
 #include "core/VisualSearch.h"
 #include "recording/LinuxRecordingSupport.h"
 #include "recording/RecordingSettingsPolicy.h"
+#include "recording/RecordingDrawerPolicy.h"
 
 #include "../core/TranslationManager.h"
 
@@ -35,6 +37,7 @@
 #include <functional>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
+#include <QFormLayout>
 #include <QPushButton>
 #include <QLabel>
 #include <QFrame>
@@ -750,6 +753,7 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
     connect(m_annotationEngine, &AnnotationEngine::annotationAdded, this, &CaptureOverlay::updateUndoRedoState);
 
     setupToolSettingsDrawer();
+    setupRecordingDrawer();
 
     m_actionPanel = new QWidget(this);
     m_actionPanel->setStyleSheet(R"(
@@ -1215,6 +1219,234 @@ void CaptureOverlay::setupToolSettingsDrawer()
     m_toolSettingsButtonAnimation->setEasingCurve(QEasingCurve::OutCubic);
 }
 
+void CaptureOverlay::setupRecordingDrawer()
+{
+    m_recordingDrawer = new QWidget(this);
+    m_recordingDrawer->setObjectName(QStringLiteral("recordingDrawer"));
+    m_recordingDrawer->setFixedWidth(264);
+    m_recordingDrawer->setStyleSheet(R"(
+        QWidget#recordingDrawer { background: rgba(37, 37, 37, 250); border: 1px solid rgba(255,255,255,55); border-radius: 10px; }
+        QLabel { color: #d6d6d6; font-size: 11px; }
+        QLabel#recordingDrawerTitle { color: #f5f5f5; font-size: 13px; font-weight: 700; }
+        QSpinBox, QComboBox { min-height: 32px; background: #303030; border: 1px solid #505050; border-radius: 6px; color: #f2f2f2; }
+        QComboBox { padding: 0 7px; }
+        QSpinBox { padding: 0; }
+        QSpinBox:hover, QComboBox:hover { border-color: #6a6a6a; background: #383838; }
+        QSpinBox:focus, QComboBox:focus { border-color: #0078d4; }
+        QComboBox::drop-down {
+            subcontrol-origin: padding;
+            subcontrol-position: top right;
+            width: 28px;
+            border-left: 1px solid #4b4d52;
+            border-top-right-radius: 6px;
+            border-bottom-right-radius: 6px;
+            background: #34363a;
+        }
+        QComboBox::down-arrow {
+            image: url(:/icons/chevron_down.svg);
+            width: 14px;
+            height: 14px;
+        }
+        QSpinBox::up-button, QSpinBox::down-button {
+            subcontrol-origin: border;
+            width: 22px;
+            background: #34363a;
+            border-left: 1px solid #4b4d52;
+        }
+        QSpinBox::up-button { subcontrol-position: top right; border-top-right-radius: 6px; }
+        QSpinBox::down-button { subcontrol-position: bottom right; border-bottom-right-radius: 6px; }
+        QSpinBox::up-button:hover, QSpinBox::down-button:hover { background: #3a3a3a; }
+        QSpinBox::up-arrow { image: url(:/icons/chevron_up.svg); width: 11px; height: 11px; }
+        QSpinBox::down-arrow { image: url(:/icons/chevron_down.svg); width: 11px; height: 11px; }
+        QCheckBox { color: #e4e4e4; spacing: 7px; }
+        QPushButton#recordingStartButton { min-height: 32px; background: #0078d4; border: 1px solid #2497eb; border-radius: 6px; color: white; font-weight: 700; }
+        QPushButton#recordingStartButton:hover { background: #1686dc; }
+        QPushButton#recordingCancelButton { min-height: 28px; background: transparent; border: 1px solid #505050; border-radius: 6px; color: #d6d6d6; }
+    )");
+
+    auto *layout = new QVBoxLayout(m_recordingDrawer);
+    layout->setContentsMargins(13, 12, 13, 12);
+    layout->setSpacing(9);
+    m_recordingDrawerTitle = new QLabel(m_recordingDrawer);
+    m_recordingDrawerTitle->setObjectName(QStringLiteral("recordingDrawerTitle"));
+    layout->addWidget(m_recordingDrawerTitle);
+
+    m_recordingGifOptions = new QWidget(m_recordingDrawer);
+    auto *gifForm = new QFormLayout(m_recordingGifOptions);
+    gifForm->setContentsMargins(0, 0, 0, 0);
+    gifForm->setSpacing(7);
+    m_recordingGifFpsSpin = new QSpinBox(m_recordingGifOptions);
+    m_recordingGifFpsSpin->setRange(1, gifRecordingFpsLimit());
+    m_recordingGifFpsSpin->setAlignment(Qt::AlignCenter);
+    m_recordingGifSecondsSpin = new QSpinBox(m_recordingGifOptions);
+    m_recordingGifSecondsSpin->setRange(0, 600);
+    m_recordingGifSecondsSpin->setSpecialValueText(TranslationManager::recordingUnlimited());
+    m_recordingGifSecondsSpin->setAlignment(Qt::AlignCenter);
+    m_recordingGifLoopCombo = new QComboBox(m_recordingGifOptions);
+    m_recordingGifLoopCombo->addItem(TranslationManager::recordingLoopInfinite(), 0);
+    for (int loops : {1, 2, 3, 5, 10})
+        m_recordingGifLoopCombo->addItem(QString::number(loops), loops);
+    gifForm->addRow(TranslationManager::gifFpsLabel().remove(QChar(':')), m_recordingGifFpsSpin);
+    gifForm->addRow(TranslationManager::quickMaxSeconds(), m_recordingGifSecondsSpin);
+    gifForm->addRow(TranslationManager::recordingLoop().remove(QChar(':')), m_recordingGifLoopCombo);
+    layout->addWidget(m_recordingGifOptions);
+
+    m_recordingVideoOptions = new QWidget(m_recordingDrawer);
+    auto *videoForm = new QFormLayout(m_recordingVideoOptions);
+    videoForm->setContentsMargins(0, 0, 0, 0);
+    videoForm->setSpacing(7);
+    m_recordingVideoFpsSpin = new QSpinBox(m_recordingVideoOptions);
+    m_recordingVideoFpsSpin->setRange(1, videoRecordingFpsLimit());
+    m_recordingVideoFpsSpin->setAlignment(Qt::AlignCenter);
+    m_recordingVideoSecondsSpin = new QSpinBox(m_recordingVideoOptions);
+    m_recordingVideoSecondsSpin->setRange(0, 3600);
+    m_recordingVideoSecondsSpin->setSpecialValueText(TranslationManager::recordingUnlimited());
+    m_recordingVideoSecondsSpin->setAlignment(Qt::AlignCenter);
+    m_recordingVideoCrfSpin = new QSpinBox(m_recordingVideoOptions);
+    m_recordingVideoCrfSpin->setRange(18, 32);
+    m_recordingVideoCrfSpin->setAlignment(Qt::AlignCenter);
+    m_recordingDesktopAudioCheck = new QCheckBox(TranslationManager::audioDesktop(), m_recordingVideoOptions);
+    m_recordingMicrophoneCheck = new QCheckBox(TranslationManager::audioMicrophone(), m_recordingVideoOptions);
+    m_recordingMicrophoneDeviceCombo = new QComboBox(m_recordingVideoOptions);
+    const auto inputDevices = microphoneAudioDevices();
+    m_recordingMicrophoneDeviceCombo->addItem(
+        QStringLiteral("Default"),
+        inputDevices.isEmpty() ? QStringLiteral("default") : inputDevices.first().second);
+    for (const auto &device : inputDevices) {
+        if (m_recordingMicrophoneDeviceCombo->findData(device.second) < 0)
+            m_recordingMicrophoneDeviceCombo->addItem(device.first, device.second);
+    }
+#ifdef Q_OS_WIN
+    for (const QString &device : desktopAudioDevices()) {
+        if (m_recordingMicrophoneDeviceCombo->findData(device) < 0)
+            m_recordingMicrophoneDeviceCombo->addItem(device, device);
+    }
+#endif
+    videoForm->addRow(TranslationManager::videoFpsLabel().remove(QChar(':')), m_recordingVideoFpsSpin);
+    videoForm->addRow(TranslationManager::quickMaxSeconds(), m_recordingVideoSecondsSpin);
+    videoForm->addRow(TranslationManager::videoQualityCrf(), m_recordingVideoCrfSpin);
+    videoForm->addRow(m_recordingDesktopAudioCheck);
+    videoForm->addRow(m_recordingMicrophoneCheck);
+    videoForm->addRow(TranslationManager::audioMicrophoneDevice(), m_recordingMicrophoneDeviceCombo);
+    layout->addWidget(m_recordingVideoOptions);
+
+    m_recordingStartButton = new QPushButton(m_recordingDrawer);
+    m_recordingStartButton->setObjectName(QStringLiteral("recordingStartButton"));
+    m_recordingCancelButton = new QPushButton(TranslationManager::recordingCancel(), m_recordingDrawer);
+    m_recordingCancelButton->setObjectName(QStringLiteral("recordingCancelButton"));
+    layout->addWidget(m_recordingStartButton);
+    layout->addWidget(m_recordingCancelButton);
+
+    auto persist = [](const char *key, int value) { QSettings("EShot", "EShot").setValue(key, value); };
+    connect(m_recordingGifFpsSpin, qOverload<int>(&QSpinBox::valueChanged), this, [persist](int value) { persist("recordingFps", value); });
+    connect(m_recordingGifSecondsSpin, qOverload<int>(&QSpinBox::valueChanged), this, [persist](int value) { persist("recordingMaxSeconds", value); });
+    connect(m_recordingGifLoopCombo, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int) { QSettings("EShot", "EShot").setValue("recordingLoop", m_recordingGifLoopCombo->currentData()); });
+    connect(m_recordingVideoFpsSpin, qOverload<int>(&QSpinBox::valueChanged), this, [persist](int value) { persist("videoRecordingFps", value); });
+    connect(m_recordingVideoSecondsSpin, qOverload<int>(&QSpinBox::valueChanged), this, [persist](int value) { persist("videoRecordingMaxSeconds", value); });
+    connect(m_recordingVideoCrfSpin, qOverload<int>(&QSpinBox::valueChanged), this, [persist](int value) { persist("videoRecordingCrf", value); });
+    connect(m_recordingDesktopAudioCheck, &QCheckBox::toggled, this, [](bool enabled) { QSettings("EShot", "EShot").setValue("videoDesktopAudioEnabled", enabled); });
+    connect(m_recordingMicrophoneCheck, &QCheckBox::toggled, this, [this](bool enabled) {
+        QSettings("EShot", "EShot").setValue("videoMicrophoneEnabled", enabled);
+        if (m_recordingMicrophoneDeviceCombo)
+            m_recordingMicrophoneDeviceCombo->setEnabled(enabled);
+    });
+    connect(m_recordingMicrophoneDeviceCombo, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int) {
+        QSettings("EShot", "EShot").setValue(
+            "videoMicrophoneDevice", m_recordingMicrophoneDeviceCombo->currentData().toString());
+    });
+    connect(m_recordingStartButton, &QPushButton::clicked, this, &CaptureOverlay::startRecordingFromDrawer);
+    connect(m_recordingCancelButton, &QPushButton::clicked, this, [this] { hideRecordingDrawer(); });
+    m_recordingDrawer->hide();
+}
+
+void CaptureOverlay::showRecordingDrawer(RecordingDrawerMode mode)
+{
+    if (!m_recordingDrawer || !m_selectionComplete)
+        return;
+
+    m_recordingDrawerMode = mode;
+    const QStringList fields = recordingDrawerFields(mode);
+    m_recordingGifOptions->setVisible(fields.contains(QStringLiteral("gifFps")));
+    m_recordingVideoOptions->setVisible(fields.contains(QStringLiteral("videoFps")));
+    const bool isGif = mode == RecordingDrawerMode::Gif;
+    m_recordingDrawerTitle->setText(isGif ? TranslationManager::quickGifRecording() : TranslationManager::videoRecordingTitle());
+    m_recordingStartButton->setText(TranslationManager::recordingStart());
+
+    QSettings settings("EShot", "EShot");
+    {
+        QSignalBlocker gifFpsBlocker(m_recordingGifFpsSpin);
+        QSignalBlocker gifTimeBlocker(m_recordingGifSecondsSpin);
+        QSignalBlocker gifLoopBlocker(m_recordingGifLoopCombo);
+        QSignalBlocker videoFpsBlocker(m_recordingVideoFpsSpin);
+        QSignalBlocker videoTimeBlocker(m_recordingVideoSecondsSpin);
+        QSignalBlocker videoCrfBlocker(m_recordingVideoCrfSpin);
+        QSignalBlocker desktopAudioBlocker(m_recordingDesktopAudioCheck);
+        QSignalBlocker microphoneBlocker(m_recordingMicrophoneCheck);
+        QSignalBlocker microphoneDeviceBlocker(m_recordingMicrophoneDeviceCombo);
+        m_recordingGifFpsSpin->setValue(settings.value("recordingFps", 10).toInt());
+        m_recordingGifSecondsSpin->setValue(settings.value("recordingMaxSeconds", 30).toInt());
+        int loopIndex = m_recordingGifLoopCombo->findData(settings.value("recordingLoop", 0).toInt());
+        m_recordingGifLoopCombo->setCurrentIndex(loopIndex < 0 ? 0 : loopIndex);
+        m_recordingVideoFpsSpin->setValue(settings.value("videoRecordingFps", 30).toInt());
+        m_recordingVideoSecondsSpin->setValue(settings.value("videoRecordingMaxSeconds", 0).toInt());
+        m_recordingVideoCrfSpin->setValue(settings.value("videoRecordingCrf", 24).toInt());
+        m_recordingDesktopAudioCheck->setChecked(loadRecordingAudioEnabled(settings, RecordingAudioSource::Desktop));
+        m_recordingMicrophoneCheck->setChecked(loadRecordingAudioEnabled(settings, RecordingAudioSource::Microphone));
+        const int microphoneDeviceIndex = m_recordingMicrophoneDeviceCombo->findData(
+            settings.value("videoMicrophoneDevice", "default").toString());
+        m_recordingMicrophoneDeviceCombo->setCurrentIndex(microphoneDeviceIndex < 0 ? 0 : microphoneDeviceIndex);
+        m_recordingMicrophoneDeviceCombo->setEnabled(m_recordingMicrophoneCheck->isChecked());
+    }
+
+    setToolSettingsDrawerVisible(false);
+    if (m_toolbar)
+        m_toolbar->hide();
+    if (m_actionPanel)
+        m_actionPanel->hide();
+    if (m_toolSettingsButton)
+        m_toolSettingsButton->hide();
+    if (m_toolSettingsDrawer)
+        m_toolSettingsDrawer->hide();
+    m_recordingDrawer->adjustSize();
+    QRect bounds = m_selectionAnchorScreenRect.intersected(rect());
+    if (bounds.isEmpty())
+        bounds = rect();
+    bounds.adjust(12, 12, -12, -12);
+    m_recordingDrawer->move(recordingDrawerPosition(bounds, m_recordingDrawer->size()));
+    m_recordingDrawer->show();
+    m_recordingDrawer->raise();
+}
+
+void CaptureOverlay::hideRecordingDrawer(bool restoreToolbar)
+{
+    if (m_recordingDrawer)
+        m_recordingDrawer->hide();
+    m_recordingDrawerMode = RecordingDrawerMode::None;
+    if (restoreToolbar && m_selectionComplete) {
+        showToolbar();
+        updateUndoRedoState();
+        update();
+    }
+}
+
+void CaptureOverlay::startRecordingFromDrawer()
+{
+    const RecordingDrawerMode mode = m_recordingDrawerMode;
+    if (mode == RecordingDrawerMode::None || !m_selectionComplete)
+        return;
+    const QRect captureRect = selectedCaptureRect();
+    const QRect displayRect = selectedDisplayRect();
+    hideRecordingDrawer(false);
+    hide();
+    m_selectionComplete = false;
+    m_isSelecting = false;
+    hideToolbar();
+    if (mode == RecordingDrawerMode::Gif)
+        emit gifCaptureRequested(captureRect, displayRect);
+    else
+        emit videoCaptureRequested(captureRect, displayRect);
+}
+
 void CaptureOverlay::updateToolSettingsDrawerPosition()
 {
     if (!m_toolSettingsButton || !m_toolSettingsDrawer || !m_selectionComplete)
@@ -1441,6 +1673,9 @@ void CaptureOverlay::setToolSettingsDrawerVisible(bool visible)
 
 bool CaptureOverlay::isToolSettingsUiAt(const QPoint &pos) const
 {
+    if (m_recordingDrawer && m_recordingDrawer->isVisible()
+        && m_recordingDrawer->geometry().contains(pos))
+        return true;
     if (m_toolSettingsButton && m_toolSettingsButton->isVisible() &&
         m_toolSettingsButton->geometry().contains(pos))
         return true;
@@ -2025,15 +2260,31 @@ void CaptureOverlay::paintEvent(QPaintEvent *event)
             painter.setClipRect(selRect);
             m_annotationEngine->render(&painter, QPoint());
             if (m_annotationEngine->selectedIndex() >= 0) {
-                QRect annotationRect = m_annotationEngine->boundingRectOf(m_annotationEngine->selectedIndex())
-                                           .adjusted(-4, -4, 4, 4)
-                                           ;
+                const int selectedIndex = m_annotationEngine->selectedIndex();
+                QRect annotationRect = m_annotationEngine->boundingRectOf(selectedIndex)
+                                           .adjusted(-4, -4, 4, 4);
                 if (!annotationRect.isEmpty()) {
-                    QPen selectPen(QColor(255, 205, 70, 220), 1, Qt::DashLine);
+                    QPen selectPen(QColor(179, 102, 255, 235), 1, Qt::DashLine);
                     selectPen.setCosmetic(true);
                     painter.setPen(selectPen);
                     painter.setBrush(Qt::NoBrush);
                     painter.drawRoundedRect(annotationRect.adjusted(0, 0, -1, -1), 3, 3);
+
+                    if (m_annotationEngine->isRotatable(selectedIndex)) {
+                        const QPointF handleCenter = AnnotationRotationGeometry::handleCenter(annotationRect);
+                        const QPointF connectorStart(annotationRect.center().x(), annotationRect.bottom());
+                        painter.drawLine(connectorStart, handleCenter);
+                        const QRectF handleRect(handleCenter.x() - 12, handleCenter.y() - 12, 24, 24);
+                        painter.setBrush(QColor(250, 250, 252));
+                        painter.setPen(QPen(QColor(179, 102, 255), 1));
+                        painter.drawEllipse(handleRect);
+                        QFont handleFont = painter.font();
+                        handleFont.setPointSize(13);
+                        handleFont.setBold(true);
+                        painter.setFont(handleFont);
+                        painter.setPen(QColor(58, 34, 84));
+                        painter.drawText(handleRect, Qt::AlignCenter, QString::fromUtf8("↻"));
+                    }
                 }
             }
             painter.setClipping(false);
@@ -2183,6 +2434,25 @@ void CaptureOverlay::mousePressEvent(QMouseEvent *event)
             return;
         }
 
+        if (m_selectionComplete && m_annotationEngine
+            && m_annotationEngine->selectedIndex() >= 0) {
+            const int selectedIndex = m_annotationEngine->selectedIndex();
+            if (m_annotationEngine->isRotatable(selectedIndex)) {
+                const QRect annotationRect = m_annotationEngine->boundingRectOf(selectedIndex)
+                                                 .adjusted(-4, -4, 4, 4);
+                const QPointF handleCenter = AnnotationRotationGeometry::handleCenter(annotationRect);
+                if (QLineF(event->pos(), handleCenter).length() <= 14.0) {
+                    m_isRotatingAnnotation = true;
+                    m_rotationCenter = m_annotationEngine->rotatedBoundingRectOf(selectedIndex).center();
+                    m_rotationDragStartAngle = AnnotationRotationGeometry::angleAt(m_rotationCenter, event->pos());
+                    m_rotationStartDegrees = m_annotationEngine->rotationDegreesOf(selectedIndex);
+                    setCursor(Qt::CrossCursor);
+                    event->accept();
+                    return;
+                }
+            }
+        }
+
         if (m_selectionComplete && !m_selectionLocked) {
             QRect selRect = normalizedSelectionRect();
 
@@ -2202,6 +2472,15 @@ void CaptureOverlay::mousePressEvent(QMouseEvent *event)
                         updateUndoRedoState();
                     }
                 } else {
+                    const int existingAnnotation = m_annotationEngine->findAnnotationAt(rel);
+                    if (existingAnnotation >= 0) {
+                        m_annotationEngine->setCurrentTool(AnnotationEngine::None);
+                        m_annotationEngine->setSelectedIndex(existingAnnotation);
+                        if (m_toolbar)
+                            m_toolbar->selectTool(AnnotationEngine::None);
+                        update();
+                        return;
+                    }
                     m_annotationEngine->beginDraw(rel);
                     update();
                 }
@@ -2366,6 +2645,17 @@ void CaptureOverlay::mouseMoveEvent(QMouseEvent *event)
         return;
     }
 
+    // Annotation rotation
+    if (m_isRotatingAnnotation && m_annotationEngine && m_annotationEngine->selectedIndex() >= 0) {
+        const qreal currentAngle = AnnotationRotationGeometry::angleAt(m_rotationCenter, event->pos());
+        qreal rotation = m_rotationStartDegrees + currentAngle - m_rotationDragStartAngle;
+        rotation = AnnotationRotationGeometry::snappedAngle(
+            rotation, QApplication::keyboardModifiers().testFlag(Qt::ShiftModifier));
+        m_annotationEngine->rotateAnnotation(m_annotationEngine->selectedIndex(), rotation);
+        update();
+        return;
+    }
+
     // Annotation move
     if (m_isDraggingAnnotation && m_annotationEngine && m_annotationEngine->selectedIndex() >= 0) {
         QRect selRect = normalizedSelectionRect();
@@ -2462,10 +2752,18 @@ void CaptureOverlay::mouseReleaseEvent(QMouseEvent *event)
             return;
         }
 
+        // Annotation rotation end
+        if (m_isRotatingAnnotation) {
+            m_isRotatingAnnotation = false;
+            setCursor(Qt::CrossCursor);
+            updateUndoRedoState();
+            update();
+            return;
+        }
+
         // Annotation move end
         if (m_isDraggingAnnotation) {
             m_isDraggingAnnotation = false;
-            if (m_annotationEngine) m_annotationEngine->setSelectedIndex(-1);
             setCursor(Qt::CrossCursor);
             update();
             return;
@@ -2844,6 +3142,8 @@ void CaptureOverlay::hideToolbar()
     if (m_actionPanel) m_actionPanel->hide();
     if (m_toolSettingsButton) m_toolSettingsButton->hide();
     if (m_toolSettingsDrawer) m_toolSettingsDrawer->hide();
+    if (m_recordingDrawer) m_recordingDrawer->hide();
+    m_recordingDrawerMode = RecordingDrawerMode::None;
     if (m_textEditPanel) m_textEditPanel->hide();
     if (m_textFocusProxy) m_textFocusProxy->hide();
 }
@@ -3278,29 +3578,16 @@ void CaptureOverlay::clearVisualSearchUpload()
 
 void CaptureOverlay::onGifRequested()
 {
-    QRect selRect = normalizedSelectionRect();
-    if (selRect.isEmpty()) return;
-    QRect captureRect = selectedCaptureRect();
-    QRect displayRect = selectedDisplayRect();
-    hide();
-    m_selectionComplete = false;
-    m_isSelecting = false;
-    if (m_toolbar) m_toolbar->hide();
-    if (m_actionPanel) m_actionPanel->hide();
-    emit gifCaptureRequested(captureRect, displayRect);
+    if (normalizedSelectionRect().isEmpty())
+        return;
+    showRecordingDrawer(RecordingDrawerMode::Gif);
 }
 
 void CaptureOverlay::onVideoRequested()
 {
-    QRect selRect = normalizedSelectionRect();
-    if (selRect.isEmpty()) return;
-    QRect captureRect = selectedCaptureRect();
-    QRect displayRect = selectedDisplayRect();
-    hide();
-    m_selectionComplete = false;
-    m_isSelecting = false;
-    hideToolbar();
-    emit videoCaptureRequested(captureRect, displayRect);
+    if (normalizedSelectionRect().isEmpty())
+        return;
+    showRecordingDrawer(RecordingDrawerMode::Video);
 }
 
 QRect CaptureOverlay::normalizedSelectionRect() const

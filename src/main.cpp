@@ -764,6 +764,24 @@ private:
                 this, &EShotApp::onWindowCaptureRequested);
 #endif
 
+        const bool videoRecording = m_videoRecorder && m_videoRecorder->isRecording();
+        const bool gifRecording = m_screenRecorder && m_screenRecorder->isRecording();
+        if (videoRecording || gifRecording) {
+            QAction *cancelRecordingAction = m_trayMenu->addAction(
+                trayIcon(":/icons/close.svg"), TranslationManager::trayCancelRecording());
+            connect(cancelRecordingAction, &QAction::triggered, this, [this]() {
+                if (m_videoRecorder && m_videoRecorder->isRecording())
+                    m_videoRecorder->cancel();
+                else if (m_screenRecorder && m_screenRecorder->isRecording())
+                    m_screenRecorder->cancel();
+                if (m_recordingIndicator) {
+                    m_recordingIndicator->stop();
+                    m_recordingIndicator = nullptr;
+                }
+            });
+            m_trayMenu->addSeparator();
+        }
+
         if (hasPrintScreenConflict()) {
             QAction *fixPrintScreenAction = m_trayMenu->addAction(
                 trayIcon(":/icons/gear.svg"),
