@@ -141,6 +141,33 @@ LinuxPortalScreenshot::LinuxPortalScreenshot(QObject *parent)
 {
 }
 
+void LinuxPortalScreenshot::warmup()
+{
+#if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
+    QDBusConnection bus = QDBusConnection::sessionBus();
+    if (!bus.isConnected())
+        return;
+
+    // Pinging the portal activates xdg-desktop-portal and its selected backend,
+    // but unlike Screenshot it neither asks for nor writes any screen content.
+    const QDBusMessage message = QDBusMessage::createMethodCall(
+        QStringLiteral("org.freedesktop.portal.Desktop"),
+        QStringLiteral("/org/freedesktop/portal/desktop"),
+        QStringLiteral("org.freedesktop.DBus.Peer"),
+        QStringLiteral("Ping"));
+    auto *watcher = new QDBusPendingCallWatcher(bus.asyncCall(message), QCoreApplication::instance());
+    QObject::connect(watcher, &QDBusPendingCallWatcher::finished, watcher,
+                     [](QDBusPendingCallWatcher *finishedWatcher) {
+        QDBusReply<void> reply = *finishedWatcher;
+        if (!reply.isValid())
+            qInfo() << "[LinuxScreenshot] portal warmup skipped:" << reply.error().name();
+        else
+            qInfo() << "[LinuxScreenshot] portal warmup completed";
+        finishedWatcher->deleteLater();
+    });
+#endif
+}
+
 QPixmap LinuxPortalScreenshot::grab(QWidget *parent, int timeoutMs)
 {
 #if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)

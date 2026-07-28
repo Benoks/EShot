@@ -28,6 +28,7 @@
         <file alias="icons/semirect.svg">../icons/semirect.svg</file>
         <file alias="icons/paste.svg">../icons/paste.svg</file>
         <file alias="icons/ocr.svg">../icons/ocr.svg</file>
+        <file alias="icons/external_link.svg">../icons/external_link.svg</file>
         <file alias="icons/upload.svg">../icons/upload.svg</file>
         <file alias="icons/search.svg">../icons/search.svg</file>
         <file alias="icons/yandex_search.svg">../icons/yandex_search.svg</file>

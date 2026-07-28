@@ -2,7 +2,7 @@
 Type=Application
 Name=EShot
 Comment=Screenshot, annotation, OCR, upload, GIF and video capture tool
-Exec=eshot-launcher
+Exec=eshot-launcher --control
 Icon=io.github.benoks.EShot-v4
 Terminal=false
 StartupNotify=false

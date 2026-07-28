@@ -2,6 +2,7 @@
 #include "core/LinuxPortalScreenCast.h"
 #include "LinuxRecordingSupport.h"
 #include "RecordingSettingsPolicy.h"
+#include "VideoRecordingCompletionPolicy.h"
 
 #include <QCoreApplication>
 #include <QGuiApplication>
@@ -570,8 +571,9 @@ void VideoRecorder::onProcessFinished(int exitCode, QProcess::ExitStatus status)
         return;
     }
 
-    bool ok = status == QProcess::NormalExit && (exitCode == 0 || expectedStop) &&
-        QFileInfo(m_systemAudioLoopback ? m_videoOnlyPath : output).exists();
+    const QFileInfo completedFile(m_systemAudioLoopback ? m_videoOnlyPath : output);
+    bool ok = videoRecordingProcessSucceeded(m_usesGStreamer, expectedStop,
+                                             status, exitCode, completedFile.size());
     if (!ok) {
         if (!output.isEmpty())
             QFile::remove(output);

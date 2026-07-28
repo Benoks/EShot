@@ -8,6 +8,7 @@ enum Command {
     None,
     Capture,
     Settings,
+    Control,
     Quit
 };
 

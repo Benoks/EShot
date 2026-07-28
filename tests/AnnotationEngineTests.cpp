@@ -9,6 +9,10 @@ private slots:
     void rotatesRectangleAroundItsCenter();
     void undoRedoRestoresRotationAngle();
     void rotatedTextHitTestingUsesTransformedBounds();
+    void textHitTestingDoesNotExtendBeyondVisibleBackground();
+    void textStretchAnchorsTheOppositeCornerAndSupportsUndoRedo();
+    void shiftConstrainedCircleBoundsMatchTheRenderedCircle();
+    void shiftConstrainedHighlighterSnapsToItsDominantAxis();
     void exposesOnlyRequestedAnnotationTypesAsRotatable();
 };
 
@@ -51,6 +55,61 @@ void AnnotationEngineTests::rotatedTextHitTestingUsesTransformedBounds()
 
     const QPoint hitPoint = engine.rotatedBoundingRectOf(0).center().toPoint();
     QCOMPARE(engine.findAnnotationAt(hitPoint), 0);
+}
+
+void AnnotationEngineTests::textHitTestingDoesNotExtendBeyondVisibleBackground()
+{
+    AnnotationEngine engine;
+    engine.addTextAnnotation(QPoint(100, 100), QStringLiteral("bu text"));
+
+    const QRect visibleBounds = engine.boundingRectOf(0);
+    QVERIFY(!visibleBounds.contains(QPoint(visibleBounds.left() - 5, visibleBounds.top() - 5)));
+    QCOMPARE(engine.findAnnotationAt(QPoint(visibleBounds.left() - 5,
+                                            visibleBounds.top() - 5)), -1);
+}
+
+void AnnotationEngineTests::textStretchAnchorsTheOppositeCornerAndSupportsUndoRedo()
+{
+    AnnotationEngine engine;
+    engine.setTextFontSize(18);
+    engine.addTextAnnotation(QPoint(100, 100), QStringLiteral("Resize me"));
+    const QRectF originalBounds = engine.rotatedBoundingRectOf(0);
+    const QRectF stretchedBounds(originalBounds.left() - 30, originalBounds.top() - 12,
+                                 originalBounds.width() + 30, originalBounds.height() + 12);
+
+    engine.beginTextResize(0);
+    engine.resizeTextAnnotation(0, stretchedBounds);
+    engine.endTextResize();
+    QCOMPARE(engine.rotatedBoundingRectOf(0), stretchedBounds);
+
+    engine.undo();
+    QCOMPARE(engine.rotatedBoundingRectOf(0), originalBounds);
+
+    engine.redo();
+    QCOMPARE(engine.rotatedBoundingRectOf(0), stretchedBounds);
+}
+
+void AnnotationEngineTests::shiftConstrainedCircleBoundsMatchTheRenderedCircle()
+{
+    AnnotationEngine engine;
+    engine.setCurrentTool(AnnotationEngine::Circle);
+    engine.setShiftHeld(true);
+    engine.beginDraw(QPoint(10, 10));
+    engine.endDraw(QPoint(60, 40));
+
+    QCOMPARE(engine.rotatedBoundingRectOf(0), QRectF(10, 10, 31, 31));
+}
+
+void AnnotationEngineTests::shiftConstrainedHighlighterSnapsToItsDominantAxis()
+{
+    AnnotationEngine engine;
+    engine.setCurrentTool(AnnotationEngine::Highlighter);
+    engine.setShiftHeld(true);
+    engine.beginDraw(QPoint(10, 10));
+    engine.continueDraw(QPoint(40, 28));
+    engine.endDraw(QPoint(60, 34));
+
+    QCOMPARE(engine.rotatedBoundingRectOf(0), QRectF(10, 10, 51, 1));
 }
 
 void AnnotationEngineTests::exposesOnlyRequestedAnnotationTypesAsRotatable()

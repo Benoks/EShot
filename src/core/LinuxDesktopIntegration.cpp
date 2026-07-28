@@ -49,6 +49,11 @@ bool useGnomeShortcutFallback(LinuxDesktopEnvironment desktop, bool portalAvaila
     return desktop == LinuxDesktopEnvironment::Gnome && !portalAvailable;
 }
 
+bool shouldShowControlCenter(LinuxDesktopEnvironment desktop, bool trayAvailable, bool silent)
+{
+    return desktop == LinuxDesktopEnvironment::Gnome && !trayAvailable && !silent;
+}
+
 QString displayName(LinuxDesktopEnvironment desktop)
 {
     switch (desktop) {

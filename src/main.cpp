@@ -41,6 +41,7 @@
 #include "core/TranslationManager.h"
 #include "core/UpdateManager.h"
 #include "core/LinuxScreenshotPolicy.h"
+#include "core/LinuxDesktopIntegration.h"
 #include "core/NotificationFolderOpener.h"
 #include "core/ApplicationInstanceCommand.h"
 #if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
@@ -57,6 +58,7 @@
 #include "ui/SettingsDialog.h"
 #include "ui/ApplicationTheme.h"
 #include "ui/AboutDialog.h"
+#include "ui/ControlCenterDialog.h"
 #include "ui/FirstRunWizard.h"
 
 #ifdef Q_OS_WIN
@@ -216,6 +218,21 @@ public slots:
                                 timeoutMs);
     }
 
+    void showFailureNotification(const QString &message, int timeoutMs)
+    {
+#if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
+        if (m_linuxNotification
+            && m_linuxNotification->show(TranslationManager::notifCaptureTitle(), message,
+                                         QString(), QString(), timeoutMs)) {
+            return;
+        }
+#endif
+        if (m_trayIcon) {
+            m_trayIcon->showMessage(TranslationManager::notifCaptureTitle(), message,
+                                    QSystemTrayIcon::Warning, timeoutMs);
+        }
+    }
+
     void onCaptureCompleted(const QPixmap &pixmap)
     {
         if (m_skipNextCaptureNotification) {
@@ -338,6 +355,40 @@ public slots:
             rebuildTrayMenu();
             if (m_overlay) m_overlay->refreshUI();
         }
+    }
+
+    void onControlRequested()
+    {
+#if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
+        const LinuxDesktopEnvironment desktop = LinuxDesktopIntegration::detect(
+            qEnvironmentVariable("XDG_CURRENT_DESKTOP"),
+            qEnvironmentVariable("XDG_SESSION_DESKTOP"));
+        if (!LinuxDesktopIntegration::shouldShowControlCenter(
+                desktop, QSystemTrayIcon::isSystemTrayAvailable(), false)) {
+            return;
+        }
+
+        ControlCenterDialog dialog;
+        if (dialog.exec() != QDialog::Accepted)
+            return;
+
+        switch (dialog.selectedAction()) {
+        case ControlCenterDialog::Action::Capture:
+            onCaptureRequested();
+            break;
+        case ControlCenterDialog::Action::Settings:
+            onSettingsRequested();
+            break;
+        case ControlCenterDialog::Action::About:
+            onAboutRequested();
+            break;
+        case ControlCenterDialog::Action::Quit:
+            onQuitAction();
+            break;
+        case ControlCenterDialog::Action::None:
+            break;
+        }
+#endif
     }
 
     void onFixPrintScreenConflict()
@@ -599,9 +650,8 @@ public slots:
         if (m_recordingIndicator) { m_recordingIndicator->stop(); m_recordingIndicator = nullptr; }
         m_lastNotificationPath.clear();
         reason = localizedRecordingFailureReason(reason);
-        if (m_trayIcon) m_trayIcon->showMessage(TranslationManager::notifCaptureTitle(),
-                                                TranslationManager::recordingFailed() + QStringLiteral(": ") + reason,
-                                                QSystemTrayIcon::Warning, 3000);
+        showFailureNotification(TranslationManager::recordingFailed() + QStringLiteral(": ") + reason,
+                                3000);
         rebuildTrayMenu();
     }
 
@@ -668,9 +718,8 @@ public slots:
         if (m_recordingIndicator) { m_recordingIndicator->stop(); m_recordingIndicator = nullptr; }
         m_lastNotificationPath.clear();
         reason = localizedRecordingFailureReason(reason);
-        if (m_trayIcon) m_trayIcon->showMessage(TranslationManager::notifCaptureTitle(),
-                                                TranslationManager::videoFailed() + QStringLiteral(": ") + reason,
-                                                QSystemTrayIcon::Warning, 5000);
+        showFailureNotification(TranslationManager::videoFailed() + QStringLiteral(": ") + reason,
+                                5000);
         rebuildTrayMenu();
     }
 
@@ -1233,6 +1282,8 @@ int main(int argc, char *argv[])
     parser.addOption(captureOption);
     QCommandLineOption settingsOption("settings", "Open EShot settings.");
     parser.addOption(settingsOption);
+    QCommandLineOption controlOption("control", "Open the GNOME trayless control window.");
+    parser.addOption(controlOption);
     QCommandLineOption quitOption("quit", "Quit the running EShot instance.");
     parser.addOption(quitOption);
     QCommandLineOption saveOption("save", "Save screenshot to specified path.", "path");
@@ -1274,9 +1325,11 @@ int main(int argc, char *argv[])
     QLocalSocket instanceSocket;
     instanceSocket.connectToServer(instanceName);
     if (instanceSocket.waitForConnected(150)) {
-        const auto command = ApplicationInstanceCommand::fromInvocation(
-            parser.isSet(captureOption), parser.isSet(settingsOption),
-            parser.isSet(saveOption), parser.isSet(quitOption), true);
+        const auto command = parser.isSet(controlOption)
+            ? ApplicationInstanceCommand::Control
+            : ApplicationInstanceCommand::fromInvocation(
+                parser.isSet(captureOption), parser.isSet(settingsOption),
+                parser.isSet(saveOption), parser.isSet(quitOption), true);
         const QByteArray wireCommand = ApplicationInstanceCommand::toWire(command);
         if (!wireCommand.isEmpty()) {
             instanceSocket.write(wireCommand);
@@ -1297,6 +1350,7 @@ int main(int argc, char *argv[])
         qWarning() << "[EShot] Could not create single-instance lock:" << instanceServer.errorString();
     }
     const bool silent = parser.isSet(silentOption);
+    const bool controlRequested = parser.isSet(controlOption);
     const bool firstRunRequired = !silent && FirstRunWizard::shouldShow();
     EShotApp eshotApp(!firstRunRequired);
 
@@ -1310,6 +1364,9 @@ int main(int argc, char *argv[])
                                               Qt::QueuedConnection);
                 } else if (command == ApplicationInstanceCommand::Settings) {
                     QMetaObject::invokeMethod(&eshotApp, "onSettingsRequested",
+                                              Qt::QueuedConnection);
+                } else if (command == ApplicationInstanceCommand::Control) {
+                    QMetaObject::invokeMethod(&eshotApp, "onControlRequested",
                                               Qt::QueuedConnection);
                 } else if (command == ApplicationInstanceCommand::Quit) {
                     QMetaObject::invokeMethod(&eshotApp, "onQuitAction",
@@ -1328,7 +1385,7 @@ int main(int argc, char *argv[])
     // without prompting. On first run, delay global shortcut registration
     // until the wizard closes so GNOME's permission dialog cannot race it.
     if (firstRunRequired) {
-        QTimer::singleShot(100, &app, [&eshotApp]() {
+        QTimer::singleShot(100, &app, [&eshotApp, controlRequested]() {
 #ifdef Q_OS_LINUX
             // The Linux setup is a fresh onboarding flow even when an older
             // Windows configuration was carried over. Start it in English;
@@ -1355,6 +1412,10 @@ int main(int argc, char *argv[])
             }
             wizard->exec();
             eshotApp.initializeHotkeyConnections();
+            if (controlRequested) {
+                QMetaObject::invokeMethod(&eshotApp, "onControlRequested",
+                                          Qt::QueuedConnection);
+            }
         });
     }
 
@@ -1374,6 +1435,8 @@ int main(int argc, char *argv[])
     }
     if (parser.isSet(captureOption) || !cliSavePath.isEmpty()) {
         QMetaObject::invokeMethod(&eshotApp, "onCaptureRequested", Qt::QueuedConnection);
+    } else if (controlRequested && !firstRunRequired) {
+        QMetaObject::invokeMethod(&eshotApp, "onControlRequested", Qt::QueuedConnection);
     } else if (parser.isSet(settingsOption)
 #ifndef Q_OS_WIN
                || (!silent && !firstRunRequired && !QSystemTrayIcon::isSystemTrayAvailable())

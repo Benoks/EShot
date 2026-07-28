@@ -24,6 +24,7 @@ private slots:
     void onTextReady(const QString &text);
     void onOcrFailed(const QString &reason);
     void onCopyClicked();
+    void onTranslateClicked();
     void onRetryClicked();
     void onLanguageChanged(int index);
 
@@ -44,6 +45,7 @@ private:
     QLabel *m_statusLabel;
     QTextEdit *m_textEdit;
     QPushButton *m_copyBtn;
+    QPushButton *m_translateBtn;
     QPushButton *m_retryBtn;
     QPushButton *m_closeBtn;
 };

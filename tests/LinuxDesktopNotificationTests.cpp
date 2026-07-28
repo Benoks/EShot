@@ -13,6 +13,11 @@ private slots:
         QCOMPARE(actions, QStringList({QStringLiteral("default"), QStringLiteral("Open Folder")}));
     }
 
+    void failureNotificationHasNoFileAction()
+    {
+        QCOMPARE(LinuxDesktopNotification::actions(QString()), QStringList());
+    }
+
     void savedFileNotificationCarriesKdeFileUrl()
     {
         const QVariantMap hints = LinuxDesktopNotification::hintsForPath(

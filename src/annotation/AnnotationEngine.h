@@ -74,8 +74,13 @@ public:
     int findAnnotationAt(const QPoint &pos);
     void moveAnnotation(int index, const QPoint &delta);
     bool isRotatable(int index) const;
+    bool isTextAnnotation(int index) const;
     qreal rotationDegreesOf(int index) const;
+    int textFontSizeOf(int index) const;
     void rotateAnnotation(int index, qreal degrees);
+    void beginTextResize(int index);
+    void resizeTextAnnotation(int index, const QRectF &bounds);
+    void endTextResize();
     void setSelectedIndex(int index);
     int selectedIndex() const { return m_selectedIndex; }
     QRect boundingRectOf(int index) const;
@@ -104,11 +109,14 @@ private:
         int counterValue = 0;
         bool shiftConstrained = false;
         qreal rotationDegrees = 0.0;
+        qreal textScaleX = 1.0;
+        qreal textScaleY = 1.0;
     };
 
     struct HistoryAction {
-        enum Type { Add, Remove, Rotate } type = Add;
+        enum Type { Add, Remove, Rotate, Resize } type = Add;
         Annotation annotation;
+        Annotation previousAnnotation;
         int index = -1;
         qreal previousRotationDegrees = 0.0;
         qreal rotationDegrees = 0.0;
@@ -116,6 +124,8 @@ private:
 
     void drawAnnotation(QPainter *painter, const Annotation &ann, const QPoint &offset);
     void drawBlurEffect(QPainter *painter, const QRect &rect, const QPoint &offset);
+    QRect textBaseBackgroundRect(const Annotation &ann) const;
+    QRect textBackgroundRect(const Annotation &ann) const;
     QRect rawAnnotationBounds(const Annotation &ann, int padding = 10) const;
     QRectF rotatedAnnotationBounds(const Annotation &ann, int padding = 10) const;
     bool annotationContainsPoint(const Annotation &ann, const QPoint &pos, int padding = 8) const;
@@ -138,6 +148,8 @@ private:
     bool m_isDrawing;
     int m_counterValue;
     int m_selectedIndex;
+    int m_textResizeIndex = -1;
+    Annotation m_textResizeOriginal;
     QPixmap m_screenSnapshot;
     QRect m_selectionRect;
     qreal m_snapshotScale = 1.0;

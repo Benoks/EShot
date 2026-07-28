@@ -33,7 +33,7 @@ grep -F 'release-assets/EShot-Setup-x64/*.exe' "${workflow}" >/dev/null
 grep -F 'release-assets/EShot-Setup-arm64/*.exe' "${workflow}" >/dev/null
 grep -F '      - linux-build' "${workflow}" >/dev/null
 grep -F 'release-assets/EShot-linux-packages/EShot-${{ github.ref_name }}-x86_64.AppImage' "${workflow}" >/dev/null
-grep -F 'body_path: packaging/release-notes/v4.1.5.md' "${workflow}" >/dev/null
+grep -F 'body_path: packaging/release-notes/${{ github.ref_name }}.md' "${workflow}" >/dev/null
 grep -F 'https://img.shields.io/github/v/tag/Benoks/EShot?label=release&sort=semver' "${repo_root}/README.md" >/dev/null
 grep -F "TESSERACT_RUNTIME_RELEASE: 'v4.1.2'" "${workflow}" >/dev/null
 grep -F 'releases/download/$release/$archive' "${workflow}" >/dev/null
@@ -67,6 +67,7 @@ grep -F 'Terminal=false' "${source_desktop_entry}" >/dev/null
 grep -F 'StartupNotify=false' "${source_desktop_entry}" >/dev/null
 grep -F 'Icon=io.github.benoks.EShot-v4' "${repo_root}/packaging/linux/io.github.benoks.EShot.desktop" >/dev/null
 grep -F 'StartupWMClass=EShot' "${repo_root}/packaging/linux/io.github.benoks.EShot.desktop" >/dev/null
+grep -Fx 'Exec=eshot-launcher --control' "${repo_root}/packaging/linux/io.github.benoks.EShot.desktop" >/dev/null
 grep -F '#include "../core/LinuxAutoStartPolicy.h"' "${repo_root}/src/ui/SettingsDialog.cpp" >/dev/null
 [[ "$(grep -Fc 'LinuxAutoStartPolicy::executablePath(' "${repo_root}/src/ui/SettingsDialog.cpp")" -ge 2 ]] || {
   echo 'Linux autostart creation and detection must share the stable AppImage path policy' >&2

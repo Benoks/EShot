@@ -32,6 +32,8 @@ void SettingsTranslationTests::issue15SettingsTextExistsInEveryLanguage()
         QStringLiteral("deleteSelected"),
         QStringLiteral("ocrPackageInstallHint"),
         QStringLiteral("ocrEngineMissingHint"),
+        QStringLiteral("ocrTranslate"),
+        QStringLiteral("ocrTranslateBrowserError"),
         QStringLiteral("formatLabel"),
         QStringLiteral("instantCopyAfterSelection"),
         QStringLiteral("gifSizeSmallest"),

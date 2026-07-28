@@ -29,6 +29,8 @@ LinuxDesktopNotification::LinuxDesktopNotification(QObject *parent)
 
 QStringList LinuxDesktopNotification::actions(const QString &actionLabel)
 {
+    if (actionLabel.isEmpty())
+        return {};
     return {QStringLiteral("default"), actionLabel};
 }
 

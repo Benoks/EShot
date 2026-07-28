@@ -493,6 +493,7 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
         setWindowFlag(Qt::X11BypassWindowManagerHint, true);
     setAttribute(Qt::WA_TranslucentBackground, false);
     setAttribute(Qt::WA_DeleteOnClose, false);
+    setAttribute(Qt::WA_AlwaysShowToolTips, true);
     setFocusPolicy(Qt::StrongFocus);
     setMouseTracking(true);
     setCursor(Qt::CrossCursor);
@@ -825,6 +826,9 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
         update();
     });
 
+    QApplication::instance()->installEventFilter(this);
+    for (QWidget *widget : findChildren<QWidget *>())
+        widget->setAttribute(Qt::WA_AlwaysShowToolTips, true);
 
 }
 
@@ -1756,6 +1760,13 @@ void CaptureOverlay::prewarm()
         if (m_actionPanel) m_actionPanel->hide();
         hide();
     }
+
+#if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
+    // GNOME's first Screenshot request may spend seconds activating the portal
+    // service. Warm the service here without performing a screenshot, so the
+    // hotkey remains responsive while keeping the desktop private.
+    LinuxPortalScreenshot::warmup();
+#endif
 }
 
 void CaptureOverlay::startCapture()
@@ -2270,6 +2281,20 @@ void CaptureOverlay::paintEvent(QPaintEvent *event)
                     painter.setBrush(Qt::NoBrush);
                     painter.drawRoundedRect(annotationRect.adjusted(0, 0, -1, -1), 3, 3);
 
+                    if (m_annotationEngine->isTextAnnotation(selectedIndex)) {
+                        constexpr int handleRadius = 5;
+                        const QList<QPoint> handles = {
+                            annotationRect.topLeft(), annotationRect.topRight(),
+                            annotationRect.bottomLeft(), annotationRect.bottomRight()
+                        };
+                        painter.setPen(QPen(QColor(179, 102, 255), 1));
+                        painter.setBrush(QColor(250, 250, 252));
+                        for (const QPoint &handle : handles) {
+                            painter.drawRect(QRect(handle - QPoint(handleRadius, handleRadius),
+                                                   QSize(handleRadius * 2, handleRadius * 2)));
+                        }
+                    }
+
                     if (m_annotationEngine->isRotatable(selectedIndex)) {
                         const QPointF handleCenter = AnnotationRotationGeometry::handleCenter(annotationRect);
                         const QPointF connectorStart(annotationRect.center().x(), annotationRect.bottom());
@@ -2362,6 +2387,26 @@ void CaptureOverlay::paintEvent(QPaintEvent *event)
         drawCaptureHints(painter, monitorRectAt(cursorPos), m_captureMode == ModeRecording);
     }
 
+    if (m_showHighlighterStraightHint && m_selectionComplete) {
+        const QString hint = TranslationManager::tr("highlighterStraightHint");
+        QFont hintFont = painter.font();
+        hintFont.setPointSize(10);
+        hintFont.setWeight(QFont::DemiBold);
+        painter.setFont(hintFont);
+        const QFontMetrics metrics(hintFont);
+        const int hintWidth = metrics.horizontalAdvance(hint) + 28;
+        const int hintHeight = metrics.height() + 16;
+        const QRect selection = normalizedSelectionRect();
+        const QRect hintRect(selection.center().x() - hintWidth / 2,
+                             qMax(selection.top() + 12, selection.bottom() - hintHeight - 18),
+                             hintWidth, hintHeight);
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(QColor(31, 32, 35, 235));
+        painter.drawRoundedRect(hintRect, 8, 8);
+        painter.setPen(QColor(239, 241, 245));
+        painter.drawText(hintRect, Qt::AlignCenter, hint);
+    }
+
     // Eyedropper: color preview circle
     if (m_eyedropperActive) {
         QPoint cur = mapFromGlobal(QCursor::pos());
@@ -2437,6 +2482,30 @@ void CaptureOverlay::mousePressEvent(QMouseEvent *event)
         if (m_selectionComplete && m_annotationEngine
             && m_annotationEngine->selectedIndex() >= 0) {
             const int selectedIndex = m_annotationEngine->selectedIndex();
+            if (m_annotationEngine->isTextAnnotation(selectedIndex)) {
+                const QRect annotationRect = m_annotationEngine->boundingRectOf(selectedIndex)
+                                                 .adjusted(-4, -4, 4, 4);
+                const QList<QPair<QPoint, TextResizeHandle>> handles = {
+                    {annotationRect.topLeft(), TextResizeTopLeft},
+                    {annotationRect.topRight(), TextResizeTopRight},
+                    {annotationRect.bottomLeft(), TextResizeBottomLeft},
+                    {annotationRect.bottomRight(), TextResizeBottomRight}
+                };
+                for (const auto &handle : handles) {
+                    if (QLineF(event->pos(), handle.first).length() <= 9.0) {
+                        m_isResizingTextAnnotation = true;
+                        m_textResizeHandle = handle.second;
+                        m_textResizeDragStart = event->pos();
+                        m_textResizeStartBounds = m_annotationEngine->rotatedBoundingRectOf(selectedIndex);
+                        m_annotationEngine->beginTextResize(selectedIndex);
+                        setCursor((handle.second == TextResizeTopRight
+                                   || handle.second == TextResizeBottomLeft)
+                                      ? Qt::SizeBDiagCursor : Qt::SizeFDiagCursor);
+                        event->accept();
+                        return;
+                    }
+                }
+            }
             if (m_annotationEngine->isRotatable(selectedIndex)) {
                 const QRect annotationRect = m_annotationEngine->boundingRectOf(selectedIndex)
                                                  .adjusted(-4, -4, 4, 4);
@@ -2592,6 +2661,7 @@ void CaptureOverlay::mousePressEvent(QMouseEvent *event)
             if (m_toolbar) m_toolbar->setSelectionLocked(false);
             hideToolbar();
             if (m_annotationEngine) m_annotationEngine->clear();
+            acquireCaptureKeyboardFocus();
             update();
         } else {
             onClose();
@@ -2641,6 +2711,79 @@ void CaptureOverlay::mouseMoveEvent(QMouseEvent *event)
                     m_selectionMode, m_windowSnapCandidates, event->pos(), rect()));
             }
         }
+        update();
+        return;
+    }
+
+    // Text annotation resize
+    if (m_isResizingTextAnnotation && m_annotationEngine
+        && m_annotationEngine->selectedIndex() >= 0) {
+        QRectF targetBounds = m_textResizeStartBounds;
+        const QPointF delta = event->pos() - m_textResizeDragStart;
+        switch (m_textResizeHandle) {
+        case TextResizeTopLeft:
+            targetBounds.setLeft(targetBounds.left() + delta.x());
+            targetBounds.setTop(targetBounds.top() + delta.y());
+            break;
+        case TextResizeTopRight:
+            targetBounds.setRight(targetBounds.right() + delta.x());
+            targetBounds.setTop(targetBounds.top() + delta.y());
+            break;
+        case TextResizeBottomLeft:
+            targetBounds.setLeft(targetBounds.left() + delta.x());
+            targetBounds.setBottom(targetBounds.bottom() + delta.y());
+            break;
+        case TextResizeBottomRight:
+            targetBounds.setRight(targetBounds.right() + delta.x());
+            targetBounds.setBottom(targetBounds.bottom() + delta.y());
+            break;
+        default:
+            return;
+        }
+
+        constexpr qreal minimumTextExtent = 8.0;
+        if (targetBounds.width() < minimumTextExtent) {
+            if (m_textResizeHandle == TextResizeTopLeft || m_textResizeHandle == TextResizeBottomLeft)
+                targetBounds.setLeft(targetBounds.right() - minimumTextExtent);
+            else
+                targetBounds.setRight(targetBounds.left() + minimumTextExtent);
+        }
+        if (targetBounds.height() < minimumTextExtent) {
+            if (m_textResizeHandle == TextResizeTopLeft || m_textResizeHandle == TextResizeTopRight)
+                targetBounds.setTop(targetBounds.bottom() - minimumTextExtent);
+            else
+                targetBounds.setBottom(targetBounds.top() + minimumTextExtent);
+        }
+
+        if (QApplication::keyboardModifiers().testFlag(Qt::ShiftModifier)) {
+            const qreal scaleX = targetBounds.width() / m_textResizeStartBounds.width();
+            const qreal scaleY = targetBounds.height() / m_textResizeStartBounds.height();
+            const qreal scale = qAbs(scaleX - 1.0) >= qAbs(scaleY - 1.0) ? scaleX : scaleY;
+            const qreal width = m_textResizeStartBounds.width() * scale;
+            const qreal height = m_textResizeStartBounds.height() * scale;
+            switch (m_textResizeHandle) {
+            case TextResizeTopLeft:
+                targetBounds = QRectF(m_textResizeStartBounds.right() - width,
+                                      m_textResizeStartBounds.bottom() - height, width, height);
+                break;
+            case TextResizeTopRight:
+                targetBounds = QRectF(m_textResizeStartBounds.left(),
+                                      m_textResizeStartBounds.bottom() - height, width, height);
+                break;
+            case TextResizeBottomLeft:
+                targetBounds = QRectF(m_textResizeStartBounds.right() - width,
+                                      m_textResizeStartBounds.top(), width, height);
+                break;
+            case TextResizeBottomRight:
+                targetBounds = QRectF(m_textResizeStartBounds.left(),
+                                      m_textResizeStartBounds.top(), width, height);
+                break;
+            default:
+                break;
+            }
+        }
+
+        m_annotationEngine->resizeTextAnnotation(m_annotationEngine->selectedIndex(), targetBounds);
         update();
         return;
     }
@@ -2752,6 +2895,18 @@ void CaptureOverlay::mouseReleaseEvent(QMouseEvent *event)
             return;
         }
 
+        // Text annotation resize end
+        if (m_isResizingTextAnnotation) {
+            m_isResizingTextAnnotation = false;
+            m_textResizeHandle = TextResizeNone;
+            if (m_annotationEngine)
+                m_annotationEngine->endTextResize();
+            setCursor(Qt::CrossCursor);
+            updateUndoRedoState();
+            update();
+            return;
+        }
+
         // Annotation rotation end
         if (m_isRotatingAnnotation) {
             m_isRotatingAnnotation = false;
@@ -2841,6 +2996,7 @@ void CaptureOverlay::keyPressEvent(QKeyEvent *event)
             if (m_toolbar) m_toolbar->setSelectionLocked(false);
             hideToolbar();
             if (m_annotationEngine) m_annotationEngine->clear();
+            acquireCaptureKeyboardFocus();
             update();
         } else {
             onClose();
@@ -2948,6 +3104,21 @@ bool CaptureOverlay::eventFilter(QObject *obj, QEvent *event)
             // Enter → confirm directly
             commitText();
             return true; // consume event
+        }
+    }
+
+    // Overlay controls such as toolbar buttons and sliders can keep widget
+    // focus after a click. While an annotation is active, route shortcuts
+    // back to the capture canvas unless the user is actively editing text.
+    if (obj != this && isVisible() && m_selectionComplete
+        && (!m_textEdit || !m_textEdit->isVisible())) {
+        if (event->type() == QEvent::KeyPress) {
+            keyPressEvent(static_cast<QKeyEvent *>(event));
+            return true;
+        }
+        if (event->type() == QEvent::KeyRelease) {
+            keyReleaseEvent(static_cast<QKeyEvent *>(event));
+            return true;
         }
     }
     return QWidget::eventFilter(obj, event);
@@ -3340,9 +3511,8 @@ void CaptureOverlay::commitText()
     releaseTextKeyboardFocus();
     m_textEdit->hide();
     if (m_textEditPanel) m_textEditPanel->hide();
-    if (m_textFocusProxy) m_textFocusProxy->hide();
     m_textJustCommitted = true;
-    setFocus();
+    acquireCaptureKeyboardFocus();
 }
 
 void CaptureOverlay::cancelTextEdit()
@@ -3352,8 +3522,13 @@ void CaptureOverlay::cancelTextEdit()
         m_textEdit->hide();
     }
     if (m_textEditPanel) m_textEditPanel->hide();
-    if (m_textFocusProxy) m_textFocusProxy->hide();
-    setFocus();
+    // finishCapture() and cancelCapture() also use this cleanup path after
+    // hiding the overlay. Do not revive the managed input proxy once capture
+    // has ended, otherwise KDE shows it as a separate EShot window.
+    if (isVisible() && m_selectionComplete)
+        acquireCaptureKeyboardFocus();
+    else if (m_textFocusProxy)
+        m_textFocusProxy->hide();
 }
 
 void CaptureOverlay::updateUndoRedoState()
@@ -3741,6 +3916,7 @@ void CaptureOverlay::completeSelection(const QRect &selectionRect)
     }
 
     showToolbar();
+    acquireCaptureKeyboardFocus();
     updateUndoRedoState();
     updateCursor(bounded.center());
     update();
@@ -3758,6 +3934,24 @@ void CaptureOverlay::onToolSelected(int toolId)
         settings.setValue("lastAnnotationTool", toolId);
     if (m_selectionComplete && m_toolbar && m_toolbar->isVisible())
         showToolbar();
+    if (toolId == AnnotationEngine::Highlighter) {
+        QSettings settings(QStringLiteral("EShot"), QStringLiteral("EShot"));
+        const int shownCount = settings.value(QStringLiteral("highlighterStraightHintShown"), 0).toInt();
+        if (shownCount < 3) {
+            settings.setValue(QStringLiteral("highlighterStraightHintShown"), shownCount + 1);
+            m_showHighlighterStraightHint = true;
+            update();
+            QTimer::singleShot(2200, this, [this]() {
+                m_showHighlighterStraightHint = false;
+                update();
+            });
+        }
+    }
+    QTimer::singleShot(0, this, [this]() {
+        if (isVisible() && m_selectionComplete
+            && (!m_textEdit || !m_textEdit->isVisible()))
+            acquireCaptureKeyboardFocus();
+    });
 }
 
 void CaptureOverlay::onCopyToClipboard()

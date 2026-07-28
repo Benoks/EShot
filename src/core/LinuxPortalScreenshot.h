@@ -13,6 +13,9 @@ class LinuxPortalScreenshot : public QObject {
     Q_OBJECT
 
 public:
+    // Starts the portal service without requesting screen contents. Calling this
+    // during app startup removes the portal activation cost from the first hotkey.
+    static void warmup();
     static QPixmap grab(QWidget *parent = nullptr, int timeoutMs = 120000);
     static QPixmap grabScreen(QScreen *screen, QWidget *parent = nullptr, int timeoutMs = 5000);
     static QPixmap grabWorkspace(QWidget *parent = nullptr, int timeoutMs = 5000);

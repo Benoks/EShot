@@ -270,7 +270,10 @@ void AnnotationToolbar::setupUI()
     m_layout->addWidget(createToolButton(":/icons/rectangle.svg", TranslationManager::toolRect(), AnnotationEngine::Rectangle, "Rectangle"));
     m_layout->addWidget(createToolButton(":/icons/circle.svg", TranslationManager::toolCircle(), AnnotationEngine::Circle, "Circle"));
     m_layout->addWidget(createToolButton(":/icons/text.svg", TranslationManager::toolText(), AnnotationEngine::Text, "Text"));
-    m_layout->addWidget(createToolButton(":/icons/highlighter.svg", TranslationManager::toolHighlighter(), AnnotationEngine::Highlighter, "Highlighter"));
+    m_layout->addWidget(createToolButton(":/icons/highlighter.svg",
+        TranslationManager::toolHighlighter() + QStringLiteral(" · ")
+            + TranslationManager::tr("highlighterStraightTooltip"),
+        AnnotationEngine::Highlighter, "Highlighter"));
     m_layout->addWidget(createToolButton(":/icons/semirect.svg", TranslationManager::toolSemiRect() + QStringLiteral(" (D)"), AnnotationEngine::SemiRect, "SemiRect"));
     m_layout->addWidget(createToolButton(":/icons/blur.svg", TranslationManager::toolBlur(), AnnotationEngine::Blur, "Blur"));
     m_layout->addWidget(createToolButton(":/icons/counter.svg", TranslationManager::toolCounter(), AnnotationEngine::Counter, "Counter"));

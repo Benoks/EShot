@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(EShot VERSION 4.1.6 LANGUAGES CXX)
+project(EShot VERSION 4.2.0 LANGUAGES CXX)
 
 include(CTest)
 
@@ -65,6 +65,7 @@ set(SOURCES
     src/ui/SettingsHotkeyPolicy.cpp
     src/ui/SettingsLayoutPolicy.cpp
     src/ui/AboutDialog.cpp
+    src/ui/ControlCenterDialog.cpp
     src/ui/FirstRunWizard.cpp
     src/ui/OcrDialog.cpp
     src/ui/UploadDialog.cpp
@@ -72,6 +73,7 @@ set(SOURCES
     src/recording/LinuxRecordingSupport.cpp
     src/recording/RecordingSettingsPolicy.cpp
     src/recording/RecordingDrawerPolicy.cpp
+    src/recording/VideoRecordingCompletionPolicy.cpp
     src/recording/RecordingControlLayout.cpp
     src/recording/RecordingTimeline.cpp
     src/recording/ScreenRecorder.cpp
@@ -119,6 +121,7 @@ set(HEADERS
     src/ui/SettingsHotkeyPolicy.h
     src/ui/SettingsLayoutPolicy.h
     src/ui/AboutDialog.h
+    src/ui/ControlCenterDialog.h
     src/ui/FirstRunWizard.h
     src/ui/OcrDialog.h
     src/ui/UploadDialog.h
@@ -126,6 +129,7 @@ set(HEADERS
     src/recording/LinuxRecordingSupport.h
     src/recording/RecordingSettingsPolicy.h
     src/recording/RecordingDrawerPolicy.h
+    src/recording/VideoRecordingCompletionPolicy.h
     src/recording/RecordingControlLayout.h
     src/recording/RecordingTimeline.h
     src/recording/ScreenRecorder.h
@@ -268,6 +272,15 @@ if(BUILD_TESTING)
     target_link_libraries(eshot_recording_drawer_policy_tests PRIVATE Qt6::Core Qt6::Test)
     add_test(NAME recording_drawer_policy COMMAND eshot_recording_drawer_policy_tests)
 
+    qt_add_executable(eshot_video_recording_completion_policy_tests
+        tests/VideoRecordingCompletionPolicyTests.cpp
+        src/recording/VideoRecordingCompletionPolicy.cpp
+        src/recording/VideoRecordingCompletionPolicy.h
+    )
+    target_include_directories(eshot_video_recording_completion_policy_tests PRIVATE src)
+    target_link_libraries(eshot_video_recording_completion_policy_tests PRIVATE Qt6::Core Qt6::Test)
+    add_test(NAME video_recording_completion_policy COMMAND eshot_video_recording_completion_policy_tests)
+
     qt_add_executable(eshot_application_instance_command_tests
         tests/ApplicationInstanceCommandTests.cpp
         src/core/ApplicationInstanceCommand.cpp
@@ -381,6 +394,17 @@ if(BUILD_TESTING)
     target_include_directories(eshot_about_dialog_tests PRIVATE src)
     target_link_libraries(eshot_about_dialog_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network Qt6::Test)
     add_test(NAME about_dialog COMMAND eshot_about_dialog_tests)
+
+    qt_add_executable(eshot_control_center_dialog_tests
+        tests/ControlCenterDialogTests.cpp
+        src/ui/ControlCenterDialog.cpp
+        src/ui/ControlCenterDialog.h
+        resources/icons.qrc
+    )
+    target_include_directories(eshot_control_center_dialog_tests PRIVATE src)
+    target_link_libraries(eshot_control_center_dialog_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test)
+    add_test(NAME control_center_dialog COMMAND eshot_control_center_dialog_tests)
+    set_tests_properties(control_center_dialog PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
     qt_add_executable(eshot_update_asset_tests
         tests/UpdateAssetSelectorTests.cpp

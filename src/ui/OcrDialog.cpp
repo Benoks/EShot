@@ -6,6 +6,9 @@
 #include <QHBoxLayout>
 #include <QGuiApplication>
 #include <QClipboard>
+#include <QDesktopServices>
+#include <QUrl>
+#include <QUrlQuery>
 #include <QMessageBox>
 #include <QDebug>
 #include <QSettings>
@@ -77,17 +80,29 @@ OcrDialog::OcrDialog(const QPixmap &pixmap, QWidget *parent)
     auto *btnRow = new QHBoxLayout();
     m_copyBtn = new QPushButton(TranslationManager::ocrCopy(), this);
     m_copyBtn->setEnabled(false);
+    m_translateBtn = new QPushButton(TranslationManager::tr("ocrTranslate"), this);
+    m_translateBtn->setIcon(QIcon(QStringLiteral(":/icons/external_link.svg")));
+    m_translateBtn->setIconSize(QSize(16, 16));
+    m_translateBtn->setToolTip(TranslationManager::tr("ocrTranslate"));
+    m_translateBtn->setEnabled(false);
     m_retryBtn = new QPushButton(TranslationManager::ocrRetry(), this);
     m_retryBtn->setEnabled(false);
     m_closeBtn = new QPushButton(TranslationManager::ocrClose(), this);
+    const QList<QPushButton *> actionButtons = {m_copyBtn, m_translateBtn, m_retryBtn, m_closeBtn};
+    for (QPushButton *button : actionButtons) {
+        button->setFixedHeight(30);
+        button->setStyleSheet(QStringLiteral("QPushButton { padding: 0 10px; }"));
+    }
 
     btnRow->addWidget(m_copyBtn);
+    btnRow->addWidget(m_translateBtn);
     btnRow->addWidget(m_retryBtn);
     btnRow->addStretch();
     btnRow->addWidget(m_closeBtn);
     layout->addLayout(btnRow);
 
     connect(m_copyBtn, &QPushButton::clicked, this, &OcrDialog::onCopyClicked);
+    connect(m_translateBtn, &QPushButton::clicked, this, &OcrDialog::onTranslateClicked);
     connect(m_retryBtn, &QPushButton::clicked, this, &OcrDialog::onRetryClicked);
     connect(m_closeBtn, &QPushButton::clicked, this, &QDialog::accept);
 
@@ -186,6 +201,7 @@ void OcrDialog::translateUi()
 {
     setWindowTitle(TranslationManager::ocrTitle());
     m_copyBtn->setText(TranslationManager::ocrCopy());
+    m_translateBtn->setText(TranslationManager::tr("ocrTranslate"));
     m_closeBtn->setText(TranslationManager::ocrClose());
 }
 
@@ -203,6 +219,7 @@ void OcrDialog::runOcr()
     setBusy(true);
     m_textEdit->clear();
     m_copyBtn->setEnabled(false);
+    m_translateBtn->setEnabled(false);
     m_engine->recognize(m_pixmap, m_languageTag, m_preferredLanguageTag);
 }
 
@@ -233,10 +250,12 @@ void OcrDialog::onTextReady(const QString &text)
         m_statusLabel->setText(TranslationManager::ocrEmpty());
         m_textEdit->clear();
         m_copyBtn->setEnabled(false);
+        m_translateBtn->setEnabled(false);
     } else {
         m_statusLabel->setText(TranslationManager::ocrTitle());
         m_textEdit->setPlainText(text);
         m_copyBtn->setEnabled(true);
+        m_translateBtn->setEnabled(true);
     }
 }
 
@@ -246,6 +265,7 @@ void OcrDialog::onOcrFailed(const QString &reason)
     m_statusLabel->setText(TranslationManager::ocrFailed() + QStringLiteral(" - ") + reason);
     m_textEdit->clear();
     m_copyBtn->setEnabled(false);
+    m_translateBtn->setEnabled(false);
     m_retryBtn->setEnabled(true);
     qWarning() << "[EShot] OCR failed:" << reason;
 }
@@ -254,6 +274,25 @@ void OcrDialog::onCopyClicked()
 {
     QGuiApplication::clipboard()->setText(m_textEdit->toPlainText());
     m_statusLabel->setText(TranslationManager::ocrCopied());
+}
+
+void OcrDialog::onTranslateClicked()
+{
+    const QString text = m_textEdit->toPlainText().trimmed();
+    if (text.isEmpty())
+        return;
+
+    QUrl url(QStringLiteral("https://translate.google.com/"));
+    QUrlQuery query;
+    query.addQueryItem(QStringLiteral("sl"), QStringLiteral("auto"));
+    query.addQueryItem(QStringLiteral("tl"), TranslationManager::langCode());
+    query.addQueryItem(QStringLiteral("text"), text);
+    query.addQueryItem(QStringLiteral("op"), QStringLiteral("translate"));
+    url.setQuery(query);
+    if (!QDesktopServices::openUrl(url)) {
+        QMessageBox::warning(this, TranslationManager::tr("visualSearchBrowserLaunchTitle"),
+                             TranslationManager::tr("ocrTranslateBrowserError"));
+    }
 }
 
 void OcrDialog::onRetryClicked()

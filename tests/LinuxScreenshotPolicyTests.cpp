@@ -58,6 +58,18 @@ private slots:
             LinuxDesktopEnvironment::Kde, false));
     }
 
+    void showsControlCenterOnlyForTraylessInteractiveGnome()
+    {
+        QVERIFY(LinuxDesktopIntegration::shouldShowControlCenter(
+            LinuxDesktopEnvironment::Gnome, false, false));
+        QVERIFY(!LinuxDesktopIntegration::shouldShowControlCenter(
+            LinuxDesktopEnvironment::Gnome, true, false));
+        QVERIFY(!LinuxDesktopIntegration::shouldShowControlCenter(
+            LinuxDesktopEnvironment::Gnome, false, true));
+        QVERIFY(!LinuxDesktopIntegration::shouldShowControlCenter(
+            LinuxDesktopEnvironment::Kde, false, false));
+    }
+
     void predictsPortalRequestPathBeforeCallingPortal()
     {
         QCOMPARE(LinuxPortalRequest::requestPath(

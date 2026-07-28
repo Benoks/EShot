@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 env:
-  APP_VERSION: '4.1.6'
+  APP_VERSION: '4.2.0'
   QT_VERSION: '6.8.2'
   TESSERACT_RUNTIME_RELEASE: 'v4.1.2'
 

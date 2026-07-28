@@ -22,6 +22,14 @@ double distanceToSegment(const QPointF &p, const QPointF &a, const QPointF &b)
     const QPointF projection = a + ab * t;
     return QLineF(p, projection).length();
 }
+
+QPoint constrainedHighlighterPoint(const QPoint &start, const QPoint &pos)
+{
+    const QPoint delta = pos - start;
+    return qAbs(delta.x()) >= qAbs(delta.y())
+        ? QPoint(pos.x(), start.y())
+        : QPoint(start.x(), pos.y());
+}
 }
 
 AnnotationEngine::AnnotationEngine(QObject *parent)
@@ -76,7 +84,10 @@ void AnnotationEngine::continueDraw(const QPoint &pos)
     m_currentAnnotation.shiftConstrained = m_shiftHeld;
 
     if (m_currentTool == Pen || m_currentTool == Highlighter) {
-        m_currentAnnotation.points.append(pos);
+        const QPoint drawPoint = m_currentTool == Highlighter && m_shiftHeld
+            ? constrainedHighlighterPoint(m_currentAnnotation.points.first(), pos)
+            : pos;
+        m_currentAnnotation.points.append(drawPoint);
     } else {
         if (m_currentAnnotation.points.size() < 2)
             m_currentAnnotation.points.append(pos);
@@ -92,7 +103,10 @@ void AnnotationEngine::endDraw(const QPoint &pos)
     m_currentAnnotation.shiftConstrained = m_shiftHeld;
 
     if (m_currentTool == Pen || m_currentTool == Highlighter) {
-        m_currentAnnotation.points.append(pos);
+        const QPoint drawPoint = m_currentTool == Highlighter && m_shiftHeld
+            ? constrainedHighlighterPoint(m_currentAnnotation.points.first(), pos)
+            : pos;
+        m_currentAnnotation.points.append(drawPoint);
     } else {
         if (m_currentAnnotation.points.size() < 2)
             m_currentAnnotation.points.append(pos);
@@ -268,15 +282,14 @@ void AnnotationEngine::drawAnnotation(QPainter *painter, const Annotation &ann, 
         QSizeF docSize = doc.size();
 
         // Background
-        QRect bg(tp.x() - 4, tp.y() - 4,
-                 static_cast<int>(docSize.width()) + 8,
-                 static_cast<int>(docSize.height()) + 8);
+        const QRect bg = textBaseBackgroundRect(ann).translated(offset);
         painter->setPen(Qt::NoPen);
         painter->setBrush(QColor(0, 0, 0, 120));
-        painter->drawRoundedRect(bg, 3, 3);
-
-        // Text
         painter->save();
+        painter->translate(tp);
+        painter->scale(ann.textScaleX, ann.textScaleY);
+        painter->translate(-tp);
+        painter->drawRoundedRect(bg, 3, 3);
         painter->translate(tp);
         doc.drawContents(painter);
         painter->restore();
@@ -326,6 +339,7 @@ void AnnotationEngine::clear()
     m_isDrawing = false;
     m_currentAnnotation = Annotation();
     m_selectedIndex = -1;
+    m_textResizeIndex = -1;
 
     m_annotations.clear();
     m_undoStack.clear();
@@ -346,6 +360,9 @@ void AnnotationEngine::undo()
     } else if (action.type == HistoryAction::Remove) {
         int insertAt = qBound(0, action.index, m_annotations.size());
         m_annotations.insert(insertAt, action.annotation);
+    } else if (action.type == HistoryAction::Resize
+               && action.index >= 0 && action.index < m_annotations.size()) {
+        m_annotations[action.index] = action.previousAnnotation;
     } else if (action.index >= 0 && action.index < m_annotations.size()) {
         m_annotations[action.index].rotationDegrees = action.previousRotationDegrees;
     }
@@ -366,6 +383,9 @@ void AnnotationEngine::redo()
             m_annotations.removeAt(action.index);
         else if (!m_annotations.isEmpty())
             m_annotations.removeLast();
+    } else if (action.type == HistoryAction::Resize
+               && action.index >= 0 && action.index < m_annotations.size()) {
+        m_annotations[action.index] = action.annotation;
     } else if (action.index >= 0 && action.index < m_annotations.size()) {
         m_annotations[action.index].rotationDegrees = action.rotationDegrees;
     }
@@ -422,7 +442,7 @@ int AnnotationEngine::findAnnotationAt(const QPoint &pos)
         const Annotation &ann = m_annotations[i];
         if (ann.points.isEmpty()) continue;
 
-        if (annotationContainsPoint(ann, pos, ann.tool == Text ? 18 : 10))
+        if (annotationContainsPoint(ann, pos, ann.tool == Text ? 3 : 10))
             return i;
     }
     return -1;
@@ -449,11 +469,22 @@ bool AnnotationEngine::isRotatable(int index) const
         && isRotatableTool(m_annotations[index].tool);
 }
 
+bool AnnotationEngine::isTextAnnotation(int index) const
+{
+    return index >= 0 && index < m_annotations.size()
+        && m_annotations[index].tool == Text;
+}
+
 qreal AnnotationEngine::rotationDegreesOf(int index) const
 {
     return index >= 0 && index < m_annotations.size()
         ? m_annotations[index].rotationDegrees
         : 0.0;
+}
+
+int AnnotationEngine::textFontSizeOf(int index) const
+{
+    return isTextAnnotation(index) ? m_annotations[index].fontSize : 0;
 }
 
 void AnnotationEngine::rotateAnnotation(int index, qreal degrees)
@@ -473,6 +504,52 @@ void AnnotationEngine::rotateAnnotation(int index, qreal degrees)
     m_undoStack.append(action);
     m_redoStack.clear();
     ann.rotationDegrees = degrees;
+}
+
+void AnnotationEngine::beginTextResize(int index)
+{
+    if (!isTextAnnotation(index))
+        return;
+    m_textResizeIndex = index;
+    m_textResizeOriginal = m_annotations[index];
+}
+
+void AnnotationEngine::resizeTextAnnotation(int index, const QRectF &bounds)
+{
+    if (!isTextAnnotation(index) || index != m_textResizeIndex)
+        return;
+
+    Annotation &ann = m_annotations[index];
+    const QRect baseBounds = textBaseBackgroundRect(ann);
+    if (baseBounds.isEmpty() || bounds.width() < 2.0 || bounds.height() < 2.0)
+        return;
+
+    ann.textScaleX = qBound(0.1, bounds.width() / baseBounds.width(), 20.0);
+    ann.textScaleY = qBound(0.1, bounds.height() / baseBounds.height(), 20.0);
+    ann.points[0] = QPoint(qRound(bounds.left() + 4.0 * ann.textScaleX),
+                           qRound(bounds.top() + 4.0 * ann.textScaleY));
+}
+
+void AnnotationEngine::endTextResize()
+{
+    if (!isTextAnnotation(m_textResizeIndex)) {
+        m_textResizeIndex = -1;
+        return;
+    }
+
+    const Annotation &resized = m_annotations[m_textResizeIndex];
+    if (!qFuzzyCompare(resized.textScaleX, m_textResizeOriginal.textScaleX)
+        || !qFuzzyCompare(resized.textScaleY, m_textResizeOriginal.textScaleY)
+        || resized.points != m_textResizeOriginal.points) {
+        HistoryAction action;
+        action.type = HistoryAction::Resize;
+        action.index = m_textResizeIndex;
+        action.previousAnnotation = m_textResizeOriginal;
+        action.annotation = resized;
+        m_undoStack.append(action);
+        m_redoStack.clear();
+    }
+    m_textResizeIndex = -1;
 }
 
 void AnnotationEngine::setSelectedIndex(int index)
@@ -498,22 +575,23 @@ QRect AnnotationEngine::rawAnnotationBounds(const Annotation &ann, int padding) 
 
     QRect bounds;
     if (ann.tool == Text) {
-        QFont font(ann.fontFamily.isEmpty() ? QStringLiteral("Segoe UI") : ann.fontFamily,
-                   qBound(8, ann.fontSize, 72));
-        font.setBold(true);
-        QTextDocument doc;
-        doc.setDefaultFont(font);
-        doc.setPlainText(ann.text);
-        QSize docSize = doc.size().toSize();
-        bounds = QRect(ann.points.first(), docSize + QSize(8, 8));
+        bounds = textBackgroundRect(ann);
     } else if (ann.tool == Counter) {
         const int radius = 14;
         bounds = QRect(ann.points.first() - QPoint(radius, radius), QSize(radius * 2, radius * 2));
     } else if (ann.tool == Blur || ann.tool == SemiRect || ann.tool == Rectangle || ann.tool == Circle || ann.tool == Line || ann.tool == Arrow) {
         if (ann.points.size() < 2)
             bounds = QRect(ann.points.first(), QSize(1, 1));
-        else
-            bounds = QRect(ann.points.first(), ann.points.last()).normalized();
+        else {
+            QRect shapeBounds(ann.points.first(), ann.points.last());
+            if (ann.shiftConstrained
+                && (ann.tool == SemiRect || ann.tool == Rectangle || ann.tool == Circle)) {
+                const int side = qMin(qAbs(shapeBounds.width()), qAbs(shapeBounds.height()));
+                shapeBounds.setWidth(shapeBounds.width() < 0 ? -side : side);
+                shapeBounds.setHeight(shapeBounds.height() < 0 ? -side : side);
+            }
+            bounds = shapeBounds.normalized();
+        }
     } else if (ann.points.size() == 1) {
         bounds = QRect(ann.points.first(), QSize(1, 1));
     } else {
@@ -526,6 +604,35 @@ QRect AnnotationEngine::rawAnnotationBounds(const Annotation &ann, int padding) 
     }
     bounds.adjust(-padding, -padding, padding, padding);
     return bounds;
+}
+
+QRect AnnotationEngine::textBaseBackgroundRect(const Annotation &ann) const
+{
+    if (ann.tool != Text || ann.points.isEmpty() || ann.text.isEmpty())
+        return QRect();
+
+    QFont font(ann.fontFamily.isEmpty() ? QStringLiteral("Segoe UI") : ann.fontFamily,
+               qBound(8, ann.fontSize, 72));
+    font.setBold(true);
+    QTextDocument doc;
+    doc.setDefaultFont(font);
+    doc.setPlainText(ann.text);
+    const QSize documentSize = doc.size().toSize();
+    return QRect(ann.points.first() - QPoint(4, 4), documentSize + QSize(8, 8));
+}
+
+QRect AnnotationEngine::textBackgroundRect(const Annotation &ann) const
+{
+    const QRect baseBounds = textBaseBackgroundRect(ann);
+    if (baseBounds.isEmpty())
+        return QRect();
+
+    const QPoint anchor = ann.points.first();
+    const qreal left = anchor.x() + (baseBounds.left() - anchor.x()) * ann.textScaleX;
+    const qreal top = anchor.y() + (baseBounds.top() - anchor.y()) * ann.textScaleY;
+    return QRect(qFloor(left), qFloor(top),
+                 qCeil(baseBounds.width() * ann.textScaleX),
+                 qCeil(baseBounds.height() * ann.textScaleY));
 }
 
 QRectF AnnotationEngine::rotatedAnnotationBounds(const Annotation &ann, int padding) const

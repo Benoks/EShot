@@ -224,6 +224,12 @@ private:
     QPointF m_rotationCenter;
     qreal m_rotationDragStartAngle = 0.0;
     qreal m_rotationStartDegrees = 0.0;
+    bool m_isResizingTextAnnotation = false;
+    enum TextResizeHandle { TextResizeNone, TextResizeTopLeft, TextResizeTopRight,
+                            TextResizeBottomLeft, TextResizeBottomRight };
+    TextResizeHandle m_textResizeHandle = TextResizeNone;
+    QPointF m_textResizeDragStart;
+    QRectF m_textResizeStartBounds;
 
     // Text confirm flag
     bool m_textJustCommitted;
@@ -247,6 +253,7 @@ private:
     bool m_closeAfterCopy;
     bool m_instantCopyAfterSelection;
     bool m_showCaptureHints;
+    bool m_showHighlighterStraightHint = false;
 
     // Pinned windows list (for lifetime management)
     QList<QPointer<QWidget>> m_pinnedWindows;
