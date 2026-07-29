@@ -5,7 +5,7 @@ pkgdesc='Screenshot, annotation, OCR, GIF and video capture tool'
 arch=('x86_64')
 url='https://github.com/Benoks/EShot'
 license=('MIT')
-depends=('fuse2' 'xdg-desktop-portal')
+depends=('fuse2' 'xdg-desktop-portal' 'libsecret')
 optdepends=('xdg-desktop-portal-gnome: GNOME screenshot and recording integration'
             'gnome-shell-extension-appindicator: tray icon support on GNOME'
             'xdg-desktop-portal-kde: KDE Plasma screenshot and recording integration'

@@ -6,7 +6,7 @@ build_script="${repo_root}/scripts/linux/build-appimage.sh"
 workflow="${repo_root}/.github/workflows/build.yml"
 desktop_launcher="${repo_root}/scripts/linux/desktop-launch.sh"
 installed_launcher="${repo_root}/scripts/linux/eshot-launcher"
-source_desktop_entry="${repo_root}/EShot-Linux.desktop"
+source_desktop_entry="${repo_root}/packaging/linux/io.github.benoks.EShot.desktop"
 release_version_script="${repo_root}/scripts/linux/apply-release-version.sh"
 ubuntu_deps="${repo_root}/scripts/linux/install-ubuntu-deps.sh"
 linux_package_script="${repo_root}/scripts/linux/package-linux.sh"
@@ -62,6 +62,10 @@ if bash "${release_version_script}" nightly "${version_fixture}" >/dev/null 2>&1
   exit 1
 fi
 grep -F 'install-user.sh' "${desktop_launcher}" >/dev/null
+[[ ! -e "${repo_root}/EShot-Linux.desktop" ]] || {
+  echo 'repository root must not contain a machine-specific desktop launcher' >&2
+  exit 1
+}
 grep -F 'ESHOT_WAYLAND_XWAYLAND_OVERLAY=1' "${installed_launcher}" >/dev/null
 grep -F 'Terminal=false' "${source_desktop_entry}" >/dev/null
 grep -F 'StartupNotify=false' "${source_desktop_entry}" >/dev/null

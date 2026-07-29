@@ -16,7 +16,7 @@ Command fromInvocation(bool captureRequested,
                        bool settingsRequested,
                        bool saveRequested,
                        bool quitRequested,
-                       bool defaultToSettings);
+                       bool defaultToControl);
 QByteArray toWire(Command command);
 Command fromWire(const QByteArray &wireCommand);
 

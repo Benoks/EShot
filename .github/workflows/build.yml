@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 env:
-  APP_VERSION: '4.2.0'
+  APP_VERSION: '4.2.1'
   QT_VERSION: '6.8.2'
   TESSERACT_RUNTIME_RELEASE: 'v4.1.2'
 
@@ -57,6 +57,7 @@ jobs:
             libgl1-mesa-dev \
             libxcb-cursor0 \
             libxkbcommon-dev \
+            libsecret-1-dev \
             desktop-file-utils \
             appstream \
             ffmpeg \

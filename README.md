@@ -93,7 +93,7 @@ The AppImage bundles EShot and Qt. Optional media, OCR, and desktop-integration 
 
 Each release also includes `EShot-v<version>-linux-x64.tar.gz` for users who prefer an unpacked build. Unlike the AppImage, this archive relies on compatible Qt and runtime libraries installed by the Linux distribution.
 
-Integrated AppImages are stored for the current user under `~/.local/opt/EShot`. When an update is available, EShot downloads the matching AppImage release asset, verifies its GitHub SHA-256 digest, replaces the installed AppImage, and restarts it. Native package builds should be updated through their package manager.
+Integrated AppImages are stored for the current user under `~/.local/opt/EShot`. EShot checks for updates and always keeps manual updating available. If an EShot-managed Windows installation or integrated AppImage is at least two stable releases behind, EShot downloads the matching release asset, verifies its GitHub SHA-256 digest, updates silently, and restarts. Native package builds should be updated through their package manager.
 
 ### Arch Linux and CachyOS
 
@@ -130,7 +130,7 @@ OCR is powered by Tesseract. The first-run wizard can install English, the syste
 
 ## Upload services
 
-Anonymous providers work without credentials. Google Drive and Yandex Disk require OAuth access tokens; Allwebs and Radikal Cloud require service API keys. Tokens are stored in EShot settings on the local machine.
+Anonymous providers work without credentials. Google Drive and Yandex Disk require OAuth access tokens; Allwebs and Radikal Cloud require service API keys. OAuth tokens are stored in the operating system credential store, never in EShot's plain-text settings file.
 
 ### Google Drive token setup
 

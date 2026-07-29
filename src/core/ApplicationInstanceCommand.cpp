@@ -6,14 +6,16 @@ Command fromInvocation(bool captureRequested,
                        bool settingsRequested,
                        bool saveRequested,
                        bool quitRequested,
-                       bool defaultToSettings)
+                       bool defaultToControl)
 {
     if (quitRequested)
         return Quit;
     if (captureRequested || saveRequested)
         return Capture;
-    if (settingsRequested || defaultToSettings)
+    if (settingsRequested)
         return Settings;
+    if (defaultToControl)
+        return Control;
     return None;
 }
 

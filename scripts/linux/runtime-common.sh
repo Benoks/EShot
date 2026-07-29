@@ -48,19 +48,19 @@ eshot_runtime_packages() {
       [[ "${backend}" == "gnome" ]] && portal="xdg-desktop-portal-gnome"
       local tray=""
       [[ "${backend}" == "gnome" ]] && tray="gnome-shell-extension-appindicator"
-      printf '%s\n' "ffmpeg tesseract tesseract-data-eng pipewire wireplumber gst-plugin-pipewire gst-plugins-base gst-plugins-good gst-plugins-bad gst-plugins-ugly gst-libav xdg-desktop-portal ${portal} ${tray}"
+      printf '%s\n' "ffmpeg tesseract tesseract-data-eng pipewire wireplumber gst-plugin-pipewire gst-plugins-base gst-plugins-good gst-plugins-bad gst-plugins-ugly gst-libav libsecret xdg-desktop-portal ${portal} ${tray}"
       ;;
     apt)
       local portal="xdg-desktop-portal-gtk"
       [[ "${backend}" == "kde" ]] && portal="xdg-desktop-portal-kde"
       [[ "${backend}" == "gnome" ]] && portal="xdg-desktop-portal-gnome"
-      printf '%s\n' "ffmpeg tesseract-ocr tesseract-ocr-eng pipewire wireplumber gstreamer1.0-tools gstreamer1.0-pipewire gstreamer1.0-pulseaudio gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav xdg-desktop-portal ${portal}"
+      printf '%s\n' "ffmpeg tesseract-ocr tesseract-ocr-eng pipewire wireplumber gstreamer1.0-tools gstreamer1.0-pipewire gstreamer1.0-pulseaudio gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav libsecret-1-0 xdg-desktop-portal ${portal}"
       ;;
     dnf)
       local portal="xdg-desktop-portal-gtk"
       [[ "${backend}" == "kde" ]] && portal="xdg-desktop-portal-kde"
       [[ "${backend}" == "gnome" ]] && portal="xdg-desktop-portal-gnome"
-      printf '%s\n' "ffmpeg tesseract tesseract-langpack-eng pipewire wireplumber pipewire-gstreamer gstreamer1-plugins-base gstreamer1-plugins-good gstreamer1-plugins-bad-free gstreamer1-plugins-ugly-free gstreamer1-libav xdg-desktop-portal ${portal}"
+      printf '%s\n' "ffmpeg tesseract tesseract-langpack-eng pipewire wireplumber pipewire-gstreamer gstreamer1-plugins-base gstreamer1-plugins-good gstreamer1-plugins-bad-free gstreamer1-plugins-ugly-free gstreamer1-libav libsecret xdg-desktop-portal ${portal}"
       ;;
     *) return 1 ;;
   esac

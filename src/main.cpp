@@ -359,15 +359,6 @@ public slots:
 
     void onControlRequested()
     {
-#if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
-        const LinuxDesktopEnvironment desktop = LinuxDesktopIntegration::detect(
-            qEnvironmentVariable("XDG_CURRENT_DESKTOP"),
-            qEnvironmentVariable("XDG_SESSION_DESKTOP"));
-        if (!LinuxDesktopIntegration::shouldShowControlCenter(
-                desktop, QSystemTrayIcon::isSystemTrayAvailable(), false)) {
-            return;
-        }
-
         ControlCenterDialog dialog;
         if (dialog.exec() != QDialog::Accepted)
             return;
@@ -388,7 +379,6 @@ public slots:
         case ControlCenterDialog::Action::None:
             break;
         }
-#endif
     }
 
     void onFixPrintScreenConflict()
@@ -759,7 +749,7 @@ private:
             rebuildTrayMenu();
         });
         connect(m_updateManager, &UpdateManager::failed, this, [this](const QString &message) {
-            if (m_trayIcon && m_showNotifications) {
+            if (m_trayIcon && m_showNotifications && !m_updateManager->isSilentUpdate()) {
                 m_trayIcon->showMessage(
                     TranslationManager::errTitle(),
                     TranslationManager::updateStatusFailed(message),
@@ -768,7 +758,7 @@ private:
             }
         });
         connect(m_updateManager, &UpdateManager::installerLaunched, this, [this]() {
-            if (m_trayIcon) {
+            if (m_trayIcon && !m_updateManager->isSilentUpdate()) {
                 m_trayIcon->showMessage(
                     TranslationManager::updateTitle(),
                     TranslationManager::updateStatusRestarting(),
@@ -1282,7 +1272,7 @@ int main(int argc, char *argv[])
     parser.addOption(captureOption);
     QCommandLineOption settingsOption("settings", "Open EShot settings.");
     parser.addOption(settingsOption);
-    QCommandLineOption controlOption("control", "Open the GNOME trayless control window.");
+    QCommandLineOption controlOption("control", "Open the EShot control menu.");
     parser.addOption(controlOption);
     QCommandLineOption quitOption("quit", "Quit the running EShot instance.");
     parser.addOption(quitOption);
@@ -1350,7 +1340,9 @@ int main(int argc, char *argv[])
         qWarning() << "[EShot] Could not create single-instance lock:" << instanceServer.errorString();
     }
     const bool silent = parser.isSet(silentOption);
-    const bool controlRequested = parser.isSet(controlOption);
+    const bool controlRequested = parser.isSet(controlOption)
+        || (!silent && !parser.isSet(captureOption) && !parser.isSet(settingsOption)
+            && !parser.isSet(saveOption) && !parser.isSet(quitOption));
     const bool firstRunRequired = !silent && FirstRunWizard::shouldShow();
     EShotApp eshotApp(!firstRunRequired);
 
@@ -1437,11 +1429,7 @@ int main(int argc, char *argv[])
         QMetaObject::invokeMethod(&eshotApp, "onCaptureRequested", Qt::QueuedConnection);
     } else if (controlRequested && !firstRunRequired) {
         QMetaObject::invokeMethod(&eshotApp, "onControlRequested", Qt::QueuedConnection);
-    } else if (parser.isSet(settingsOption)
-#ifndef Q_OS_WIN
-               || (!silent && !firstRunRequired && !QSystemTrayIcon::isSystemTrayAvailable())
-#endif
-    ) {
+    } else if (parser.isSet(settingsOption)) {
         QMetaObject::invokeMethod(&eshotApp, "onSettingsRequested", Qt::QueuedConnection);
     }
 

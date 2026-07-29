@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(EShot VERSION 4.2.0 LANGUAGES CXX)
+project(EShot VERSION 4.2.1 LANGUAGES CXX)
 
 include(CTest)
 
@@ -23,6 +23,8 @@ find_package(Qt6 REQUIRED COMPONENTS ${ESHOT_QT_COMPONENTS})
 find_package(Threads REQUIRED)
 if(UNIX AND NOT APPLE)
     find_package(X11)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(LIBSECRET REQUIRED IMPORTED_TARGET libsecret-1)
 endif()
 
 set(SOURCES
@@ -41,9 +43,11 @@ set(SOURCES
     src/core/LinuxAutoStartPolicy.cpp
     src/core/LinuxScreenshotPolicy.cpp
     src/core/ImageUploader.cpp
+    src/core/SecureCredentialStore.cpp
     src/core/UploadResponseParser.cpp
     src/core/VisualSearch.cpp
     src/core/UpdateAssetSelector.cpp
+    src/core/UpdatePolicy.cpp
     src/core/LinuxUpdateScript.cpp
     src/core/LinuxDependencySelection.cpp
     src/core/CatboxUploader.cpp
@@ -97,9 +101,11 @@ set(HEADERS
     src/core/LinuxAutoStartPolicy.h
     src/core/LinuxScreenshotPolicy.h
     src/core/ImageUploader.h
+    src/core/SecureCredentialStore.h
     src/core/UploadResponseParser.h
     src/core/VisualSearch.h
     src/core/UpdateAssetSelector.h
+    src/core/UpdatePolicy.h
     src/core/LinuxUpdateScript.h
     src/core/LinuxDependencySelection.h
     src/core/CatboxUploader.h
@@ -188,7 +194,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
 )
 
 if(UNIX AND NOT APPLE)
-    target_link_libraries(${PROJECT_NAME} PRIVATE Qt6::DBus)
+    target_link_libraries(${PROJECT_NAME} PRIVATE Qt6::DBus PkgConfig::LIBSECRET)
 endif()
 
 if(WIN32)
@@ -197,6 +203,7 @@ if(WIN32)
         Gdi32
         Shell32
         Dwmapi
+        Advapi32
     )
 endif()
 
@@ -308,6 +315,18 @@ if(BUILD_TESTING)
     target_link_libraries(eshot_upload_response_parser_tests PRIVATE Qt6::Core Qt6::Test)
     add_test(NAME upload_response_parser COMMAND eshot_upload_response_parser_tests)
 
+    qt_add_executable(eshot_secure_credential_store_tests
+        tests/SecureCredentialStoreTests.cpp
+        src/core/SecureCredentialStore.cpp
+        src/core/SecureCredentialStore.h
+    )
+    target_include_directories(eshot_secure_credential_store_tests PRIVATE src)
+    target_link_libraries(eshot_secure_credential_store_tests PRIVATE Qt6::Core Qt6::Test)
+    if(UNIX AND NOT APPLE)
+        target_link_libraries(eshot_secure_credential_store_tests PRIVATE PkgConfig::LIBSECRET)
+    endif()
+    add_test(NAME secure_credential_store COMMAND eshot_secure_credential_store_tests)
+
     qt_add_executable(eshot_settings_translation_tests
         tests/SettingsTranslationTests.cpp
     )
@@ -414,6 +433,15 @@ if(BUILD_TESTING)
     target_include_directories(eshot_update_asset_tests PRIVATE src)
     target_link_libraries(eshot_update_asset_tests PRIVATE Qt6::Core Qt6::Test)
     add_test(NAME update_asset COMMAND eshot_update_asset_tests)
+
+    qt_add_executable(eshot_update_policy_tests
+        tests/UpdatePolicyTests.cpp
+        src/core/UpdatePolicy.cpp
+        src/core/UpdatePolicy.h
+    )
+    target_include_directories(eshot_update_policy_tests PRIVATE src)
+    target_link_libraries(eshot_update_policy_tests PRIVATE Qt6::Core Qt6::Test)
+    add_test(NAME update_policy COMMAND eshot_update_policy_tests)
 
     qt_add_executable(eshot_linux_update_script_tests
         tests/LinuxUpdateScriptTests.cpp

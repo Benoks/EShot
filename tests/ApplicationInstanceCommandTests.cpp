@@ -8,7 +8,7 @@ class ApplicationInstanceCommandTests : public QObject
 
 private slots:
     void choosesExplicitCommands();
-    void opensSettingsForAPlainSecondaryLaunch();
+    void opensControlForAPlainSecondaryLaunch();
     void roundTripsControlCommand();
     void rejectsUnknownWireCommands();
 };
@@ -25,10 +25,10 @@ void ApplicationInstanceCommandTests::choosesExplicitCommands()
                  ApplicationInstanceCommand::Quit);
 }
 
-void ApplicationInstanceCommandTests::opensSettingsForAPlainSecondaryLaunch()
+void ApplicationInstanceCommandTests::opensControlForAPlainSecondaryLaunch()
 {
         QCOMPARE(ApplicationInstanceCommand::fromInvocation(false, false, false, false, true),
-             ApplicationInstanceCommand::Settings);
+             ApplicationInstanceCommand::Control);
         QCOMPARE(ApplicationInstanceCommand::fromInvocation(false, false, false, false, false),
              ApplicationInstanceCommand::None);
 }

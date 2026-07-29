@@ -16,6 +16,7 @@ sudo apt-get install -y \
   libgl1-mesa-dev \
   libxcb-cursor0 \
   libxkbcommon-dev \
+  libsecret-1-dev \
   desktop-file-utils \
   appstream \
   ffmpeg \

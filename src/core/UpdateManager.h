@@ -20,9 +20,10 @@ public:
     QString latestVersion() const { return m_latestVersion; }
     QString releaseUrl() const { return m_releaseUrl; }
     QString statusText() const { return m_statusText; }
+    bool isSilentUpdate() const { return m_silentUpdate; }
 
     void checkForUpdates(bool manual = false);
-    void installUpdate();
+    void installUpdate(bool silent = false);
 
 signals:
     void statusChanged();
@@ -37,17 +38,21 @@ private:
     void downloadInstaller();
     void finishDownload();
     void launchInstaller(const QString &installerPath);
+    void checkSilentUpdateEligibility();
+    bool isSelfManagedInstall() const;
     QString updateCacheDir() const;
 
     QNetworkAccessManager *m_network = nullptr;
     QNetworkReply *m_checkReply = nullptr;
     QNetworkReply *m_downloadReply = nullptr;
+    QNetworkReply *m_releaseListReply = nullptr;
     QFile *m_downloadFile = nullptr;
 
     bool m_checking = false;
     bool m_downloading = false;
     bool m_installing = false;
     bool m_installAfterCheck = false;
+    bool m_silentUpdate = false;
     bool m_updateAvailable = false;
     QString m_latestVersion;
     QString m_releaseUrl;

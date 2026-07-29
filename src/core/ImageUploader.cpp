@@ -1,4 +1,5 @@
 #include "ImageUploader.h"
+#include "SecureCredentialStore.h"
 #include "TranslationManager.h"
 #include "UploadResponseParser.h"
 #include <QNetworkAccessManager>
@@ -570,11 +571,16 @@ public:
     explicit YandexDiskUploader(QObject *parent = nullptr)
         : ImageUploader(parent)
     {
-        QSettings s("EShot", "EShot");
-        const QString stored = s.value(QStringLiteral("yandexDiskToken")).toString();
-        m_token = normalizeOAuthTokenInput(stored);
-        if (m_token != stored)
-            s.setValue(QStringLiteral("yandexDiskToken"), m_token);
+        m_token = normalizeOAuthTokenInput(
+            SecureCredentialStore::read(QStringLiteral("yandexDiskToken")));
+        if (m_token.isEmpty()) {
+            QSettings settings("EShot", "EShot");
+            m_token = normalizeOAuthTokenInput(SecureCredentialStore::migrateLegacyToken(
+                settings, QStringLiteral("yandexDiskToken"), [](const QString &key, const QString &token) {
+                    const QString normalized = normalizeOAuthTokenInput(token);
+                    return normalized.isEmpty() || SecureCredentialStore::write(key, normalized);
+                }));
+        }
     }
 
     ~YandexDiskUploader() override { cancel(); }
@@ -587,8 +593,7 @@ public:
     void setAuthValue(const QString &value) override
     {
         m_token = normalizeOAuthTokenInput(value);
-        QSettings s("EShot", "EShot");
-        s.setValue(QStringLiteral("yandexDiskToken"), m_token);
+        SecureCredentialStore::write(QStringLiteral("yandexDiskToken"), m_token);
     }
 
     void upload() override
@@ -797,11 +802,16 @@ public:
     explicit GoogleDriveUploader(QObject *parent = nullptr)
         : ImageUploader(parent)
     {
-        QSettings s("EShot", "EShot");
-        const QString stored = s.value(QStringLiteral("googleDriveToken")).toString();
-        m_token = normalizeOAuthTokenInput(stored);
-        if (m_token != stored)
-            s.setValue(QStringLiteral("googleDriveToken"), m_token);
+        m_token = normalizeOAuthTokenInput(
+            SecureCredentialStore::read(QStringLiteral("googleDriveToken")));
+        if (m_token.isEmpty()) {
+            QSettings settings("EShot", "EShot");
+            m_token = normalizeOAuthTokenInput(SecureCredentialStore::migrateLegacyToken(
+                settings, QStringLiteral("googleDriveToken"), [](const QString &key, const QString &token) {
+                    const QString normalized = normalizeOAuthTokenInput(token);
+                    return normalized.isEmpty() || SecureCredentialStore::write(key, normalized);
+                }));
+        }
     }
 
     ~GoogleDriveUploader() override { cancel(); }
@@ -814,8 +824,7 @@ public:
     void setAuthValue(const QString &value) override
     {
         m_token = normalizeOAuthTokenInput(value);
-        QSettings s("EShot", "EShot");
-        s.setValue(QStringLiteral("googleDriveToken"), m_token);
+        SecureCredentialStore::write(QStringLiteral("googleDriveToken"), m_token);
     }
 
     void upload() override

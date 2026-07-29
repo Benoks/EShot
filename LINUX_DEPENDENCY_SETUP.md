@@ -70,26 +70,6 @@ mevcut dosyayi degistirir ve yeniden baslatir. `.deb` ya da kaynak build
 kurulumlari kendi dosyasini degistirmez; bunlar paket yoneticisi veya kaynak
 build akisi ile guncellenmelidir.
 
-## Desktop kisayolu
-
-`EShot-Linux.desktop` dosyasi proje kokunde durursa kendisi `scripts/linux/desktop-launch.sh` dosyasini calistirir.
-
-Kisayol baska bir klasore tasinacaksa goreli yol bozulur. Bu durumda kisayolun `Exec` satiri sabit bir launcher'a baglanmali. Bu makinede kullanilan launcher:
-
-```bash
-/home/emirhan/.local/bin/eshot-linux-launch
-```
-
-Icerigi:
-
-```bash
-#!/usr/bin/env bash
-set -euo pipefail
-
-cd "/run/media/emirhan/Samsung 990 PRO/Users/emirh/OneDrive/Masaüstü/Code/VSCODE/EShot"
-exec bash scripts/linux/desktop-launch.sh "$@"
-```
-
 ## Neden tek tikta kurulum bazen duruyor?
 
 `desktop-launch.sh` eksik bagimlilik gorurse paket kurmayi dener. GUI icinden calistiginda `pkexec` veya `sudo` parola/onay bekleyebilir. Bu pencere gorunmezse uygulama acilmiyor gibi durur.

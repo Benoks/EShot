@@ -2,6 +2,7 @@
 #include "LinuxUpdateScript.h"
 #include "TranslationManager.h"
 #include "UpdateAssetSelector.h"
+#include "UpdatePolicy.h"
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QDir>
@@ -15,6 +16,7 @@
 #include <QNetworkRequest>
 #include <QProcess>
 #include <QStandardPaths>
+#include <QSettings>
 #include <QSysInfo>
 #include <QTemporaryDir>
 #include <QTimer>
@@ -50,6 +52,7 @@ UpdateManager::~UpdateManager()
 {
     if (m_checkReply) m_checkReply->abort();
     if (m_downloadReply) m_downloadReply->abort();
+    if (m_releaseListReply) m_releaseListReply->abort();
     if (m_downloadFile) {
         m_downloadFile->close();
         delete m_downloadFile;
@@ -154,8 +157,69 @@ void UpdateManager::parseRelease(const QByteArray &data, bool manual)
     if (m_installAfterCheck) {
         m_installAfterCheck = false;
         if (m_updateAvailable)
-            QTimer::singleShot(0, this, &UpdateManager::installUpdate);
+            QTimer::singleShot(0, this, [this]() { installUpdate(); });
     }
+
+    if (!manual && m_updateAvailable)
+        checkSilentUpdateEligibility();
+}
+
+void UpdateManager::checkSilentUpdateEligibility()
+{
+    if (m_releaseListReply || !isSelfManagedInstall())
+        return;
+
+    QUrl url(QStringLiteral("https://api.github.com/repos/Benoks/EShot/releases"));
+    QUrlQuery query;
+    query.addQueryItem(QStringLiteral("per_page"), QStringLiteral("100"));
+    url.setQuery(query);
+
+    QNetworkRequest request(url);
+    request.setRawHeader("Accept", "application/vnd.github+json");
+    request.setRawHeader("User-Agent", "EShot-Updater");
+    request.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
+                         QNetworkRequest::NoLessSafeRedirectPolicy);
+    m_releaseListReply = m_network->get(request);
+    connect(m_releaseListReply, &QNetworkReply::finished, this, [this]() {
+        QNetworkReply *reply = m_releaseListReply;
+        m_releaseListReply = nullptr;
+        if (!reply || reply->error() != QNetworkReply::NoError) {
+            if (reply) reply->deleteLater();
+            return;
+        }
+        const QJsonDocument document = QJsonDocument::fromJson(reply->readAll());
+        reply->deleteLater();
+        if (document.isArray() && shouldSilentlyInstallUpdate(
+                countNewerStableReleases(document.array(), QCoreApplication::applicationVersion()),
+                isSelfManagedInstall())) {
+            installUpdate(true);
+        }
+    });
+}
+
+bool UpdateManager::isSelfManagedInstall() const
+{
+#ifdef Q_OS_WIN
+    const QString appDirectory = QDir::cleanPath(QCoreApplication::applicationDirPath());
+    const QString uninstallKey = QStringLiteral(
+        "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{E5H0T-SCAP-2024-GUID-000000000001}_is1");
+    for (const QString &root : {QStringLiteral("HKEY_CURRENT_USER\\"),
+                                QStringLiteral("HKEY_LOCAL_MACHINE\\")}) {
+        QSettings install(root + uninstallKey, QSettings::NativeFormat);
+        const QString installDirectory = QDir::cleanPath(install.value(QStringLiteral("InstallLocation")).toString());
+        if (!installDirectory.isEmpty() && installDirectory == appDirectory)
+            return true;
+    }
+    return false;
+#elif defined(Q_OS_LINUX)
+    const QFileInfo appImage(qEnvironmentVariable("APPIMAGE"));
+    const QString integratedPath = QDir::home().filePath(
+        QStringLiteral(".local/opt/EShot/EShot.AppImage"));
+    return appImage.isFile() && appImage.isWritable()
+        && QDir::cleanPath(appImage.absoluteFilePath()) == QDir::cleanPath(integratedPath);
+#else
+    return false;
+#endif
 }
 
 QString UpdateManager::updateCacheDir() const
@@ -168,10 +232,11 @@ QString UpdateManager::updateCacheDir() const
     return dir;
 }
 
-void UpdateManager::installUpdate()
+void UpdateManager::installUpdate(bool silent)
 {
     if (isBusy())
         return;
+    m_silentUpdate = silent;
     if (!m_updateAvailable) {
         m_installAfterCheck = true;
         checkForUpdates(true);
