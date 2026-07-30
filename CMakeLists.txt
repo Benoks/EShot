@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(EShot VERSION 4.2.1 LANGUAGES CXX)
+project(EShot VERSION 4.2.2 LANGUAGES CXX)
 
 include(CTest)
 
@@ -54,6 +54,7 @@ set(SOURCES
     src/core/UguuUploader.cpp
     src/core/UpdateManager.cpp
     src/core/NotificationFolderOpener.cpp
+    src/core/DebouncedSettingsWriter.cpp
     src/capture/CaptureGeometry.cpp
     src/capture/CaptureInteractionPolicy.cpp
     src/capture/WindowSnapPolicy.cpp
@@ -65,6 +66,7 @@ set(SOURCES
     src/annotation/AnnotationRotationGeometry.cpp
     src/ui/AnnotationToolbar.cpp
     src/ui/ApplicationTheme.cpp
+    src/ui/OverlayPanelStyle.cpp
     src/ui/SettingsDialog.cpp
     src/ui/SettingsHotkeyPolicy.cpp
     src/ui/SettingsLayoutPolicy.cpp
@@ -80,6 +82,7 @@ set(SOURCES
     src/recording/VideoRecordingCompletionPolicy.cpp
     src/recording/RecordingControlLayout.cpp
     src/recording/RecordingTimeline.cpp
+    src/recording/RecordingFinalizationPolicy.cpp
     src/recording/ScreenRecorder.cpp
     src/recording/VideoRecorder.cpp
     src/recording/RecordingIndicator.cpp
@@ -112,6 +115,7 @@ set(HEADERS
     src/core/UguuUploader.h
     src/core/UpdateManager.h
     src/core/NotificationFolderOpener.h
+    src/core/DebouncedSettingsWriter.h
     src/capture/CaptureGeometry.h
     src/capture/CaptureInteractionPolicy.h
     src/capture/WindowSnapPolicy.h
@@ -123,6 +127,7 @@ set(HEADERS
     src/annotation/AnnotationRotationGeometry.h
     src/ui/AnnotationToolbar.h
     src/ui/ApplicationTheme.h
+    src/ui/OverlayPanelStyle.h
     src/ui/SettingsDialog.h
     src/ui/SettingsHotkeyPolicy.h
     src/ui/SettingsLayoutPolicy.h
@@ -138,6 +143,7 @@ set(HEADERS
     src/recording/VideoRecordingCompletionPolicy.h
     src/recording/RecordingControlLayout.h
     src/recording/RecordingTimeline.h
+    src/recording/RecordingFinalizationPolicy.h
     src/recording/ScreenRecorder.h
     src/recording/VideoRecorder.h
     src/recording/RecordingIndicator.h
@@ -279,6 +285,15 @@ if(BUILD_TESTING)
     target_link_libraries(eshot_recording_drawer_policy_tests PRIVATE Qt6::Core Qt6::Test)
     add_test(NAME recording_drawer_policy COMMAND eshot_recording_drawer_policy_tests)
 
+    qt_add_executable(eshot_overlay_panel_style_tests
+        tests/OverlayPanelStyleTests.cpp
+        src/ui/OverlayPanelStyle.cpp
+        src/ui/OverlayPanelStyle.h
+    )
+    target_include_directories(eshot_overlay_panel_style_tests PRIVATE src)
+    target_link_libraries(eshot_overlay_panel_style_tests PRIVATE Qt6::Core Qt6::Widgets Qt6::Test)
+    add_test(NAME overlay_panel_style COMMAND eshot_overlay_panel_style_tests)
+
     qt_add_executable(eshot_video_recording_completion_policy_tests
         tests/VideoRecordingCompletionPolicyTests.cpp
         src/recording/VideoRecordingCompletionPolicy.cpp
@@ -349,8 +364,17 @@ if(BUILD_TESTING)
         src/capture/CaptureInteractionPolicy.h
     )
     target_include_directories(eshot_capture_interaction_policy_tests PRIVATE src)
-    target_link_libraries(eshot_capture_interaction_policy_tests PRIVATE Qt6::Core Qt6::Test)
+    target_link_libraries(eshot_capture_interaction_policy_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Test)
     add_test(NAME capture_interaction_policy COMMAND eshot_capture_interaction_policy_tests)
+
+    qt_add_executable(eshot_debounced_settings_writer_tests
+        tests/DebouncedSettingsWriterTests.cpp
+        src/core/DebouncedSettingsWriter.cpp
+        src/core/DebouncedSettingsWriter.h
+    )
+    target_include_directories(eshot_debounced_settings_writer_tests PRIVATE src)
+    target_link_libraries(eshot_debounced_settings_writer_tests PRIVATE Qt6::Core Qt6::Test)
+    add_test(NAME debounced_settings_writer COMMAND eshot_debounced_settings_writer_tests)
 
     qt_add_executable(eshot_window_snap_policy_tests
         tests/WindowSnapPolicyTests.cpp
@@ -376,6 +400,15 @@ if(BUILD_TESTING)
     target_include_directories(eshot_recording_settings_policy_tests PRIVATE src)
     target_link_libraries(eshot_recording_settings_policy_tests PRIVATE Qt6::Core Qt6::Test)
     add_test(NAME recording_settings_policy COMMAND eshot_recording_settings_policy_tests)
+
+    qt_add_executable(eshot_recording_finalization_policy_tests
+        tests/RecordingFinalizationPolicyTests.cpp
+        src/recording/RecordingFinalizationPolicy.cpp
+        src/recording/RecordingFinalizationPolicy.h
+    )
+    target_include_directories(eshot_recording_finalization_policy_tests PRIVATE src)
+    target_link_libraries(eshot_recording_finalization_policy_tests PRIVATE Qt6::Core Qt6::Test)
+    add_test(NAME recording_finalization_policy COMMAND eshot_recording_finalization_policy_tests)
 
     qt_add_executable(eshot_settings_layout_policy_tests
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/SettingsLayoutPolicyTests.cpp

@@ -56,6 +56,7 @@
 #include "recording/RecordingIndicator.h"
 #include "recording/RecordingSettingsPolicy.h"
 #include "ui/SettingsDialog.h"
+#include "ui/SettingsLayoutPolicy.h"
 #include "ui/ApplicationTheme.h"
 #include "ui/AboutDialog.h"
 #include "ui/ControlCenterDialog.h"
@@ -339,9 +340,11 @@ public slots:
             if (!screen) screen = QGuiApplication::primaryScreen();
             QRect avail = screen->availableGeometry();
             
-            // Programmatically simulate a user resize to force layout compression and fix Sandbox double-render
-            dlg.resize(dlg.minimumSizeHint());
-            QApplication::processEvents();
+            if (settingsDialogUsesAdaptiveSize(dlg.remembersWindowSize())) {
+                // Programmatically simulate a user resize to force layout compression and fix Sandbox double-render.
+                dlg.resize(dlg.minimumSizeHint());
+                QApplication::processEvents();
+            }
             
             int nx = avail.center().x() - dlg.width() / 2;
             int ny = avail.center().y() - dlg.height() / 2;

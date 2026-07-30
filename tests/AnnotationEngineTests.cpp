@@ -14,6 +14,8 @@ private slots:
     void shiftConstrainedCircleBoundsMatchTheRenderedCircle();
     void shiftConstrainedHighlighterSnapsToItsDominantAxis();
     void exposesOnlyRequestedAnnotationTypesAsRotatable();
+    void releasesScreenSnapshotExplicitly();
+    void capsUndoHistoryAtTwoHundredActions();
 };
 
 void AnnotationEngineTests::rotatesRectangleAroundItsCenter()
@@ -124,6 +126,30 @@ void AnnotationEngineTests::exposesOnlyRequestedAnnotationTypesAsRotatable()
     engine.beginDraw(QPoint(40, 0));
     engine.endDraw(QPoint(60, 20));
     QVERIFY(!engine.isRotatable(1));
+}
+
+void AnnotationEngineTests::releasesScreenSnapshotExplicitly()
+{
+    AnnotationEngine engine;
+    engine.setScreenSnapshot(QPixmap(1920, 1080));
+    QVERIFY(!engine.screenSnapshot().isNull());
+
+    engine.releaseScreenSnapshot();
+
+    QVERIFY(engine.screenSnapshot().isNull());
+}
+
+void AnnotationEngineTests::capsUndoHistoryAtTwoHundredActions()
+{
+    AnnotationEngine engine;
+    for (int i = 0; i < 201; ++i)
+        engine.addTextAnnotation(QPoint(i, i), QString::number(i));
+
+    for (int i = 0; i < 200; ++i)
+        engine.undo();
+
+    QVERIFY(!engine.canUndo());
+    QVERIFY(engine.hasAnnotations());
 }
 
 QTEST_MAIN(AnnotationEngineTests)

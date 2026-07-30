@@ -29,6 +29,7 @@ public:
     ~SettingsDialog();
 
     void setUpdateInfo(bool available, const QString &version, bool busy, const QString &status);
+    bool remembersWindowSize() const { return m_rememberSettingsWindowSizeEnabled; }
 
 signals:
     void updateRequested();
@@ -55,6 +56,7 @@ private slots:
 #endif
 
 private:
+    void done(int result) override;
     void loadSettings();
     void setupUI();
     QWidget* createGeneralTab();
@@ -149,6 +151,8 @@ private:
     QListWidget *m_toolVisibilityList = nullptr;
     QListWidget *m_toolbarControlVisibilityList = nullptr;
     QComboBox *m_visualSearchProviderCombo = nullptr;
+    QCheckBox *m_rememberSettingsWindowSizeCheck = nullptr;
+    bool m_rememberSettingsWindowSizeEnabled = false;
 
     // Shortcut
     QKeySequenceEdit *m_hotkeyEdit = nullptr;

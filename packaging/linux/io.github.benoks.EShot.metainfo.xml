@@ -34,6 +34,11 @@
   <url type="homepage">https://github.com/Benoks/EShot</url>
   <url type="bugtracker">https://github.com/Benoks/EShot/issues</url>
   <releases>
+    <release version="4.2.2" date="2026-07-30">
+      <description>
+        <p>Polishes the compact capture panels, improves selection responsiveness and memory use, makes recording finalization non-blocking, adds optional settings-window size memory, and prevents package-managed AppImages from creating a second user installation.</p>
+      </description>
+    </release>
     <release version="4.2.1" date="2026-07-29">
       <description>
         <p>Adds a consistent control window when EShot is launched normally, secure operating-system storage for OAuth tokens, and optional silent updates for self-managed installations that are at least two stable releases behind.</p>

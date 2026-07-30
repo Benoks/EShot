@@ -389,7 +389,7 @@ void AnnotationEngine::redo()
     } else if (action.index >= 0 && action.index < m_annotations.size()) {
         m_annotations[action.index].rotationDegrees = action.rotationDegrees;
     }
-    m_undoStack.append(action);
+    appendHistoryAction(action);
     recalculateCounterValue();
 }
 
@@ -501,7 +501,7 @@ void AnnotationEngine::rotateAnnotation(int index, qreal degrees)
     action.index = index;
     action.previousRotationDegrees = ann.rotationDegrees;
     action.rotationDegrees = degrees;
-    m_undoStack.append(action);
+    appendHistoryAction(action);
     m_redoStack.clear();
     ann.rotationDegrees = degrees;
 }
@@ -546,7 +546,7 @@ void AnnotationEngine::endTextResize()
         action.index = m_textResizeIndex;
         action.previousAnnotation = m_textResizeOriginal;
         action.annotation = resized;
-        m_undoStack.append(action);
+        appendHistoryAction(action);
         m_redoStack.clear();
     }
     m_textResizeIndex = -1;
@@ -732,8 +732,16 @@ void AnnotationEngine::pushHistory(HistoryAction::Type type, const Annotation &a
     action.type = type;
     action.annotation = annotation;
     action.index = index;
-    m_undoStack.append(action);
+    appendHistoryAction(action);
     m_redoStack.clear();
+}
+
+void AnnotationEngine::appendHistoryAction(const HistoryAction &action)
+{
+    constexpr qsizetype MaxUndoActions = 200;
+    if (m_undoStack.size() >= MaxUndoActions)
+        m_undoStack.removeFirst();
+    m_undoStack.append(action);
 }
 
 void AnnotationEngine::recalculateCounterValue()
@@ -749,6 +757,11 @@ void AnnotationEngine::recalculateCounterValue()
 void AnnotationEngine::setScreenSnapshot(const QPixmap &snapshot)
 {
     m_screenSnapshot = snapshot;
+}
+
+void AnnotationEngine::releaseScreenSnapshot()
+{
+    m_screenSnapshot = QPixmap();
 }
 
 void AnnotationEngine::setSelectionRect(const QRect &rect)

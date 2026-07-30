@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QRect>
+#include <QRegion>
 #include <QSize>
 
 bool shouldReleaseToolForResize(bool handleHit, int currentTool, int noneTool);
@@ -11,3 +12,10 @@ QRect captureHintRect(const QRect &monitorRect, const QSize &preferredSize);
 int quickSettingsTabHeight(int textWidth, int availableHeight);
 bool shouldForwardCaptureKeyFromManagedProxy(bool textEditorVisible);
 bool shouldDetachModalFromOverlay(bool xwaylandOverlay);
+bool shouldComposeCaptureResult(bool recordingMode);
+QRegion crosshairUpdateRegion(const QPoint &previousPosition,
+                              const QPoint &currentPosition,
+                              const QRect &canvasRect);
+QRegion selectionUpdateRegion(const QRect &previousSelection,
+                              const QRect &currentSelection,
+                              const QRect &canvasRect);

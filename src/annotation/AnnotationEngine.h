@@ -87,6 +87,7 @@ public:
     QRectF rotatedBoundingRectOf(int index) const;
 
     void setScreenSnapshot(const QPixmap &snapshot);
+    void releaseScreenSnapshot();
     // Ratio of physical snapshot pixels to logical annotation coordinates, so
     // the blur tool samples the correct snapshot region on high-DPI displays.
     void setSnapshotScale(qreal scale) { m_snapshotScale = scale; }
@@ -131,6 +132,7 @@ private:
     bool annotationContainsPoint(const Annotation &ann, const QPoint &pos, int padding = 8) const;
     static bool isRotatableTool(Tool tool);
     void pushHistory(HistoryAction::Type type, const Annotation &annotation, int index);
+    void appendHistoryAction(const HistoryAction &action);
     void recalculateCounterValue();
 
     Tool m_currentTool;

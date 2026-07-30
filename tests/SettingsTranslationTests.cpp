@@ -35,6 +35,7 @@ void SettingsTranslationTests::issue15SettingsTextExistsInEveryLanguage()
         QStringLiteral("ocrTranslate"),
         QStringLiteral("ocrTranslateBrowserError"),
         QStringLiteral("formatLabel"),
+        QStringLiteral("rememberSettingsWindowSize"),
         QStringLiteral("instantCopyAfterSelection"),
         QStringLiteral("gifSizeSmallest"),
         QStringLiteral("gifSizeBalanced"),

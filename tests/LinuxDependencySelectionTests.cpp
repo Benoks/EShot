@@ -54,6 +54,17 @@ private slots:
         QVERIFY(!defaultLinuxPortalSelection("x11"));
         QVERIFY(!defaultLinuxPortalSelection(""));
     }
+    void offersIntegrationOnlyForUserManagedAppImages() {
+        QVERIFY(!shouldOfferAppImageIntegration(QString()));
+        QVERIFY(shouldOfferAppImageIntegration(
+            QStringLiteral("/home/user/Downloads/EShot.AppImage")));
+        QVERIFY(shouldOfferAppImageIntegration(
+            QStringLiteral("/home/user/.local/opt/EShot/EShot.AppImage")));
+        QVERIFY(!shouldOfferAppImageIntegration(
+            QStringLiteral("/opt/eshot/EShot.AppImage")));
+        QVERIFY(!shouldOfferAppImageIntegration(
+            QStringLiteral("/usr/lib/eshot/EShot.AppImage")));
+    }
 };
 QTEST_MAIN(LinuxDependencySelectionTests)
 #include "LinuxDependencySelectionTests.moc"

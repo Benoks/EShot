@@ -25,8 +25,9 @@ public:
     explicit ScreenRecorder(QObject *parent = nullptr);
     ~ScreenRecorder();
 
-    bool isRecording() const { return m_recording; }
+    bool isRecording() const { return m_recording || isFinalizing(); }
     bool isPaused() const { return m_paused; }
+    bool isFinalizing() const { return m_conversionProcess != nullptr; }
     QRect captureRect() const { return m_displayRect.isValid() ? m_displayRect : m_captureRect; }
     int frameCount() const { return m_frameCount; }
     int maxSeconds() const { return m_maxSeconds; }
@@ -51,6 +52,7 @@ signals:
 private slots:
     void captureFrame();
     void onPortalProcessFinished(int exitCode, QProcess::ExitStatus status);
+    void onPortalConversionFinished(int exitCode, QProcess::ExitStatus status);
 
 private:
     void finishRecording();
@@ -64,13 +66,16 @@ private:
     bool startWaylandPortalRecording(const QRect &captureRect);
     QString gstLaunchPath() const;
     QString ffmpegPath() const;
-    bool convertPortalVideoToGif();
+    bool startPortalVideoToGifConversion();
+    void cleanupPortalConversion();
     void closePortalSession();
     bool setPortalProcessSuspended(bool suspended);
     qint64 nowMs() const;
 
     GifEncoder *m_encoder = nullptr;
     QProcess *m_process = nullptr;
+    QProcess *m_conversionProcess = nullptr;
+    QTimer *m_conversionTimeout = nullptr;
     QTimer *m_frameTimer = nullptr;
     QTimer *m_countdownTimer = nullptr;
     QRect m_captureRect;

@@ -47,3 +47,13 @@ bool loadRecordingAudioEnabled(QSettings &settings, RecordingAudioSource source)
         settings.setValue(key, enabled);
     return enabled;
 }
+
+bool shouldDiscoverAudioDevices(bool microphoneEnabled,
+                                const QString &microphoneDevice)
+{
+    if (!microphoneEnabled)
+        return false;
+    const QString normalized = microphoneDevice.trimmed();
+    return normalized.isEmpty()
+        || normalized.compare(QStringLiteral("default"), Qt::CaseInsensitive) == 0;
+}

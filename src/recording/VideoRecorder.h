@@ -17,8 +17,9 @@ public:
     explicit VideoRecorder(QObject *parent = nullptr);
     ~VideoRecorder() override;
 
-    bool isRecording() const { return m_recording; }
+    bool isRecording() const { return m_recording || isFinalizing(); }
     bool isPaused() const { return m_paused; }
+    bool isFinalizing() const { return m_muxProcess != nullptr; }
     QRect captureRect() const { return m_displayRect.isValid() ? m_displayRect : m_captureRect; }
     int maxSeconds() const { return m_maxSeconds; }
 
@@ -44,6 +45,7 @@ signals:
 
 private slots:
     void onProcessFinished(int exitCode, QProcess::ExitStatus status);
+    void onMuxFinished(int exitCode, QProcess::ExitStatus status);
 
 private:
     QString ffmpegPath() const;
@@ -52,11 +54,14 @@ private:
     bool setProcessSuspended(bool suspended);
     void cleanupProcess();
     void stopSystemAudioCapture();
-    bool muxSystemAudio();
+    bool startSystemAudioMux();
+    void cleanupMuxProcess();
     bool startWaylandPortalRecording(const QRect &captureRect);
     QString gstLaunchPath() const;
 
     QProcess *m_process = nullptr;
+    QProcess *m_muxProcess = nullptr;
+    QTimer *m_muxTimeout = nullptr;
     QTimer *m_countdownTimer = nullptr;
     QRect m_captureRect;
     QRect m_displayRect;

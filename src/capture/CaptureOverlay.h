@@ -4,11 +4,13 @@
 #include <QWidget>
 #include "core/VisualSearch.h"
 #include <QPixmap>
+#include <QImage>
 #include <QPoint>
 #include <QRect>
 #include <QTimer>
 #include <QElapsedTimer>
 #include <QList>
+#include <QStringList>
 #include <QTextEdit>
 #include <QPointer>
 
@@ -38,6 +40,7 @@ class QPropertyAnimation;
 class QVariantAnimation;
 class QLabel;
 class ImageUploader;
+class DebouncedSettingsWriter;
 class QScreen;
 
 
@@ -81,6 +84,7 @@ private:
     void hideToolbar();
     void finishCapture();
     void cancelCapture();
+    void releaseCaptureBuffers();
     QRect normalizedSelectionRect() const;
     QRect selectedCaptureRect() const;
     QRect selectedDisplayRect() const;
@@ -95,6 +99,7 @@ private:
     QString resolveWindowTitle() const;
 
     QPixmap m_screenSnapshot;
+    QImage m_eyedropperImage;
     QPoint m_selectionStart;
     QPoint m_selectionEnd;
     QRect m_selectionAnchorScreenRect;
@@ -210,6 +215,7 @@ private:
     void showRecordingDrawer(RecordingDrawerMode mode);
     void hideRecordingDrawer(bool restoreToolbar = true);
     void startRecordingFromDrawer();
+    void ensureAudioDevicesLoaded();
 
     // Resize and move
     enum ResizeMode { ResNone, ResTopLeft, ResTopRight, ResBottomRight, ResBottomLeft, ResMove, ResNewSelection };
@@ -247,6 +253,8 @@ private:
 
     // Crosshair style
     QString m_crosshairStyle;
+    QPoint m_crosshairPosition;
+    bool m_hasCrosshairPosition = false;
 
     // Settings
     bool m_copyAfterCapture;
@@ -254,6 +262,10 @@ private:
     bool m_instantCopyAfterSelection;
     bool m_showCaptureHints;
     bool m_showHighlighterStraightHint = false;
+    DebouncedSettingsWriter *m_settingsWriter = nullptr;
+    bool m_audioDevicesLoaded = false;
+    QStringList m_cachedDesktopAudioDevices;
+    QList<QPair<QString, QString>> m_cachedMicrophoneAudioDevices;
 
     // Pinned windows list (for lifetime management)
     QList<QPointer<QWidget>> m_pinnedWindows;

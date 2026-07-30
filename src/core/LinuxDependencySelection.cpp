@@ -1,5 +1,6 @@
 #include "LinuxDependencySelection.h"
 
+#include <QDir>
 #include <QHash>
 
 QStringList supportedOcrLanguageCodes()
@@ -73,4 +74,15 @@ QList<int> kdeShortcutsWithoutPlainPrint(const QList<int> &shortcuts)
 bool defaultLinuxPortalSelection(const QString &sessionType)
 {
     return sessionType.compare(QStringLiteral("wayland"), Qt::CaseInsensitive) == 0;
+}
+
+bool shouldOfferAppImageIntegration(const QString &appImagePath)
+{
+    const QString path = QDir::cleanPath(appImagePath.trimmed());
+    if (path.isEmpty() || path == QStringLiteral("."))
+        return false;
+    return path != QStringLiteral("/opt")
+        && !path.startsWith(QStringLiteral("/opt/"))
+        && path != QStringLiteral("/usr")
+        && !path.startsWith(QStringLiteral("/usr/"));
 }

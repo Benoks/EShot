@@ -55,6 +55,50 @@ private slots:
         QVERIFY(!shouldDetachModalFromOverlay(false));
     }
 
+    void crosshairMovementOnlyInvalidatesThinLineRegions()
+    {
+        const QRect canvas(0, 0, 3840, 1080);
+        const QRegion dirty = crosshairUpdateRegion(
+            QPoint(200, 300), QPoint(240, 330), canvas);
+
+        QVERIFY(dirty.contains(QPoint(200, 10)));
+        QVERIFY(dirty.contains(QPoint(240, 1000)));
+        QVERIFY(dirty.contains(QPoint(10, 300)));
+        QVERIFY(dirty.contains(QPoint(3800, 330)));
+        QVERIFY(!dirty.contains(QPoint(1000, 700)));
+        QVERIFY(dirty.boundingRect() == canvas);
+
+        qsizetype dirtyArea = 0;
+        for (const QRect &rect : dirty)
+            dirtyArea += static_cast<qsizetype>(rect.width()) * rect.height();
+        QVERIFY(dirtyArea < static_cast<qsizetype>(canvas.width()) * canvas.height() / 50);
+    }
+
+    void selectionMovementOnlyInvalidatesChangedEdgesAndLabels()
+    {
+        const QRect canvas(0, 0, 3840, 1080);
+        const QRect previous(100, 100, 800, 600);
+        const QRect current(106, 104, 800, 600);
+        const QRegion dirty = selectionUpdateRegion(previous, current, canvas);
+
+        QVERIFY(dirty.contains(previous.topLeft()));
+        QVERIFY(dirty.contains(current.bottomRight()));
+        QVERIFY(dirty.contains(previous.bottomRight() + QPoint(6, 6)));
+        QVERIFY(dirty.contains(previous.topLeft() - QPoint(6, 6)));
+        QVERIFY(!dirty.contains(QPoint(500, 400)));
+
+        qsizetype dirtyArea = 0;
+        for (const QRect &rect : dirty)
+            dirtyArea += static_cast<qsizetype>(rect.width()) * rect.height();
+        QVERIFY(dirtyArea < static_cast<qsizetype>(canvas.width()) * canvas.height() / 20);
+    }
+
+    void recordingSelectionSkipsStillImageComposition()
+    {
+        QVERIFY(shouldComposeCaptureResult(false));
+        QVERIFY(!shouldComposeCaptureResult(true));
+    }
+
     void annotationPersistenceLabelsExistInEveryLanguage()
     {
         for (int language = 0; language < TranslationManager::LangCount; ++language) {

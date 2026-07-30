@@ -55,6 +55,14 @@ private slots:
         QCOMPARE(settings.value(QStringLiteral("videoDesktopAudioEnabled")).toBool(), true);
         QCOMPARE(settings.value(QStringLiteral("videoMicrophoneEnabled")).toBool(), false);
     }
+
+    void discoversDevicesOnlyForAnUnresolvedEnabledMicrophone()
+    {
+        QVERIFY(shouldDiscoverAudioDevices(true, QStringLiteral("default")));
+        QVERIFY(shouldDiscoverAudioDevices(true, QString()));
+        QVERIFY(!shouldDiscoverAudioDevices(false, QStringLiteral("default")));
+        QVERIFY(!shouldDiscoverAudioDevices(true, QStringLiteral("Easy Effects Source")));
+    }
 };
 
 QTEST_APPLESS_MAIN(RecordingSettingsPolicyTests)

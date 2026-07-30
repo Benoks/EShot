@@ -20,3 +20,5 @@ bool initialAudioEnabled(bool hasExplicitSetting,
                          RecordingAudioSource source);
 
 bool loadRecordingAudioEnabled(QSettings &settings, RecordingAudioSource source);
+bool shouldDiscoverAudioDevices(bool microphoneEnabled,
+                                const QString &microphoneDevice);

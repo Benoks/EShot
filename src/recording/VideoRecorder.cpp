@@ -3,6 +3,7 @@
 #include "LinuxRecordingSupport.h"
 #include "RecordingSettingsPolicy.h"
 #include "VideoRecordingCompletionPolicy.h"
+#include "RecordingFinalizationPolicy.h"
 
 #include <QCoreApplication>
 #include <QGuiApplication>
@@ -231,8 +232,9 @@ VideoRecorder::VideoRecorder(QObject *parent)
 
 VideoRecorder::~VideoRecorder()
 {
-    if (m_recording)
+    if (isRecording())
         cancel();
+    cleanupMuxProcess();
 }
 
 void VideoRecorder::start(const QRect &captureRect, int fps, int maxSeconds, int crf,
@@ -243,7 +245,7 @@ void VideoRecorder::start(const QRect &captureRect, int fps, int maxSeconds, int
                           const QString &outputPath,
                           const QRect &displayRect)
 {
-    if (m_recording) {
+    if (isRecording()) {
         emit recordingFailed(QStringLiteral("already recording"));
         return;
     }
@@ -258,9 +260,15 @@ void VideoRecorder::start(const QRect &captureRect, int fps, int maxSeconds, int
         emit recordingFailed(ffmpegMissingReason());
         return;
     }
-    const QStringList audioDevices = platformAudioDevices(m_ffmpegPath);
+#endif
+    const bool discoverAudioDevices = shouldDiscoverAudioDevices(
+        microphoneEnabled, microphoneDevice);
+#ifdef Q_OS_WIN
+    const QStringList audioDevices = discoverAudioDevices
+        ? platformAudioDevices(m_ffmpegPath) : QStringList();
 #else
-    const QStringList audioDevices = platformAudioDevices(QString());
+    const QStringList audioDevices = discoverAudioDevices
+        ? platformAudioDevices(QString()) : QStringList();
 #endif
 
     m_captureRect = captureRect;
@@ -275,14 +283,10 @@ void VideoRecorder::start(const QRect &captureRect, int fps, int maxSeconds, int
     if (m_desktopAudioDevice.isEmpty() || m_desktopAudioDevice == QStringLiteral("virtual-audio-capturer"))
         m_desktopAudioDevice = QStringLiteral("__wasapi__");
     m_systemAudioLoopback = m_desktopAudioEnabled && m_desktopAudioDevice == QStringLiteral("__wasapi__");
-    if (m_desktopAudioEnabled && m_desktopAudioDevice != QStringLiteral("__wasapi__") && !containsDevice(audioDevices, m_desktopAudioDevice))
-        m_desktopAudioEnabled = false;
 #else
     m_systemAudioLoopback = false;
     if (m_desktopAudioDevice.isEmpty() || m_desktopAudioDevice == QStringLiteral("__wasapi__"))
         m_desktopAudioDevice = QStringLiteral("@DEFAULT_SINK@.monitor");
-    if (m_desktopAudioEnabled && !containsDevice(audioDevices, m_desktopAudioDevice))
-        m_desktopAudioEnabled = false;
 #endif
     m_microphoneEnabled = microphoneEnabled;
     m_microphoneVolume = qBound(0, microphoneVolume, 100);
@@ -291,10 +295,12 @@ void VideoRecorder::start(const QRect &captureRect, int fps, int maxSeconds, int
         m_microphoneDevice = audioDevices.isEmpty() ? QString() : audioDevices.first();
     }
 #ifdef Q_OS_WIN
-    if (m_microphoneEnabled && (m_microphoneDevice.isEmpty() || !containsDevice(audioDevices, m_microphoneDevice)))
+    if (m_microphoneEnabled && discoverAudioDevices
+        && (m_microphoneDevice.isEmpty() || !containsDevice(audioDevices, m_microphoneDevice)))
         m_microphoneEnabled = false;
 #else
-    if (m_microphoneEnabled && (m_microphoneDevice.isEmpty() || !containsDevice(audioDevices, m_microphoneDevice)))
+    if (m_microphoneEnabled && discoverAudioDevices
+        && (m_microphoneDevice.isEmpty() || !containsDevice(audioDevices, m_microphoneDevice)))
         m_microphoneEnabled = false;
 #endif
     m_lastElapsedSeconds = -1;
@@ -512,8 +518,15 @@ void VideoRecorder::stop()
 
 void VideoRecorder::cancel()
 {
-    if (!m_recording)
+    if (!m_recording && !isFinalizing())
         return;
+    if (isFinalizing()) {
+        cleanupMuxProcess();
+        QFile::remove(m_outputPath);
+        QFile::remove(m_videoOnlyPath);
+        QFile::remove(m_audioPath);
+        return;
+    }
     m_canceling = true;
     if (m_paused)
         resume();
@@ -587,10 +600,26 @@ void VideoRecorder::onProcessFinished(int exitCode, QProcess::ExitStatus status)
         return;
     }
 
-    if (m_systemAudioLoopback)
-        ok = muxSystemAudio();
-
     cleanupProcess();
+    if (m_systemAudioLoopback) {
+        if (!QFileInfo::exists(m_videoOnlyPath)) {
+            QFile::remove(m_audioPath);
+            emit recordingFailed(QStringLiteral("failed to mux system audio"));
+            return;
+        }
+        if (!QFileInfo::exists(m_audioPath) || QFileInfo(m_audioPath).size() < 128) {
+            QFile::remove(m_outputPath);
+            const bool fallbackOk = QFile::rename(m_videoOnlyPath, m_outputPath);
+            QFile::remove(m_audioPath);
+            if (fallbackOk) emit recordingStopped(output);
+            else emit recordingFailed(QStringLiteral("failed to mux system audio"));
+            return;
+        }
+        if (startSystemAudioMux())
+            return;
+        emit recordingFailed(QStringLiteral("failed to start system audio mux"));
+        return;
+    }
     if (!ok) {
         emit recordingFailed(QStringLiteral("failed to mux system audio"));
         return;
@@ -606,20 +635,16 @@ void VideoRecorder::stopSystemAudioCapture()
         m_audioThread.join();
 }
 
-bool VideoRecorder::muxSystemAudio()
+bool VideoRecorder::startSystemAudioMux()
 {
     if (m_videoOnlyPath.isEmpty() || m_audioPath.isEmpty())
         return false;
     if (!QFileInfo::exists(m_videoOnlyPath))
         return false;
-    if (!QFileInfo::exists(m_audioPath) || QFileInfo(m_audioPath).size() < 128) {
-        QFile::rename(m_videoOnlyPath, m_outputPath);
-        QFile::remove(m_audioPath);
-        return QFileInfo::exists(m_outputPath);
-    }
-
-    QProcess mux;
-    mux.setProgram(m_ffmpegPath);
+    cleanupMuxProcess();
+    QFile::remove(m_outputPath);
+    m_muxProcess = new QProcess(this);
+    m_muxProcess->setProgram(m_ffmpegPath);
     QStringList args = {
         QStringLiteral("-y"),
         QStringLiteral("-hide_banner"),
@@ -628,13 +653,7 @@ bool VideoRecorder::muxSystemAudio()
         QStringLiteral("-i"), m_audioPath
     };
 
-    QProcess probe;
-    probe.setProgram(m_ffmpegPath);
-    probe.setArguments({QStringLiteral("-hide_banner"), QStringLiteral("-i"), m_videoOnlyPath});
-    probe.setProcessChannelMode(QProcess::MergedChannels);
-    probe.start();
-    probe.waitForFinished(5000);
-    const bool videoHasAudio = QString::fromLocal8Bit(probe.readAll()).contains(QStringLiteral("Audio:"), Qt::CaseInsensitive);
+    const bool videoHasAudio = m_microphoneEnabled && m_microphoneVolume > 0;
 
     if (videoHasAudio) {
         args << QStringLiteral("-filter_complex")
@@ -649,17 +668,69 @@ bool VideoRecorder::muxSystemAudio()
          << QStringLiteral("-c:a") << QStringLiteral("aac")
          << QStringLiteral("-shortest")
          << m_outputPath;
-    mux.setArguments(args);
-    mux.start();
-    const bool finished = mux.waitForFinished(30000);
-    if (!(finished && mux.exitStatus() == QProcess::NormalExit && mux.exitCode() == 0 && QFileInfo::exists(m_outputPath))) {
+    m_muxProcess->setArguments(args);
+    m_muxProcess->setProcessChannelMode(QProcess::SeparateChannels);
+    connect(m_muxProcess, &QProcess::finished, this, &VideoRecorder::onMuxFinished);
+    connect(m_muxProcess, &QProcess::errorOccurred, this,
+            [this](QProcess::ProcessError error) {
+        if (error != QProcess::FailedToStart || !m_muxProcess)
+            return;
+        cleanupMuxProcess();
+        QFile::remove(m_outputPath);
+        const bool fallbackOk = QFile::rename(m_videoOnlyPath, m_outputPath);
+        QFile::remove(m_audioPath);
+        if (fallbackOk) emit recordingStopped(m_outputPath);
+        else emit recordingFailed(QStringLiteral("failed to start system audio mux"));
+    });
+    m_muxTimeout = new QTimer(this);
+    m_muxTimeout->setSingleShot(true);
+    m_muxTimeout->setInterval(30000);
+    connect(m_muxTimeout, &QTimer::timeout, this, [this]() {
+        if (!m_muxProcess)
+            return;
+        m_muxProcess->setProperty("eshotTimedOut", true);
+        m_muxProcess->kill();
+    });
+    m_muxTimeout->start();
+    m_muxProcess->start();
+    return true;
+}
+
+void VideoRecorder::onMuxFinished(int exitCode, QProcess::ExitStatus status)
+{
+    if (!m_muxProcess)
+        return;
+    const VideoMuxCompletionAction action = videoMuxCompletionAction(
+        status == QProcess::NormalExit && !m_muxProcess->property("eshotTimedOut").toBool(),
+        exitCode, QFileInfo(m_outputPath).size());
+    cleanupMuxProcess();
+
+    if (action == VideoMuxCompletionAction::UseMuxedOutput) {
+        QFile::remove(m_videoOnlyPath);
+    } else {
         QFile::remove(m_outputPath);
         QFile::rename(m_videoOnlyPath, m_outputPath);
-    } else {
-        QFile::remove(m_videoOnlyPath);
     }
     QFile::remove(m_audioPath);
-    return QFileInfo::exists(m_outputPath);
+    if (QFileInfo::exists(m_outputPath))
+        emit recordingStopped(m_outputPath);
+    else
+        emit recordingFailed(QStringLiteral("failed to mux system audio"));
+}
+
+void VideoRecorder::cleanupMuxProcess()
+{
+    if (m_muxTimeout) {
+        m_muxTimeout->stop();
+        m_muxTimeout->deleteLater();
+        m_muxTimeout = nullptr;
+    }
+    if (m_muxProcess) {
+        if (m_muxProcess->state() != QProcess::NotRunning)
+            m_muxProcess->kill();
+        m_muxProcess->deleteLater();
+        m_muxProcess = nullptr;
+    }
 }
 
 bool VideoRecorder::startWaylandPortalRecording(const QRect &captureRect)

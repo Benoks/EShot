@@ -6,9 +6,11 @@
 #include "annotation/AnnotationEngine.h"
 #include "annotation/AnnotationRotationGeometry.h"
 #include "ui/AnnotationToolbar.h"
+#include "ui/OverlayPanelStyle.h"
 #include "ui/OcrDialog.h"
 #include "ui/UploadDialog.h"
 #include "core/ImageUploader.h"
+#include "core/DebouncedSettingsWriter.h"
 #include "core/HotkeyManager.h"
 #include "core/LinuxDesktopIntegration.h"
 #include "core/LinuxPortalScreenshot.h"
@@ -79,6 +81,21 @@
 #endif
 
 namespace {
+void addOverlayPanelSection(QVBoxLayout *layout, QWidget *parent,
+                            const QString &title, bool separator = true)
+{
+    if (separator) {
+        auto *line = new QFrame(parent);
+        line->setFrameShape(QFrame::HLine);
+        line->setProperty("panelRole", QStringLiteral("separator"));
+        layout->addWidget(line);
+    }
+
+    auto *label = new QLabel(title, parent);
+    label->setProperty("panelRole", QStringLiteral("section"));
+    layout->addWidget(label);
+}
+
 void drawCaptureHintShortcut(QPainter &painter, int &x, int y,
                              const QString &key, const QString &label,
                              bool compact)
@@ -489,6 +506,8 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
     , m_eyedropperActive(false)
     , m_selectionLocked(false)
 {
+    m_settingsWriter = new DebouncedSettingsWriter(
+        QStringLiteral("EShot"), QStringLiteral("EShot"), 200, this);
     if (qEnvironmentVariableIntValue("ESHOT_WAYLAND_XWAYLAND_OVERLAY") == 1)
         setWindowFlag(Qt::X11BypassWindowManagerHint, true);
     setAttribute(Qt::WA_TranslucentBackground, false);
@@ -857,96 +876,19 @@ void CaptureOverlay::setupToolSettingsDrawer()
     m_toolSettingsDrawer = new QWidget(this);
     m_toolSettingsDrawer->setObjectName(QStringLiteral("toolSettingsDrawer"));
     m_toolSettingsDrawer->setFixedWidth(258);
-    m_toolSettingsDrawer->setStyleSheet(R"(
-        QWidget#toolSettingsDrawer {
-            background-color: rgba(37, 37, 37, 248);
-            border: 1px solid rgba(255, 255, 255, 50);
-            border-top-left-radius: 0px;
-            border-bottom-left-radius: 0px;
-            border-top-right-radius: 7px;
-            border-bottom-right-radius: 7px;
-        }
-        QLabel { color: #d6d6d6; font-size: 11px; }
-        QLabel[section="true"] { color: #f2f2f2; font-size: 12px; font-weight: 700; }
-        QLabel[valueBadge="true"] {
-            color: #f4f4f4;
-            background-color: rgba(255, 255, 255, 18);
-            border: 1px solid rgba(255, 255, 255, 38);
-            border-radius: 4px;
-            padding: 1px 5px;
-            min-width: 24px;
-            qproperty-alignment: AlignCenter;
-            font-size: 10px;
-            font-weight: 700;
-        }
-        QSlider::groove:horizontal {
-            background: #484848;
-            height: 4px;
-            border-radius: 2px;
-        }
-        QSlider::handle:horizontal {
-            background: #e8e8e8;
-            border: 1px solid #9a9a9a;
-            width: 14px;
-            height: 14px;
-            margin: -5px 0;
-            border-radius: 7px;
-        }
-        QSpinBox, QComboBox {
-            background: rgba(52, 52, 52, 235);
-            color: #f1f1f1;
-            border: 1px solid rgba(255, 255, 255, 55);
-            border-radius: 5px;
-            min-height: 25px;
-            padding: 2px 8px;
-            selection-background-color: #4a4a4a;
-        }
-        QSpinBox:hover, QComboBox:hover {
-            background: rgba(62, 62, 62, 240);
-            border-color: rgba(255, 255, 255, 82);
-        }
-        QSpinBox:focus, QComboBox:focus {
-            border-color: rgba(255, 255, 255, 110);
-        }
-        QCheckBox {
-            color: #d6d6d6;
-            font-size: 11px;
-            spacing: 7px;
-        }
-        QCheckBox::indicator {
-            width: 13px;
-            height: 13px;
-            border-radius: 3px;
-            border: 1px solid rgba(255, 255, 255, 70);
-            background: rgba(255, 255, 255, 12);
-        }
-        QCheckBox::indicator:checked {
-            background: #4ea1ff;
-            border-color: #77bbff;
-        }
-        QComboBox::drop-down {
-            subcontrol-origin: padding;
-            subcontrol-position: top right;
-            width: 22px;
-            border-left: 1px solid rgba(255, 255, 255, 36);
-            border-top-right-radius: 5px;
-            border-bottom-right-radius: 5px;
-            background: rgba(255, 255, 255, 10);
-        }
-        QComboBox::down-arrow {
-            image: none;
-            width: 0px;
-            height: 0px;
-        }
-    )");
+    m_toolSettingsDrawer->setStyleSheet(overlayPanelStyleSheet());
 
+    const OverlayPanelMetrics panelMetrics = overlayPanelMetrics();
     QVBoxLayout *drawerLayout = new QVBoxLayout(m_toolSettingsDrawer);
-    drawerLayout->setContentsMargins(12, 10, 12, 11);
-    drawerLayout->setSpacing(8);
+    drawerLayout->setContentsMargins(panelMetrics.contentMargin, 10,
+                                      panelMetrics.contentMargin, panelMetrics.contentMargin);
+    drawerLayout->setSpacing(panelMetrics.rowSpacing);
 
     QLabel *title = new QLabel(TranslationManager::quickSettings(), m_toolSettingsDrawer);
-    title->setProperty("section", true);
+    title->setProperty("panelRole", QStringLiteral("title"));
     drawerLayout->addWidget(title);
+    addOverlayPanelSection(drawerLayout, m_toolSettingsDrawer,
+                           TranslationManager::drawingTools(), false);
 
     auto addSliderRow = [&](const QString &label, QSlider *&slider, QLabel *&valueLabel, int min, int max, int value) {
         QLabel *rowLabel = new QLabel(label, m_toolSettingsDrawer);
@@ -954,7 +896,7 @@ void CaptureOverlay::setupToolSettingsDrawer()
         slider->setRange(min, max);
         slider->setValue(value);
         valueLabel = new QLabel(QString::number(value), m_toolSettingsDrawer);
-        valueLabel->setProperty("valueBadge", true);
+        valueLabel->setProperty("panelRole", QStringLiteral("value"));
         valueLabel->setFixedWidth(34);
         drawerLayout->addWidget(rowLabel);
         auto *valueRow = new QHBoxLayout();
@@ -968,15 +910,15 @@ void CaptureOverlay::setupToolSettingsDrawer()
     addSliderRow(TranslationManager::quickPenWidth(), m_quickPenWidthSlider, m_quickPenWidthValueLabel, 1, 20, 3);
     addSliderRow(TranslationManager::quickBlurIntensity(), m_quickBlurSlider, m_quickBlurValueLabel, 4, 64, 16);
 
-    QLabel *gifTitle = new QLabel(TranslationManager::quickGifRecording(), m_toolSettingsDrawer);
-    gifTitle->setProperty("section", true);
-    drawerLayout->addWidget(gifTitle);
+    addOverlayPanelSection(drawerLayout, m_toolSettingsDrawer,
+                           TranslationManager::quickGifRecording());
 
     auto *fpsRow = new QHBoxLayout();
     fpsRow->addWidget(new QLabel(TranslationManager::gifFpsLabel().remove(QChar(':')), m_toolSettingsDrawer));
     m_quickGifFpsSpin = new QSpinBox(m_toolSettingsDrawer);
     m_quickGifFpsSpin->setRange(1, gifRecordingFpsLimit());
-    m_quickGifFpsSpin->setButtonSymbols(QAbstractSpinBox::NoButtons);
+    configureOverlaySpinBox(m_quickGifFpsSpin);
+    m_quickGifFpsSpin->setFixedWidth(96);
     fpsRow->addWidget(m_quickGifFpsSpin);
     drawerLayout->addLayout(fpsRow);
 
@@ -984,7 +926,8 @@ void CaptureOverlay::setupToolSettingsDrawer()
     timeRow->addWidget(new QLabel(TranslationManager::quickMaxSeconds(), m_toolSettingsDrawer));
     m_quickGifSecondsSpin = new QSpinBox(m_toolSettingsDrawer);
     m_quickGifSecondsSpin->setRange(0, 600);
-    m_quickGifSecondsSpin->setButtonSymbols(QAbstractSpinBox::NoButtons);
+    configureOverlaySpinBox(m_quickGifSecondsSpin);
+    m_quickGifSecondsSpin->setFixedWidth(96);
     timeRow->addWidget(m_quickGifSecondsSpin);
     drawerLayout->addLayout(timeRow);
 
@@ -997,22 +940,19 @@ void CaptureOverlay::setupToolSettingsDrawer()
     m_quickGifLoopCombo->addItem(QStringLiteral("3"), 3);
     m_quickGifLoopCombo->addItem(QStringLiteral("5"), 5);
     m_quickGifLoopCombo->addItem(QStringLiteral("10"), 10);
+    m_quickGifLoopCombo->setFixedWidth(96);
     loopRow->addWidget(m_quickGifLoopCombo);
     drawerLayout->addLayout(loopRow);
 
-    QFrame *line = new QFrame(m_toolSettingsDrawer);
-    line->setFrameShape(QFrame::HLine);
-    line->setStyleSheet(QStringLiteral("color: rgba(255,255,255,45);"));
-    drawerLayout->addWidget(line);
-    QLabel *videoTitle = new QLabel(TranslationManager::videoRecordingTitle(), m_toolSettingsDrawer);
-    videoTitle->setProperty("section", true);
-    drawerLayout->addWidget(videoTitle);
+    addOverlayPanelSection(drawerLayout, m_toolSettingsDrawer,
+                           TranslationManager::videoRecordingTitle());
 
     auto *videoFpsRow = new QHBoxLayout();
     videoFpsRow->addWidget(new QLabel(TranslationManager::videoFpsLabel().remove(QChar(':')), m_toolSettingsDrawer));
     m_quickVideoFpsSpin = new QSpinBox(m_toolSettingsDrawer);
     m_quickVideoFpsSpin->setRange(1, videoRecordingFpsLimit());
-    m_quickVideoFpsSpin->setButtonSymbols(QAbstractSpinBox::NoButtons);
+    configureOverlaySpinBox(m_quickVideoFpsSpin);
+    m_quickVideoFpsSpin->setFixedWidth(96);
     videoFpsRow->addWidget(m_quickVideoFpsSpin);
     drawerLayout->addLayout(videoFpsRow);
 
@@ -1021,7 +961,8 @@ void CaptureOverlay::setupToolSettingsDrawer()
     m_quickVideoSecondsSpin = new QSpinBox(m_toolSettingsDrawer);
     m_quickVideoSecondsSpin->setRange(0, 3600);
     m_quickVideoSecondsSpin->setSpecialValueText(TranslationManager::recordingUnlimited());
-    m_quickVideoSecondsSpin->setButtonSymbols(QAbstractSpinBox::NoButtons);
+    configureOverlaySpinBox(m_quickVideoSecondsSpin);
+    m_quickVideoSecondsSpin->setFixedWidth(96);
     videoTimeRow->addWidget(m_quickVideoSecondsSpin);
     drawerLayout->addLayout(videoTimeRow);
 
@@ -1031,13 +972,13 @@ void CaptureOverlay::setupToolSettingsDrawer()
     m_quickVideoCrfSpin->setRange(18, 32);
     m_quickVideoCrfSpin->setValue(24);
     m_quickVideoCrfSpin->setToolTip(TranslationManager::videoCrfHint());
-    m_quickVideoCrfSpin->setButtonSymbols(QAbstractSpinBox::NoButtons);
+    configureOverlaySpinBox(m_quickVideoCrfSpin);
+    m_quickVideoCrfSpin->setFixedWidth(96);
     videoCrfRow->addWidget(m_quickVideoCrfSpin);
     drawerLayout->addLayout(videoCrfRow);
 
-    QLabel *audioTitle = new QLabel(TranslationManager::audioMode(), m_toolSettingsDrawer);
-    audioTitle->setProperty("section", true);
-    drawerLayout->addWidget(audioTitle);
+    addOverlayPanelSection(drawerLayout, m_toolSettingsDrawer,
+                           TranslationManager::audioMode());
 
     auto addAudioVolumeRow = [&](QCheckBox *&check, QSlider *&slider, QLabel *&valueLabel,
                                  const QString &label, const char *enabledKey, const char *volumeKey) {
@@ -1052,7 +993,7 @@ void CaptureOverlay::setupToolSettingsDrawer()
         slider->setRange(0, 100);
         slider->setValue(80);
         valueLabel = new QLabel(QStringLiteral("80"), m_toolSettingsDrawer);
-        valueLabel->setProperty("valueBadge", true);
+        valueLabel->setProperty("panelRole", QStringLiteral("value"));
         valueLabel->setFixedWidth(34);
         valueRow->addWidget(slider, 1);
         valueRow->addWidget(valueLabel);
@@ -1061,11 +1002,6 @@ void CaptureOverlay::setupToolSettingsDrawer()
         auto updateEnabled = [slider, valueLabel](bool enabled) {
             slider->setEnabled(enabled);
             valueLabel->setEnabled(enabled);
-            slider->setGraphicsEffect(nullptr);
-            slider->setStyleSheet(enabled ? QString() : QStringLiteral("opacity: 0.45;"));
-            valueLabel->setStyleSheet(enabled
-                ? QStringLiteral("color: #f4f4f4; background-color: rgba(255, 255, 255, 18); border: 1px solid rgba(255, 255, 255, 38); border-radius: 4px; padding: 1px 5px;")
-                : QStringLiteral("color: #777; background-color: rgba(255, 255, 255, 8); border: 1px solid rgba(255, 255, 255, 18); border-radius: 4px; padding: 1px 5px;"));
         };
         updateEnabled(check->isChecked());
 
@@ -1074,10 +1010,10 @@ void CaptureOverlay::setupToolSettingsDrawer()
             s.setValue(QString::fromLatin1(enabledKey), enabled);
             updateEnabled(enabled);
         });
-        connect(slider, &QSlider::valueChanged, this, [valueLabel, volumeKey](int value) {
+        connect(slider, &QSlider::valueChanged, this, [this, valueLabel, volumeKey](int value) {
             valueLabel->setText(QString::number(value));
-            QSettings s("EShot", "EShot");
-            s.setValue(QString::fromLatin1(volumeKey), value);
+            if (m_settingsWriter)
+                m_settingsWriter->schedule(QString::fromLatin1(volumeKey), value);
         });
     };
 
@@ -1086,8 +1022,8 @@ void CaptureOverlay::setupToolSettingsDrawer()
     addAudioVolumeRow(m_quickMicrophoneCheck, m_quickMicrophoneVolumeSlider, m_quickMicrophoneVolumeLabel,
                       TranslationManager::audioMicrophone(), "videoMicrophoneEnabled", "videoMicrophoneVolume");
 
-    const QStringList audioDevices = desktopAudioDevices();
-    const auto activeInputDevices = microphoneAudioDevices();
+    const QStringList audioDevices;
+    const QList<QPair<QString, QString>> activeInputDevices;
     auto *desktopDeviceRow = new QHBoxLayout();
     auto *desktopDeviceLabel = new QLabel(TranslationManager::audioSource(), m_toolSettingsDrawer);
     desktopDeviceRow->addWidget(desktopDeviceLabel);
@@ -1168,8 +1104,8 @@ void CaptureOverlay::setupToolSettingsDrawer()
             m_quickBlurValueLabel->setText(QString::number(value));
         if (m_annotationEngine) m_annotationEngine->setBlurIntensity(value);
         if (m_toolbar) m_toolbar->setBlurIntensity(value);
-        QSettings s("EShot", "EShot");
-        s.setValue("blurIntensity", value);
+        if (m_settingsWriter)
+            m_settingsWriter->schedule(QStringLiteral("blurIntensity"), value);
     });
     connect(m_quickGifFpsSpin, qOverload<int>(&QSpinBox::valueChanged), this, [](int value) {
         QSettings s("EShot", "EShot");
@@ -1206,8 +1142,9 @@ void CaptureOverlay::setupToolSettingsDrawer()
 
     m_toolSettingsDrawer->hide();
 
+    const int drawerAnimationDurationMs = overlayPanelMetrics().drawerAnimationDurationMs;
     m_toolSettingsAnimation = new QPropertyAnimation(m_toolSettingsDrawer, "geometry", this);
-    m_toolSettingsAnimation->setDuration(185);
+    m_toolSettingsAnimation->setDuration(drawerAnimationDurationMs);
     m_toolSettingsAnimation->setEasingCurve(QEasingCurve::OutCubic);
     connect(m_toolSettingsAnimation, &QPropertyAnimation::finished, this, [this]() {
         if (m_toolSettingsDrawer && m_toolSettingsDrawer->property("closing").toBool()) {
@@ -1219,7 +1156,7 @@ void CaptureOverlay::setupToolSettingsDrawer()
     });
 
     m_toolSettingsButtonAnimation = new QPropertyAnimation(m_toolSettingsButton, "geometry", this);
-    m_toolSettingsButtonAnimation->setDuration(185);
+    m_toolSettingsButtonAnimation->setDuration(drawerAnimationDurationMs);
     m_toolSettingsButtonAnimation->setEasingCurve(QEasingCurve::OutCubic);
 }
 
@@ -1228,57 +1165,24 @@ void CaptureOverlay::setupRecordingDrawer()
     m_recordingDrawer = new QWidget(this);
     m_recordingDrawer->setObjectName(QStringLiteral("recordingDrawer"));
     m_recordingDrawer->setFixedWidth(264);
-    m_recordingDrawer->setStyleSheet(R"(
-        QWidget#recordingDrawer { background: rgba(37, 37, 37, 250); border: 1px solid rgba(255,255,255,55); border-radius: 10px; }
-        QLabel { color: #d6d6d6; font-size: 11px; }
-        QLabel#recordingDrawerTitle { color: #f5f5f5; font-size: 13px; font-weight: 700; }
-        QSpinBox, QComboBox { min-height: 32px; background: #303030; border: 1px solid #505050; border-radius: 6px; color: #f2f2f2; }
-        QComboBox { padding: 0 7px; }
-        QSpinBox { padding: 0; }
-        QSpinBox:hover, QComboBox:hover { border-color: #6a6a6a; background: #383838; }
-        QSpinBox:focus, QComboBox:focus { border-color: #0078d4; }
-        QComboBox::drop-down {
-            subcontrol-origin: padding;
-            subcontrol-position: top right;
-            width: 28px;
-            border-left: 1px solid #4b4d52;
-            border-top-right-radius: 6px;
-            border-bottom-right-radius: 6px;
-            background: #34363a;
-        }
-        QComboBox::down-arrow {
-            image: url(:/icons/chevron_down.svg);
-            width: 14px;
-            height: 14px;
-        }
-        QSpinBox::up-button, QSpinBox::down-button {
-            subcontrol-origin: border;
-            width: 22px;
-            background: #34363a;
-            border-left: 1px solid #4b4d52;
-        }
-        QSpinBox::up-button { subcontrol-position: top right; border-top-right-radius: 6px; }
-        QSpinBox::down-button { subcontrol-position: bottom right; border-bottom-right-radius: 6px; }
-        QSpinBox::up-button:hover, QSpinBox::down-button:hover { background: #3a3a3a; }
-        QSpinBox::up-arrow { image: url(:/icons/chevron_up.svg); width: 11px; height: 11px; }
-        QSpinBox::down-arrow { image: url(:/icons/chevron_down.svg); width: 11px; height: 11px; }
-        QCheckBox { color: #e4e4e4; spacing: 7px; }
-        QPushButton#recordingStartButton { min-height: 32px; background: #0078d4; border: 1px solid #2497eb; border-radius: 6px; color: white; font-weight: 700; }
-        QPushButton#recordingStartButton:hover { background: #1686dc; }
-        QPushButton#recordingCancelButton { min-height: 28px; background: transparent; border: 1px solid #505050; border-radius: 6px; color: #d6d6d6; }
-    )");
+    m_recordingDrawer->setStyleSheet(overlayPanelStyleSheet());
 
+    const OverlayPanelMetrics panelMetrics = overlayPanelMetrics();
     auto *layout = new QVBoxLayout(m_recordingDrawer);
-    layout->setContentsMargins(13, 12, 13, 12);
-    layout->setSpacing(9);
+    layout->setContentsMargins(panelMetrics.contentMargin, panelMetrics.contentMargin,
+                               panelMetrics.contentMargin, panelMetrics.contentMargin);
+    layout->setSpacing(panelMetrics.rowSpacing);
     m_recordingDrawerTitle = new QLabel(m_recordingDrawer);
     m_recordingDrawerTitle->setObjectName(QStringLiteral("recordingDrawerTitle"));
+    m_recordingDrawerTitle->setProperty("panelRole", QStringLiteral("title"));
     layout->addWidget(m_recordingDrawerTitle);
 
     m_recordingGifOptions = new QWidget(m_recordingDrawer);
     auto *gifForm = new QFormLayout(m_recordingGifOptions);
     gifForm->setContentsMargins(0, 0, 0, 0);
-    gifForm->setSpacing(7);
+    gifForm->setHorizontalSpacing(10);
+    gifForm->setVerticalSpacing(panelMetrics.rowSpacing);
+    gifForm->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
     m_recordingGifFpsSpin = new QSpinBox(m_recordingGifOptions);
     m_recordingGifFpsSpin->setRange(1, gifRecordingFpsLimit());
     m_recordingGifFpsSpin->setAlignment(Qt::AlignCenter);
@@ -1298,7 +1202,9 @@ void CaptureOverlay::setupRecordingDrawer()
     m_recordingVideoOptions = new QWidget(m_recordingDrawer);
     auto *videoForm = new QFormLayout(m_recordingVideoOptions);
     videoForm->setContentsMargins(0, 0, 0, 0);
-    videoForm->setSpacing(7);
+    videoForm->setHorizontalSpacing(10);
+    videoForm->setVerticalSpacing(panelMetrics.rowSpacing);
+    videoForm->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
     m_recordingVideoFpsSpin = new QSpinBox(m_recordingVideoOptions);
     m_recordingVideoFpsSpin->setRange(1, videoRecordingFpsLimit());
     m_recordingVideoFpsSpin->setAlignment(Qt::AlignCenter);
@@ -1309,10 +1215,11 @@ void CaptureOverlay::setupRecordingDrawer()
     m_recordingVideoCrfSpin = new QSpinBox(m_recordingVideoOptions);
     m_recordingVideoCrfSpin->setRange(18, 32);
     m_recordingVideoCrfSpin->setAlignment(Qt::AlignCenter);
+    m_recordingVideoCrfSpin->setToolTip(TranslationManager::videoCrfHint());
     m_recordingDesktopAudioCheck = new QCheckBox(TranslationManager::audioDesktop(), m_recordingVideoOptions);
     m_recordingMicrophoneCheck = new QCheckBox(TranslationManager::audioMicrophone(), m_recordingVideoOptions);
     m_recordingMicrophoneDeviceCombo = new QComboBox(m_recordingVideoOptions);
-    const auto inputDevices = microphoneAudioDevices();
+    const QList<QPair<QString, QString>> inputDevices;
     m_recordingMicrophoneDeviceCombo->addItem(
         TranslationManager::tr("defaultAudioDevice"),
         inputDevices.isEmpty() ? QStringLiteral("default") : inputDevices.first().second);
@@ -1320,15 +1227,16 @@ void CaptureOverlay::setupRecordingDrawer()
         if (m_recordingMicrophoneDeviceCombo->findData(device.second) < 0)
             m_recordingMicrophoneDeviceCombo->addItem(device.first, device.second);
     }
-#ifdef Q_OS_WIN
-    for (const QString &device : desktopAudioDevices()) {
-        if (m_recordingMicrophoneDeviceCombo->findData(device) < 0)
-            m_recordingMicrophoneDeviceCombo->addItem(device, device);
-    }
-#endif
     videoForm->addRow(TranslationManager::videoFpsLabel().remove(QChar(':')), m_recordingVideoFpsSpin);
     videoForm->addRow(TranslationManager::quickMaxSeconds(), m_recordingVideoSecondsSpin);
     videoForm->addRow(TranslationManager::videoQualityCrf(), m_recordingVideoCrfSpin);
+    auto *audioSeparator = new QFrame(m_recordingVideoOptions);
+    audioSeparator->setFrameShape(QFrame::HLine);
+    audioSeparator->setProperty("panelRole", QStringLiteral("separator"));
+    videoForm->addRow(audioSeparator);
+    auto *audioSection = new QLabel(TranslationManager::audioMode(), m_recordingVideoOptions);
+    audioSection->setProperty("panelRole", QStringLiteral("section"));
+    videoForm->addRow(audioSection);
     videoForm->addRow(m_recordingDesktopAudioCheck);
     videoForm->addRow(m_recordingMicrophoneCheck);
     videoForm->addRow(TranslationManager::audioMicrophoneDevice(), m_recordingMicrophoneDeviceCombo);
@@ -1336,8 +1244,10 @@ void CaptureOverlay::setupRecordingDrawer()
 
     m_recordingStartButton = new QPushButton(m_recordingDrawer);
     m_recordingStartButton->setObjectName(QStringLiteral("recordingStartButton"));
+    m_recordingStartButton->setProperty("panelAction", QStringLiteral("primary"));
     m_recordingCancelButton = new QPushButton(TranslationManager::recordingCancel(), m_recordingDrawer);
     m_recordingCancelButton->setObjectName(QStringLiteral("recordingCancelButton"));
+    m_recordingCancelButton->setProperty("panelAction", QStringLiteral("secondary"));
     layout->addWidget(m_recordingStartButton);
     layout->addWidget(m_recordingCancelButton);
 
@@ -1368,6 +1278,7 @@ void CaptureOverlay::showRecordingDrawer(RecordingDrawerMode mode)
     if (!m_recordingDrawer || !m_selectionComplete)
         return;
 
+    ensureAudioDevicesLoaded();
     m_recordingDrawerMode = mode;
     const QStringList fields = recordingDrawerFields(mode);
     m_recordingGifOptions->setVisible(fields.contains(QStringLiteral("gifFps")));
@@ -1445,10 +1356,61 @@ void CaptureOverlay::startRecordingFromDrawer()
     m_selectionComplete = false;
     m_isSelecting = false;
     hideToolbar();
+    releaseCaptureBuffers();
     if (mode == RecordingDrawerMode::Gif)
         emit gifCaptureRequested(captureRect, displayRect);
     else
         emit videoCaptureRequested(captureRect, displayRect);
+}
+
+void CaptureOverlay::ensureAudioDevicesLoaded()
+{
+    if (!m_audioDevicesLoaded) {
+        m_audioDevicesLoaded = true;
+        m_cachedDesktopAudioDevices = desktopAudioDevices();
+        m_cachedMicrophoneAudioDevices = microphoneAudioDevices();
+    }
+
+    const QString defaultInput = m_cachedMicrophoneAudioDevices.isEmpty()
+        ? QStringLiteral("default")
+        : m_cachedMicrophoneAudioDevices.first().second;
+    const QList<QComboBox *> microphoneCombos = {
+        m_quickMicrophoneDeviceCombo, m_recordingMicrophoneDeviceCombo
+    };
+    for (QComboBox *combo : microphoneCombos) {
+        if (!combo)
+            continue;
+        if (combo->count() == 0)
+            combo->addItem(TranslationManager::tr("defaultAudioDevice"), defaultInput);
+        else
+            combo->setItemData(0, defaultInput);
+        for (const auto &device : m_cachedMicrophoneAudioDevices) {
+            if (combo->findData(device.second) < 0)
+                combo->addItem(device.first, device.second);
+        }
+#ifdef Q_OS_WIN
+        for (const QString &device : m_cachedDesktopAudioDevices) {
+            if (combo->findData(device) < 0)
+                combo->addItem(device, device);
+        }
+#endif
+    }
+
+#ifdef Q_OS_WIN
+    if (m_quickDesktopAudioDeviceCombo) {
+        for (const QString &device : m_cachedDesktopAudioDevices) {
+            const QString lower = device.toLower();
+            const bool looksLikeDesktop =
+                lower.contains(QStringLiteral("virtual-audio-capturer"))
+                || lower.contains(QStringLiteral("stereo mix"))
+                || lower.contains(QStringLiteral("what u hear"))
+                || lower.contains(QStringLiteral("loopback"))
+                || lower.contains(QStringLiteral("wave out"));
+            if (looksLikeDesktop && m_quickDesktopAudioDeviceCombo->findData(device) < 0)
+                m_quickDesktopAudioDeviceCombo->addItem(device, device);
+        }
+    }
+#endif
 }
 
 void CaptureOverlay::updateToolSettingsDrawerPosition()
@@ -1539,6 +1501,7 @@ void CaptureOverlay::setToolSettingsDrawerVisible(bool visible)
         m_toolSettingsButtonAnimation->stop();
 
     if (visible) {
+        ensureAudioDevicesLoaded();
         QSettings s("EShot", "EShot");
         if (m_quickPenWidthSlider && m_annotationEngine) {
             QSignalBlocker blocker(m_quickPenWidthSlider);
@@ -1781,6 +1744,7 @@ void CaptureOverlay::startWindowCapture()
 
 void CaptureOverlay::startCaptureInternal(CaptureSelectionMode selectionMode, bool recordingMode)
 {
+    releaseCaptureBuffers();
     m_captureLatencyTimer.start();
     m_logNextCapturePaint = true;
     if (m_captureDelayTimer) m_captureDelayTimer->stop();
@@ -1799,6 +1763,8 @@ void CaptureOverlay::startCaptureInternal(CaptureSelectionMode selectionMode, bo
     m_pressedWindowRect = QRect();
     m_windowSnapClickPending = false;
     m_eyedropperActive = false;
+    m_crosshairPosition = mapFromGlobal(QCursor::pos());
+    m_hasCrosshairPosition = true;
 
     if (m_textEdit) m_textEdit->hide();
     if (m_textEditPanel) m_textEditPanel->hide();
@@ -2368,7 +2334,8 @@ void CaptureOverlay::paintEvent(QPaintEvent *event)
     // Crosshair
     if (!m_isSelecting && !m_selectionComplete && m_hoveredWindowRect.isEmpty()
         && m_crosshairStyle != "none" && !m_eyedropperActive) {
-        QPoint cur = mapFromGlobal(QCursor::pos());
+        const QPoint cur = m_hasCrosshairPosition
+            ? m_crosshairPosition : mapFromGlobal(QCursor::pos());
         QPen cp;
         cp.setColor(QColor(255,255,255,150));
         cp.setWidth(1);
@@ -2413,10 +2380,8 @@ void CaptureOverlay::paintEvent(QPaintEvent *event)
         if (rect().contains(cur)) {
             QColor pixelColor;
             const QPoint curDev = logicalToSnapshot(cur);
-            if (m_screenSnapshot.rect().contains(curDev)) {
-                QImage img = m_screenSnapshot.toImage();
-                pixelColor = QColor(img.pixel(curDev));
-            }
+            if (m_eyedropperImage.rect().contains(curDev))
+                pixelColor = QColor(m_eyedropperImage.pixel(curDev));
             if (pixelColor.isValid()) {
                 // Circle
                 painter.setPen(QPen(Qt::white, 2));
@@ -2452,7 +2417,22 @@ void CaptureOverlay::paintEvent(QPaintEvent *event)
 void CaptureOverlay::mousePressEvent(QMouseEvent *event)
 {
     if (event->button() == Qt::LeftButton) {
-        if (isToolSettingsUiAt(event->pos())) {
+        const bool recordingOpen = m_recordingDrawer && m_recordingDrawer->isVisible();
+        const bool quickSettingsOpen = m_toolSettingsDrawer
+            && m_toolSettingsDrawer->isVisible()
+            && !m_toolSettingsDrawer->property("closing").toBool();
+        const bool pressInsideMenu = isToolSettingsUiAt(event->pos());
+        const OverlayMenuPressAction menuPressAction = overlayMenuPressAction(
+            recordingOpen, quickSettingsOpen, pressInsideMenu);
+        if (menuPressAction == OverlayMenuPressAction::CloseAndConsume
+            || menuPressAction == OverlayMenuPressAction::CloseAndContinueCapture) {
+            if (recordingOpen)
+                hideRecordingDrawer();
+            if (quickSettingsOpen)
+                setToolSettingsDrawerVisible(false);
+        }
+        if (menuPressAction == OverlayMenuPressAction::CloseAndConsume
+            || menuPressAction == OverlayMenuPressAction::ConsumeInsideMenu) {
             event->accept();
             return;
         }
@@ -2464,9 +2444,8 @@ void CaptureOverlay::mousePressEvent(QMouseEvent *event)
         // Eyedropper click — pick color and return to normal mode
         if (m_eyedropperActive) {
             const QPoint pickDev = logicalToSnapshot(event->pos());
-            if (m_screenSnapshot.rect().contains(pickDev)) {
-                QImage img = m_screenSnapshot.toImage();
-                QColor c = QColor(img.pixel(pickDev));
+            if (m_eyedropperImage.rect().contains(pickDev)) {
+                QColor c = QColor(m_eyedropperImage.pixel(pickDev));
                 if (c.isValid()) {
                     if (m_annotationEngine) m_annotationEngine->setColor(c);
                     // Update color button in toolbar
@@ -2474,6 +2453,7 @@ void CaptureOverlay::mousePressEvent(QMouseEvent *event)
                 }
             }
             m_eyedropperActive = false;
+            m_eyedropperImage = QImage();
             setCursor(Qt::CrossCursor);
             update();
             return;
@@ -2640,7 +2620,13 @@ void CaptureOverlay::mousePressEvent(QMouseEvent *event)
             m_selectionEnd = event->pos();
             m_selectionAnchorScreenRect = monitorRectAt(event->pos());
             hideToolbar();
-            update();
+            QRegion dirty = selectionUpdateRegion(
+                QRect(), normalizedSelectionRect(), rect());
+            if (m_hasCrosshairPosition) {
+                dirty += crosshairUpdateRegion(
+                    m_crosshairPosition, m_crosshairPosition, rect());
+            }
+            update(dirty);
         }
     } else if (event->button() == Qt::RightButton) {
         if (m_eyedropperActive) {
@@ -2814,6 +2800,15 @@ void CaptureOverlay::mouseMoveEvent(QMouseEvent *event)
 
     if (m_resizeMode != ResNone && m_resizeMode != ResNewSelection) {
         QRect oldSel = normalizedSelectionRect();
+        QRegion movingUiRegion;
+        auto includeVisibleUi = [&movingUiRegion](QWidget *widget) {
+            if (widget && widget->isVisible())
+                movingUiRegion += widget->geometry().adjusted(-4, -4, 4, 4);
+        };
+        includeVisibleUi(m_toolbar);
+        includeVisibleUi(m_actionPanel);
+        includeVisibleUi(m_toolSettingsButton);
+        includeVisibleUi(m_toolSettingsDrawer);
         
         if (m_resizeMode == ResMove) {
             QPoint newTopLeft = event->pos() - m_moveOffset;
@@ -2843,13 +2838,22 @@ void CaptureOverlay::mouseMoveEvent(QMouseEvent *event)
 
         if (m_selectionComplete && m_toolbar && m_toolbar->isVisible())
             showToolbar();
-        update();
+        includeVisibleUi(m_toolbar);
+        includeVisibleUi(m_actionPanel);
+        includeVisibleUi(m_toolSettingsButton);
+        includeVisibleUi(m_toolSettingsDrawer);
+        QRegion dirty = selectionUpdateRegion(
+            oldSel, normalizedSelectionRect(), rect());
+        dirty += movingUiRegion.intersected(rect());
+        update(dirty);
         return;
     }
 
     if (m_isSelecting) {
+        const QRect previousSelection = normalizedSelectionRect();
         m_selectionEnd = event->pos();
-        update();
+        update(selectionUpdateRegion(
+            previousSelection, normalizedSelectionRect(), rect()));
     } else if (m_selectionComplete && m_annotationEngine &&
                m_annotationEngine->currentTool() != AnnotationEngine::None) {
         QRect selRect = normalizedSelectionRect();
@@ -2867,9 +2871,21 @@ void CaptureOverlay::mouseMoveEvent(QMouseEvent *event)
         const QRect hovered = windowSnapTargetForMode(
             m_selectionMode, m_windowSnapCandidates, event->pos(), rect());
         if (hovered != m_hoveredWindowRect) {
+            m_crosshairPosition = event->pos();
+            m_hasCrosshairPosition = true;
             setHoveredWindowRect(hovered);
-        } else {
-            update(); // crosshair
+        } else if (hovered.isEmpty()) {
+            const QPoint previousPosition = m_hasCrosshairPosition
+                ? m_crosshairPosition : event->pos();
+            const QRect previousMonitor = monitorRectAt(previousPosition);
+            const QRect currentMonitor = monitorRectAt(event->pos());
+            m_crosshairPosition = event->pos();
+            m_hasCrosshairPosition = true;
+            if (previousMonitor != currentMonitor)
+                update();
+            else
+                update(crosshairUpdateRegion(previousPosition,
+                                             m_crosshairPosition, rect()));
         }
     } else {
         updateCursor(event->pos());
@@ -2974,13 +2990,24 @@ void CaptureOverlay::keyPressEvent(QKeyEvent *event)
     }
 
     if (event->key() == Qt::Key_Escape) {
-    // If eyedropper is active, just close it
-    if (m_eyedropperActive) {
-        m_eyedropperActive = false;
-        update();
-        return;
-    }
-    // If text edit is open, just close it
+        const bool recordingOpen = m_recordingDrawer && m_recordingDrawer->isVisible();
+        const bool quickSettingsOpen = m_toolSettingsDrawer
+            && m_toolSettingsDrawer->isVisible()
+            && !m_toolSettingsDrawer->property("closing").toBool();
+        if (escapeClosesOverlayMenu(recordingOpen, quickSettingsOpen)) {
+            if (recordingOpen)
+                hideRecordingDrawer();
+            if (quickSettingsOpen)
+                setToolSettingsDrawerVisible(false);
+            return;
+        }
+        // If eyedropper is active, just close it
+        if (m_eyedropperActive) {
+            m_eyedropperActive = false;
+            update();
+            return;
+        }
+        // If text edit is open, just close it
         if (m_textEdit && m_textEdit->isVisible()) {
             cancelTextEdit();
             m_textJustCommitted = false;
@@ -3322,7 +3349,10 @@ void CaptureOverlay::hideToolbar()
 void CaptureOverlay::finishCapture()
 {
     QRect selRect = normalizedSelectionRect();
-    QPixmap result = getSelectedPixmap();
+    const bool recordingMode = m_captureMode == ModeRecording;
+    QPixmap result;
+    if (shouldComposeCaptureResult(recordingMode))
+        result = getSelectedPixmap();
     hide();
     m_selectionComplete = false;
     m_isSelecting = false;
@@ -3330,10 +3360,13 @@ void CaptureOverlay::finishCapture()
     hideToolbar();
     cancelTextEdit();
 
-    if (m_captureMode == ModeRecording) {
+    if (recordingMode) {
         m_captureMode = ModeNormal;
+        const QRect captureRect = selectedCaptureRect();
+        const QRect displayRect = selectedDisplayRect();
+        releaseCaptureBuffers();
         if (!selRect.isEmpty())
-            emit regionSelected(selectedCaptureRect(), selectedDisplayRect());
+            emit regionSelected(captureRect, displayRect);
         return;
     }
 
@@ -3347,6 +3380,7 @@ void CaptureOverlay::finishCapture()
 #endif
     }
 
+    releaseCaptureBuffers();
     if (!result.isNull()) emit captureCompleted(result);
 }
 
@@ -3358,7 +3392,16 @@ void CaptureOverlay::cancelCapture()
     m_selectionAnchorScreenRect = QRect();
     hideToolbar();
     cancelTextEdit();
+    releaseCaptureBuffers();
     emit captureCancelled();
+}
+
+void CaptureOverlay::releaseCaptureBuffers()
+{
+    m_eyedropperImage = QImage();
+    m_screenSnapshot = QPixmap();
+    if (m_annotationEngine)
+        m_annotationEngine->releaseScreenSnapshot();
 }
 
 void CaptureOverlay::beginTextEditAt(const QPoint &pos)
@@ -3568,6 +3611,8 @@ void CaptureOverlay::onClose() { cancelCapture(); }
 
 void CaptureOverlay::onEyedropperRequested()
 {
+    if (m_eyedropperImage.isNull() && !m_screenSnapshot.isNull())
+        m_eyedropperImage = m_screenSnapshot.toImage();
     m_eyedropperActive = true;
     setCursor(Qt::CrossCursor);
     update();
@@ -3583,9 +3628,8 @@ void CaptureOverlay::onSelectionLockToggled(bool locked)
 void CaptureOverlay::onBlurIntensityChanged(int intensity)
 {
     if (m_annotationEngine) m_annotationEngine->setBlurIntensity(intensity);
-    // Save to settings
-    QSettings s("EShot", "EShot");
-    s.setValue("blurIntensity", intensity);
+    if (m_settingsWriter)
+        m_settingsWriter->schedule(QStringLiteral("blurIntensity"), intensity);
 }
 
 void CaptureOverlay::onOcrRequested()

@@ -1222,6 +1222,10 @@ QWidget* SettingsDialog::createInterfaceTab()
     layout->setContentsMargins(10, 10, 10, 10);
     layout->setSpacing(8);
 
+    m_rememberSettingsWindowSizeCheck = new QCheckBox(
+        TranslationManager::tr("rememberSettingsWindowSize"), tab);
+    layout->addWidget(m_rememberSettingsWindowSizeCheck);
+
     QGroupBox *visualSearchGroup = new QGroupBox(TranslationManager::visualSearchTitle());
     QFormLayout *visualSearchLayout = new QFormLayout(visualSearchGroup);
     m_visualSearchProviderCombo = new QComboBox(visualSearchGroup);
@@ -2025,6 +2029,10 @@ void SettingsDialog::loadSettings()
     if (m_notificationOptionsWidget) m_notificationOptionsWidget->setEnabled(m_showNotificationsCheck->isChecked());
     m_playSoundCheck->setChecked(m_settings->value("playSound", false).toBool());
     m_copyPathAfterSaveCheck->setChecked(m_settings->value("copyPathAfterSave", false).toBool());
+    m_rememberSettingsWindowSizeEnabled = m_settings->value(
+        "rememberSettingsWindowSize", false).toBool();
+    if (m_rememberSettingsWindowSizeCheck)
+        m_rememberSettingsWindowSizeCheck->setChecked(m_rememberSettingsWindowSizeEnabled);
 
     // Language (saved as int, convert to string)
     int langInt = m_settings->value("language", 1).toInt(); // 1=English default
@@ -2189,6 +2197,19 @@ void SettingsDialog::loadSettings()
     HotkeyManager::instance().reRegisterCaptureHotkey(
         HotkeyManager::instance().captureModifiers(),
         HotkeyManager::instance().captureVirtualKey());
+
+    const QSize restoredSize = settingsDialogRestoredSize(
+        m_rememberSettingsWindowSizeEnabled,
+        m_settings->value("settingsWindowSize").toSize(), minimumSize(), maximumSize());
+    if (restoredSize.isValid())
+        resize(restoredSize);
+}
+
+void SettingsDialog::done(int result)
+{
+    if (m_rememberSettingsWindowSizeEnabled)
+        m_settings->setValue("settingsWindowSize", size());
+    QDialog::done(result);
 }
 
 void SettingsDialog::onHotkeyChanged(const QKeySequence &seq)
@@ -2498,6 +2519,13 @@ void SettingsDialog::onSave()
     if (m_notifyVideoCheck) m_settings->setValue("notifyVideo", m_notifyVideoCheck->isChecked());
     m_settings->setValue("playSound",          m_playSoundCheck->isChecked());
     m_settings->setValue("copyPathAfterSave",  m_copyPathAfterSaveCheck->isChecked());
+    m_rememberSettingsWindowSizeEnabled = m_rememberSettingsWindowSizeCheck
+        && m_rememberSettingsWindowSizeCheck->isChecked();
+    m_settings->setValue("rememberSettingsWindowSize", m_rememberSettingsWindowSizeEnabled);
+    if (m_rememberSettingsWindowSizeEnabled)
+        m_settings->setValue("settingsWindowSize", size());
+    else
+        m_settings->remove("settingsWindowSize");
 
     m_settings->setValue("imageFormat",        m_formatCombo->currentData().toString());
     m_settings->setValue("imageQuality",       m_qualitySpin->value());

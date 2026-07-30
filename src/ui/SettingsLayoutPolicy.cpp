@@ -18,3 +18,17 @@ QSize settingsDialogActionButtonSize(const QList<QSize> &sizeHints,
     }
     return QSize(width, height);
 }
+
+QSize settingsDialogRestoredSize(bool rememberSize, const QSize &savedSize,
+                                 const QSize &minimumSize, const QSize &maximumSize)
+{
+    if (!rememberSize || !savedSize.isValid())
+        return QSize();
+
+    return savedSize.boundedTo(maximumSize).expandedTo(minimumSize);
+}
+
+bool settingsDialogUsesAdaptiveSize(bool rememberSize)
+{
+    return !rememberSize;
+}

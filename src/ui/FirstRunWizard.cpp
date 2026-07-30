@@ -302,7 +302,10 @@ void FirstRunWizard::setupUi()
     m_linuxAppImageIntegrationCheck->setToolTip(tr("Copies this AppImage to your user applications folder and adds EShot to the application menu. No system-wide installation is performed."));
     m_linuxFfmpegCheck->setChecked(true); m_linuxOcrCheck->setChecked(true);
     m_linuxDesktopCheck->setChecked(defaultLinuxPortalSelection(qEnvironmentVariable("XDG_SESSION_TYPE")));
-    m_linuxAppImageIntegrationCheck->setChecked(!qEnvironmentVariable("APPIMAGE").isEmpty());
+    const bool offerAppImageIntegration = shouldOfferAppImageIntegration(
+        qEnvironmentVariable("APPIMAGE"));
+    m_linuxAppImageIntegrationCheck->setVisible(offerAppImageIntegration);
+    m_linuxAppImageIntegrationCheck->setChecked(offerAppImageIntegration);
     depsLayout->addWidget(m_linuxFfmpegCheck); depsLayout->addWidget(m_linuxOcrCheck); depsLayout->addWidget(m_linuxDesktopCheck); depsLayout->addWidget(m_linuxAppImageIntegrationCheck);
     QGridLayout *languages = new QGridLayout();
     const auto names = ocrLanguageDisplayNames();
@@ -368,7 +371,12 @@ void FirstRunWizard::loadDefaults()
     m_linuxOcrCheck->setChecked(s.value("linuxSetupOcr", true).toBool());
     m_linuxDesktopCheck->setChecked(s.value("linuxSetupPortal",
         defaultLinuxPortalSelection(qEnvironmentVariable("XDG_SESSION_TYPE"))).toBool());
-    m_linuxAppImageIntegrationCheck->setChecked(s.value("linuxSetupAppImageIntegration", !qEnvironmentVariable("APPIMAGE").isEmpty()).toBool());
+    const bool offerAppImageIntegration = shouldOfferAppImageIntegration(
+        qEnvironmentVariable("APPIMAGE"));
+    m_linuxAppImageIntegrationCheck->setVisible(offerAppImageIntegration);
+    m_linuxAppImageIntegrationCheck->setChecked(
+        offerAppImageIntegration
+        && s.value("linuxSetupAppImageIntegration", true).toBool());
     const QStringList selectedLanguages = s.value("linuxSetupOcrLanguages", defaultOcrLanguageCodes(QLocale::system().name())).toStringList();
     for (auto *check : m_linuxLanguageChecks) check->setChecked(selectedLanguages.contains(check->property("ocrCode").toString()));
 #endif
@@ -440,18 +448,22 @@ void FirstRunWizard::onActivateLinuxPrintScreen()
                 m_hotkeyStatusLabel->setStyleSheet("color: #ff9800; font-size: 12px;");
                 return;
             }
-            m_linuxAppImageIntegrationCheck->setChecked(true);
+            if (shouldOfferAppImageIntegration(qEnvironmentVariable("APPIMAGE")))
+                m_linuxAppImageIntegrationCheck->setChecked(true);
             m_hotkeyStatusLabel->setText(tr("Choose Print Screen in the GNOME shortcut permission window."));
             m_hotkeyStatusLabel->setStyleSheet("color: #4caf50; font-size: 12px;");
             return;
         }
 
-        m_linuxAppImageIntegrationCheck->setChecked(true);
+        const bool offerAppImageIntegration = shouldOfferAppImageIntegration(
+            qEnvironmentVariable("APPIMAGE"));
+        if (offerAppImageIntegration)
+            m_linuxAppImageIntegrationCheck->setChecked(true);
         const QString integrated = QDir::home().filePath(
             QStringLiteral(".local/opt/EShot/EShot.AppImage"));
         const QString executable = LinuxGnomeShortcutInstaller::preferredExecutable(
             qEnvironmentVariable("APPIMAGE"), QCoreApplication::applicationFilePath(),
-            qEnvironmentVariable("APPIMAGE").isEmpty() ? QString() : integrated);
+            offerAppImageIntegration ? integrated : QString());
         const auto installed = LinuxGnomeShortcutInstaller::installPrintScreen(
             LinuxGnomeShortcutInstaller::captureCommand(executable));
         if (!installed.success) {
@@ -500,7 +512,8 @@ void FirstRunWizard::onActivateLinuxPrintScreen()
         return;
     }
 
-    m_linuxAppImageIntegrationCheck->setChecked(true);
+    if (shouldOfferAppImageIntegration(qEnvironmentVariable("APPIMAGE")))
+        m_linuxAppImageIntegrationCheck->setChecked(true);
     m_hotkeyStatusLabel->setText(tr("Print Screen activated for EShot. Spectacle's other shortcuts were kept."));
     m_hotkeyStatusLabel->setStyleSheet("color: #4caf50; font-size: 12px;");
 }
@@ -537,7 +550,7 @@ void FirstRunWizard::onFinish()
     deferHotkeyRegistration = LinuxDesktopIntegration::deferFirstRunHotkeyRegistration(
         desktop);
     const bool willIntegrate = m_linuxAppImageIntegrationCheck->isChecked()
-        && !qEnvironmentVariable("APPIMAGE").isEmpty();
+        && shouldOfferAppImageIntegration(qEnvironmentVariable("APPIMAGE"));
     if (desktop == LinuxDesktopEnvironment::Gnome
         && !LinuxPortalGlobalShortcuts::desktopPortalAvailable()
         && !willIntegrate) {
@@ -653,7 +666,8 @@ void FirstRunWizard::startLinuxDependencyInstaller()
     QStringList languages;
     for (auto *check : m_linuxLanguageChecks) if (check->isChecked()) languages << check->property("ocrCode").toString();
     QStringList args = linuxDependencyArguments(m_linuxFfmpegCheck->isChecked(), m_linuxOcrCheck->isChecked(), languages, m_linuxDesktopCheck->isChecked());
-    const bool integrate = m_linuxAppImageIntegrationCheck->isChecked() && !qEnvironmentVariable("APPIMAGE").isEmpty();
+    const bool integrate = m_linuxAppImageIntegrationCheck->isChecked()
+        && shouldOfferAppImageIntegration(qEnvironmentVariable("APPIMAGE"));
     if (integrate) args << QStringLiteral("--integrate-appimage");
     auto markLinuxSetupCompleted = [] {
         QSettings settings("EShot", "EShot");
@@ -685,7 +699,8 @@ void FirstRunWizard::startLinuxDependencyInstaller()
         qInfo() << "[FirstRunWizard] Optional setup exit status:" << exitCode << status;
         m_finishButton->setEnabled(true);
         if (status == QProcess::NormalExit && exitCode == 0) {
-            const bool integration = m_linuxAppImageIntegrationCheck->isChecked() && !qEnvironmentVariable("APPIMAGE").isEmpty();
+            const bool integration = m_linuxAppImageIntegrationCheck->isChecked()
+                && shouldOfferAppImageIntegration(qEnvironmentVariable("APPIMAGE"));
             if (!selectedLinuxCapabilitiesAvailable(m_linuxFfmpegCheck->isChecked(), m_linuxOcrCheck->isChecked(), integration)) {
                 m_linuxInstallStatus->setText(tr("Setup finished, but one or more selected capabilities are still unavailable. Click Finish to retry, or choose Skip."));
                 m_linuxInstallerProcess->deleteLater(); m_linuxInstallerProcess = nullptr;
