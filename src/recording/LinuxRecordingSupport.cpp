@@ -93,6 +93,87 @@ QString discoverGstAacEncoder()
     return {};
 }
 
+QStringList waylandRecordingAudioArguments(bool desktopEnabled, int desktopVolume,
+                                           const QString &desktopDevice,
+                                           bool microphoneEnabled, int microphoneVolume,
+                                           const QString &microphoneDevice,
+                                           const QString &aacEncoder)
+{
+    struct AudioSource {
+        QString device;
+        int volume;
+    };
+
+    QList<AudioSource> sources;
+    if (desktopEnabled && desktopVolume > 0 && !desktopDevice.trimmed().isEmpty())
+        sources.append({desktopDevice, qBound(0, desktopVolume, 100)});
+    if (microphoneEnabled && microphoneVolume > 0 && !microphoneDevice.trimmed().isEmpty())
+        sources.append({microphoneDevice, qBound(0, microphoneVolume, 100)});
+    if (sources.isEmpty() || aacEncoder.trimmed().isEmpty())
+        return {};
+
+    const QString stableCaps = QStringLiteral("audio/x-raw,rate=48000,channels=2");
+    auto appendSource = [&stableCaps](QStringList &args, const AudioSource &source) {
+        args << QStringLiteral("pulsesrc")
+             << QStringLiteral("device=%1").arg(source.device)
+             << QStringLiteral("do-timestamp=true")
+             << QStringLiteral("buffer-time=500000")
+             << QStringLiteral("latency-time=20000")
+             << QStringLiteral("slave-method=resample")
+             << QStringLiteral("!")
+             << QStringLiteral("queue")
+             << QStringLiteral("max-size-time=1000000000")
+             << QStringLiteral("max-size-buffers=0")
+             << QStringLiteral("max-size-bytes=0")
+             << QStringLiteral("!")
+             << QStringLiteral("audioconvert")
+             << QStringLiteral("!")
+             << QStringLiteral("audioresample")
+             << QStringLiteral("!")
+             << stableCaps
+             << QStringLiteral("!")
+             << QStringLiteral("volume")
+             << QStringLiteral("volume=%1").arg(
+                    QString::number(source.volume / 100.0, 'f', 2));
+    };
+
+    QStringList args;
+    if (sources.size() == 1) {
+        appendSource(args, sources.first());
+        args << QStringLiteral("!")
+             << aacEncoder
+             << QStringLiteral("bitrate=160000")
+             << QStringLiteral("!")
+             << QStringLiteral("queue")
+             << QStringLiteral("!")
+             << QStringLiteral("mux.");
+        return args;
+    }
+
+    args << QStringLiteral("audiomixer")
+         << QStringLiteral("name=mix")
+         << QStringLiteral("ignore-inactive-pads=true")
+         << QStringLiteral("latency=100000000")
+         << QStringLiteral("!")
+         << QStringLiteral("audioconvert")
+         << QStringLiteral("!")
+         << QStringLiteral("audioresample")
+         << QStringLiteral("!")
+         << stableCaps
+         << QStringLiteral("!")
+         << aacEncoder
+         << QStringLiteral("bitrate=160000")
+         << QStringLiteral("!")
+         << QStringLiteral("queue")
+         << QStringLiteral("!")
+         << QStringLiteral("mux.");
+    for (const AudioSource &source : std::as_const(sources)) {
+        appendSource(args, source);
+        args << QStringLiteral("!") << QStringLiteral("mix.");
+    }
+    return args;
+}
+
 QList<QPair<QString, QString>> linuxMicrophoneDevices(const QString &pactlSources)
 {
     QList<QPair<QString, QString>> result;

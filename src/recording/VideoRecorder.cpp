@@ -831,64 +831,10 @@ bool VideoRecorder::startWaylandPortalRecording(const QRect &captureRect)
          << QStringLiteral("!")
          << QStringLiteral("mux.");
 
-    auto appendAudioEncoder = [&args, &aacEncoder](int volume) {
-        args << QStringLiteral("!")
-             << QStringLiteral("audioconvert")
-             << QStringLiteral("!")
-             << QStringLiteral("audioresample")
-             << QStringLiteral("!")
-             << QStringLiteral("volume")
-             << QStringLiteral("volume=%1").arg(QString::number(qBound(0, volume, 100) / 100.0, 'f', 2))
-             << QStringLiteral("!")
-             << aacEncoder
-             << QStringLiteral("bitrate=160000")
-             << QStringLiteral("!")
-             << QStringLiteral("queue")
-             << QStringLiteral("!")
-             << QStringLiteral("mux.");
-    };
-
-    if (wantDesktopAudio && !wantMicrophoneAudio) {
-        args << QStringLiteral("pulsesrc")
-             << QStringLiteral("device=%1").arg(m_desktopAudioDevice);
-        appendAudioEncoder(m_desktopVolume);
-    } else if (!wantDesktopAudio && wantMicrophoneAudio) {
-        args << QStringLiteral("pulsesrc")
-             << QStringLiteral("device=%1").arg(m_microphoneDevice);
-        appendAudioEncoder(m_microphoneVolume);
-    } else if (wantDesktopAudio && wantMicrophoneAudio) {
-        args << QStringLiteral("audiomixer")
-             << QStringLiteral("name=mix")
-             << QStringLiteral("!")
-             << QStringLiteral("audioconvert")
-             << QStringLiteral("!")
-             << QStringLiteral("audioresample")
-             << QStringLiteral("!")
-             << aacEncoder
-             << QStringLiteral("bitrate=160000")
-             << QStringLiteral("!")
-             << QStringLiteral("queue")
-             << QStringLiteral("!")
-             << QStringLiteral("mux.")
-             << QStringLiteral("pulsesrc")
-             << QStringLiteral("device=%1").arg(m_desktopAudioDevice)
-             << QStringLiteral("!")
-             << QStringLiteral("volume")
-             << QStringLiteral("volume=%1").arg(QString::number(qBound(0, m_desktopVolume, 100) / 100.0, 'f', 2))
-             << QStringLiteral("!")
-             << QStringLiteral("queue")
-             << QStringLiteral("!")
-             << QStringLiteral("mix.")
-             << QStringLiteral("pulsesrc")
-             << QStringLiteral("device=%1").arg(m_microphoneDevice)
-             << QStringLiteral("!")
-             << QStringLiteral("volume")
-             << QStringLiteral("volume=%1").arg(QString::number(qBound(0, m_microphoneVolume, 100) / 100.0, 'f', 2))
-             << QStringLiteral("!")
-             << QStringLiteral("queue")
-             << QStringLiteral("!")
-             << QStringLiteral("mix.");
-    }
+    args << waylandRecordingAudioArguments(
+        wantDesktopAudio, m_desktopVolume, m_desktopAudioDevice,
+        wantMicrophoneAudio, m_microphoneVolume, m_microphoneDevice,
+        aacEncoder);
 
     m_process = new QProcess(this);
     m_process->setProgram(gst);

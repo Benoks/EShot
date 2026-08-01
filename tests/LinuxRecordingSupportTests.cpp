@@ -62,6 +62,35 @@ private slots:
         QCOMPARE(devices.at(1).first, QStringLiteral("Easy Effects Source"));
         QCOMPARE(devices.at(1).second, QStringLiteral("easyeffects_source"));
     }
+
+    void stabilizesMixedPulseAudioSourcesForWaylandRecording()
+    {
+        const QStringList args = waylandRecordingAudioArguments(
+            true, 80, QStringLiteral("@DEFAULT_SINK@.monitor"),
+            true, 70, QStringLiteral("easyeffects_source"),
+            QStringLiteral("fdkaacenc"));
+
+        QVERIFY(args.contains(QStringLiteral("ignore-inactive-pads=true")));
+        QVERIFY(!args.contains(QStringLiteral("force-live=true")));
+        QVERIFY(args.contains(QStringLiteral("latency=100000000")));
+        QCOMPARE(args.count(QStringLiteral("do-timestamp=true")), 2);
+        QCOMPARE(args.count(QStringLiteral("buffer-time=500000")), 2);
+        QCOMPARE(args.count(QStringLiteral("latency-time=20000")), 2);
+        QCOMPARE(args.count(QStringLiteral("slave-method=resample")), 2);
+        QVERIFY(args.count(QStringLiteral("audio/x-raw,rate=48000,channels=2")) >= 3);
+    }
+
+    void stabilizesAStandalonePulseAudioSourceWithoutAddingAMixer()
+    {
+        const QStringList args = waylandRecordingAudioArguments(
+            true, 80, QStringLiteral("@DEFAULT_SINK@.monitor"),
+            false, 0, QString(), QStringLiteral("fdkaacenc"));
+
+        QVERIFY(!args.contains(QStringLiteral("audiomixer")));
+        QVERIFY(args.contains(QStringLiteral("do-timestamp=true")));
+        QVERIFY(args.contains(QStringLiteral("slave-method=resample")));
+        QVERIFY(args.contains(QStringLiteral("audio/x-raw,rate=48000,channels=2")));
+    }
 };
 
 QTEST_APPLESS_MAIN(LinuxRecordingSupportTests)

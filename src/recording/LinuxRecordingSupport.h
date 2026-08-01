@@ -23,5 +23,10 @@ PortalCropGeometry portalCropGeometry(const QRect &captureRect,
 QSize evenRecordingSize(const QSize &size);
 QString preferredGstAacEncoder(const QStringList &availableElements);
 QString discoverGstAacEncoder();
+QStringList waylandRecordingAudioArguments(bool desktopEnabled, int desktopVolume,
+                                           const QString &desktopDevice,
+                                           bool microphoneEnabled, int microphoneVolume,
+                                           const QString &microphoneDevice,
+                                           const QString &aacEncoder);
 QList<QPair<QString, QString>> linuxMicrophoneDevices(const QString &pactlSources);
 QList<QPair<QString, QString>> discoverLinuxMicrophoneDevices();
