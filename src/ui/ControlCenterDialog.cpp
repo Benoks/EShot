@@ -26,13 +26,13 @@ ControlCenterDialog::ControlCenterDialog(QWidget *parent)
     setWindowTitle(TranslationManager::appTitle());
     setWindowIcon(QIcon(QStringLiteral(":/icons/pen.svg")));
     setModal(true);
-    setFixedWidth(300);
     setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint
                    & ~Qt::WindowMaximizeButtonHint);
 
     auto *layout = new QVBoxLayout(this);
     layout->setContentsMargins(18, 16, 18, 18);
     layout->setSpacing(8);
+    layout->setSizeConstraint(QLayout::SetFixedSize);
 
     auto *title = new QLabel(QStringLiteral("EShot"), this);
     QFont titleFont = title->font();
@@ -40,6 +40,7 @@ ControlCenterDialog::ControlCenterDialog(QWidget *parent)
     titleFont.setBold(true);
     title->setFont(titleFont);
     title->setAlignment(Qt::AlignCenter);
+    title->setMinimumWidth(264);
     layout->addWidget(title);
     layout->addSpacing(4);
 

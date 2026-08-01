@@ -19,3 +19,6 @@ QRegion crosshairUpdateRegion(const QPoint &previousPosition,
 QRegion selectionUpdateRegion(const QRect &previousSelection,
                               const QRect &currentSelection,
                               const QRect &canvasRect);
+QRegion selectionStartUpdateRegion(const QRect &currentSelection,
+                                   const QRect &canvasRect,
+                                   const QRect &dismissedUiRect);

@@ -93,6 +93,21 @@ private slots:
         QVERIFY(dirtyArea < static_cast<qsizetype>(canvas.width()) * canvas.height() / 20);
     }
 
+    void selectionStartInvalidatesTheDismissedCaptureInfoPanel()
+    {
+        const QRect canvas(0, 0, 1920, 1080);
+        const QRect selection(420, 260, 1, 1);
+        const QRect infoPanel(640, 24, 640, 132);
+
+        const QRegion dirty = selectionStartUpdateRegion(
+            selection, canvas, infoPanel);
+
+        QVERIFY(dirty.contains(infoPanel.topLeft()));
+        QVERIFY(dirty.contains(infoPanel.bottomRight()));
+        QVERIFY(dirty.contains(selection.topLeft()));
+        QVERIFY(!dirty.contains(QPoint(100, 900)));
+    }
+
     void recordingSelectionSkipsStillImageComposition()
     {
         QVERIFY(shouldComposeCaptureResult(false));

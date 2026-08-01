@@ -2615,13 +2615,19 @@ void CaptureOverlay::mousePressEvent(QMouseEvent *event)
                 event->accept();
                 return;
             }
+            const QRect dismissedCaptureInfoRect = shouldShowCaptureHints(
+                m_showCaptureHints, m_isSelecting, m_selectionComplete,
+                m_eyedropperActive)
+                ? captureHintRect(monitorRectAt(event->pos()),
+                                  QSize(840, m_captureMode == ModeRecording ? 76 : 132))
+                : QRect();
             m_isSelecting = true;
             m_selectionStart = event->pos();
             m_selectionEnd = event->pos();
             m_selectionAnchorScreenRect = monitorRectAt(event->pos());
             hideToolbar();
-            QRegion dirty = selectionUpdateRegion(
-                QRect(), normalizedSelectionRect(), rect());
+            QRegion dirty = selectionStartUpdateRegion(
+                normalizedSelectionRect(), rect(), dismissedCaptureInfoRect);
             if (m_hasCrosshairPosition) {
                 dirty += crosshairUpdateRegion(
                     m_crosshairPosition, m_crosshairPosition, rect());

@@ -34,6 +34,11 @@
   <url type="homepage">https://github.com/Benoks/EShot</url>
   <url type="bugtracker">https://github.com/Benoks/EShot/issues</url>
   <releases>
+    <release version="4.2.3" date="2026-08-01">
+      <description>
+        <p>Fixes the capture guidance panel leaving trails when region selection starts and restores a compact, consistently sized application control window.</p>
+      </description>
+    </release>
     <release version="4.2.2" date="2026-07-30">
       <description>
         <p>Polishes the compact capture panels, improves selection responsiveness and memory use, makes recording finalization non-blocking, adds optional settings-window size memory, and prevents package-managed AppImages from creating a second user installation.</p>

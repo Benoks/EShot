@@ -25,6 +25,16 @@ private slots:
         for (QPushButton *button : buttons)
             QVERIFY(button->styleSheet().isEmpty());
     }
+
+    void staysCompactInsteadOfStretchingTheHeadingArea()
+    {
+        ControlCenterDialog dialog;
+        dialog.adjustSize();
+
+        QCOMPARE(dialog.minimumHeight(), dialog.maximumHeight());
+        QVERIFY(dialog.height() < 300);
+        QCOMPARE(dialog.width(), 300);
+    }
 };
 
 QTEST_MAIN(ControlCenterDialogTests)

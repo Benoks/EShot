@@ -121,3 +121,12 @@ QRegion selectionUpdateRegion(const QRect &previousSelection,
     dirty += sizeLabelArea(current);
     return dirty;
 }
+
+QRegion selectionStartUpdateRegion(const QRect &currentSelection,
+                                   const QRect &canvasRect,
+                                   const QRect &dismissedUiRect)
+{
+    QRegion dirty = selectionUpdateRegion(QRect(), currentSelection, canvasRect);
+    dirty += dismissedUiRect.intersected(canvasRect);
+    return dirty;
+}
