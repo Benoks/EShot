@@ -130,3 +130,69 @@ QRegion selectionStartUpdateRegion(const QRect &currentSelection,
     dirty += dismissedUiRect.intersected(canvasRect);
     return dirty;
 }
+
+SelectionResizeHandle selectionResizeHandleAt(const QRect &selection,
+                                              const QPoint &position,
+                                              int hitRadius)
+{
+    const QRect rect = selection.normalized();
+    if (!rect.isValid())
+        return SelectionResizeHandle::NewSelection;
+
+    const auto isNear = [position](const QPoint &handle, int radius) {
+        return QLineF(position, handle).length() <= radius;
+    };
+
+    if (isNear(rect.topLeft(), hitRadius))
+        return SelectionResizeHandle::TopLeft;
+    if (isNear(rect.topRight(), hitRadius))
+        return SelectionResizeHandle::TopRight;
+    if (isNear(rect.bottomRight(), hitRadius))
+        return SelectionResizeHandle::BottomRight;
+    if (isNear(rect.bottomLeft(), hitRadius))
+        return SelectionResizeHandle::BottomLeft;
+    constexpr int EdgeHandleExtraHitRadius = 4;
+    const int edgeHitRadius = hitRadius + EdgeHandleExtraHitRadius;
+    if (isNear(QPoint(rect.center().x(), rect.top()), edgeHitRadius))
+        return SelectionResizeHandle::Top;
+    if (isNear(QPoint(rect.right(), rect.center().y()), edgeHitRadius))
+        return SelectionResizeHandle::Right;
+    if (isNear(QPoint(rect.center().x(), rect.bottom()), edgeHitRadius))
+        return SelectionResizeHandle::Bottom;
+    if (isNear(QPoint(rect.left(), rect.center().y()), edgeHitRadius))
+        return SelectionResizeHandle::Left;
+    if (rect.contains(position))
+        return SelectionResizeHandle::Move;
+    return SelectionResizeHandle::NewSelection;
+}
+
+QRect resizedSelectionForHandle(const QRect &selection,
+                                SelectionResizeHandle handle,
+                                const QPoint &position)
+{
+    QRect result = selection.normalized();
+    switch (handle) {
+    case SelectionResizeHandle::Top:
+        result.setTop(position.y());
+        break;
+    case SelectionResizeHandle::Right:
+        result.setRight(position.x());
+        break;
+    case SelectionResizeHandle::Bottom:
+        result.setBottom(position.y());
+        break;
+    case SelectionResizeHandle::Left:
+        result.setLeft(position.x());
+        break;
+    default:
+        break;
+    }
+    return result.normalized();
+}
+
+QPen selectionFramePen()
+{
+    QPen pen(QColor(0, 120, 215), 2);
+    pen.setCosmetic(true);
+    return pen;
+}

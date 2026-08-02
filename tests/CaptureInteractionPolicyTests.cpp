@@ -108,6 +108,43 @@ private slots:
         QVERIFY(!dirty.contains(QPoint(100, 900)));
     }
 
+    void edgeResizeHandlesAdjustOnlyTheirMatchingAxis()
+    {
+        const QRect selection(100, 200, 80, 60);
+
+        QCOMPARE(selectionResizeHandleAt(selection, QPoint(140, 200)),
+                 SelectionResizeHandle::Top);
+        QCOMPARE(selectionResizeHandleAt(selection,
+                                         QPoint(selection.center().x(), selection.top() + 14)),
+                 SelectionResizeHandle::Top);
+        QCOMPARE(selectionResizeHandleAt(selection, QPoint(179, 230)),
+                 SelectionResizeHandle::Right);
+        QCOMPARE(selectionResizeHandleAt(selection, QPoint(140, 259)),
+                 SelectionResizeHandle::Bottom);
+        QCOMPARE(selectionResizeHandleAt(selection, QPoint(100, 230)),
+                 SelectionResizeHandle::Left);
+
+        QCOMPARE(resizedSelectionForHandle(selection, SelectionResizeHandle::Top,
+                                           QPoint(140, 180)),
+                 QRect(100, 180, 80, 80));
+        QCOMPARE(resizedSelectionForHandle(selection, SelectionResizeHandle::Right,
+                                           QPoint(205, 230)),
+                 QRect(100, 200, 106, 60));
+        QCOMPARE(resizedSelectionForHandle(selection, SelectionResizeHandle::Bottom,
+                                           QPoint(140, 280)),
+                 QRect(100, 200, 80, 81));
+        QCOMPARE(resizedSelectionForHandle(selection, SelectionResizeHandle::Left,
+                                           QPoint(70, 230)),
+                 QRect(70, 200, 110, 60));
+    }
+
+    void selectionFrameUsesAStableTwoPixelCosmeticPen()
+    {
+        const QPen pen = selectionFramePen();
+        QCOMPARE(pen.width(), 2);
+        QVERIFY(pen.isCosmetic());
+    }
+
     void recordingSelectionSkipsStillImageComposition()
     {
         QVERIFY(shouldComposeCaptureResult(false));

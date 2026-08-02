@@ -218,7 +218,19 @@ private:
     void ensureAudioDevicesLoaded();
 
     // Resize and move
-    enum ResizeMode { ResNone, ResTopLeft, ResTopRight, ResBottomRight, ResBottomLeft, ResMove, ResNewSelection };
+    enum ResizeMode {
+        ResNone,
+        ResTopLeft,
+        ResTop,
+        ResTopRight,
+        ResRight,
+        ResBottomRight,
+        ResBottom,
+        ResBottomLeft,
+        ResLeft,
+        ResMove,
+        ResNewSelection
+    };
     ResizeMode m_resizeMode;
     ResizeMode getResizeMode(const QPoint &pos);
     void updateCursor(const QPoint &pos);

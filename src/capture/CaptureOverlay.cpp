@@ -2282,7 +2282,7 @@ void CaptureOverlay::paintEvent(QPaintEvent *event)
         }
 
     // Frame
-    painter.setPen(QPen(QColor(0, 120, 215), 2));
+    painter.setPen(selectionFramePen());
     painter.setBrush(Qt::NoBrush);
     painter.drawRect(selRect);
 
@@ -2297,12 +2297,23 @@ void CaptureOverlay::paintEvent(QPaintEvent *event)
             painter.setPen(hbc);
             painter.drawRect(hr);
         };
+        auto drawEdgeHandle = [&](const QPoint &p, bool horizontal) {
+            const QSize size = horizontal ? QSize(10, 4) : QSize(4, 10);
+            const QRect hr(p - QPoint(size.width() / 2, size.height() / 2), size);
+            painter.fillRect(hr, hc);
+            painter.setPen(hbc);
+            painter.drawRect(hr);
+        };
 
         if (!windowPreview) {
             drawHandle(selRect.topLeft());
             drawHandle(selRect.topRight());
             drawHandle(selRect.bottomLeft());
             drawHandle(selRect.bottomRight());
+            drawEdgeHandle(QPoint(selRect.center().x(), selRect.top()), true);
+            drawEdgeHandle(QPoint(selRect.right(), selRect.center().y()), false);
+            drawEdgeHandle(QPoint(selRect.center().x(), selRect.bottom()), true);
+            drawEdgeHandle(QPoint(selRect.left(), selRect.center().y()), false);
         }
 
         // Size info — always visible (top-left of selection)
@@ -2806,6 +2817,11 @@ void CaptureOverlay::mouseMoveEvent(QMouseEvent *event)
 
     if (m_resizeMode != ResNone && m_resizeMode != ResNewSelection) {
         QRect oldSel = normalizedSelectionRect();
+        const auto resizeSingleEdge = [this, &oldSel, event](SelectionResizeHandle handle) {
+            const QRect resized = resizedSelectionForHandle(oldSel, handle, event->pos());
+            m_selectionStart = resized.topLeft();
+            m_selectionEnd = resized.bottomRight();
+        };
         QRegion movingUiRegion;
         auto includeVisibleUi = [&movingUiRegion](QWidget *widget) {
             if (widget && widget->isVisible())
@@ -2830,16 +2846,28 @@ void CaptureOverlay::mouseMoveEvent(QMouseEvent *event)
         else if (m_resizeMode == ResTopLeft) {
             m_selectionStart = event->pos();
         } 
+        else if (m_resizeMode == ResTop) {
+            resizeSingleEdge(SelectionResizeHandle::Top);
+        }
         else if (m_resizeMode == ResTopRight) {
             m_selectionStart.setY(event->pos().y());
             m_selectionEnd.setX(event->pos().x());
-        } 
+        }
+        else if (m_resizeMode == ResRight) {
+            resizeSingleEdge(SelectionResizeHandle::Right);
+        }
         else if (m_resizeMode == ResBottomLeft) {
             m_selectionStart.setX(event->pos().x());
             m_selectionEnd.setY(event->pos().y());
         }
         else if (m_resizeMode == ResBottomRight) {
             m_selectionEnd = event->pos();
+        }
+        else if (m_resizeMode == ResBottom) {
+            resizeSingleEdge(SelectionResizeHandle::Bottom);
+        }
+        else if (m_resizeMode == ResLeft) {
+            resizeSingleEdge(SelectionResizeHandle::Left);
         }
 
         if (m_selectionComplete && m_toolbar && m_toolbar->isVisible())
@@ -4111,16 +4139,19 @@ void CaptureOverlay::onPinToDesktop()
 
 CaptureOverlay::ResizeMode CaptureOverlay::getResizeMode(const QPoint &pos)
 {
-    QRect sel = normalizedSelectionRect();
-    int h = 10; // Hit radius
-
-    if (QRect(sel.topLeft() + QPoint(-h,-h), QSize(h*2,h*2)).contains(pos)) return ResTopLeft;
-    if (QRect(sel.topRight() + QPoint(-h,-h), QSize(h*2,h*2)).contains(pos)) return ResTopRight;
-    if (QRect(sel.bottomLeft() + QPoint(-h,-h), QSize(h*2,h*2)).contains(pos)) return ResBottomLeft;
-    if (QRect(sel.bottomRight() + QPoint(-h,-h), QSize(h*2,h*2)).contains(pos)) return ResBottomRight;
-
-    if (sel.contains(pos)) return ResMove;
-    
+    switch (selectionResizeHandleAt(normalizedSelectionRect(), pos)) {
+    case SelectionResizeHandle::TopLeft: return ResTopLeft;
+    case SelectionResizeHandle::Top: return ResTop;
+    case SelectionResizeHandle::TopRight: return ResTopRight;
+    case SelectionResizeHandle::Right: return ResRight;
+    case SelectionResizeHandle::BottomRight: return ResBottomRight;
+    case SelectionResizeHandle::Bottom: return ResBottom;
+    case SelectionResizeHandle::BottomLeft: return ResBottomLeft;
+    case SelectionResizeHandle::Left: return ResLeft;
+    case SelectionResizeHandle::Move: return ResMove;
+    case SelectionResizeHandle::None: return ResNone;
+    case SelectionResizeHandle::NewSelection: return ResNewSelection;
+    }
     return ResNewSelection;
 }
 
@@ -4146,6 +4177,14 @@ void CaptureOverlay::updateCursor(const QPoint &pos)
         case ResTopRight:
         case ResBottomLeft:
             setCursor(Qt::SizeBDiagCursor);
+            break;
+        case ResTop:
+        case ResBottom:
+            setCursor(Qt::SizeVerCursor);
+            break;
+        case ResLeft:
+        case ResRight:
+            setCursor(Qt::SizeHorCursor);
             break;
         case ResMove:
             if (m_annotationEngine && m_annotationEngine->currentTool() == AnnotationEngine::None)

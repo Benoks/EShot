@@ -34,6 +34,11 @@
   <url type="homepage">https://github.com/Benoks/EShot</url>
   <url type="bugtracker">https://github.com/Benoks/EShot/issues</url>
   <releases>
+    <release version="4.2.5" date="2026-08-02">
+      <description>
+        <p>Adds single-edge capture selection resizing with compact midpoint handles and keeps the selection border visually consistent at fractional display scales.</p>
+      </description>
+    </release>
     <release version="4.2.4" date="2026-08-01">
       <description>
         <p>Stabilizes simultaneous desktop and microphone audio recording on PipeWire and EasyEffects setups, while retaining compatibility with the GStreamer version used by supported Linux builds.</p>

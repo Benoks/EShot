@@ -3,6 +3,21 @@
 #include <QRect>
 #include <QRegion>
 #include <QSize>
+#include <QPen>
+
+enum class SelectionResizeHandle {
+    None,
+    TopLeft,
+    Top,
+    TopRight,
+    Right,
+    BottomRight,
+    Bottom,
+    BottomLeft,
+    Left,
+    Move,
+    NewSelection
+};
 
 bool shouldReleaseToolForResize(bool handleHit, int currentTool, int noneTool);
 int initialAnnotationTool(bool rememberLastTool, int storedTool, int noneTool);
@@ -22,3 +37,10 @@ QRegion selectionUpdateRegion(const QRect &previousSelection,
 QRegion selectionStartUpdateRegion(const QRect &currentSelection,
                                    const QRect &canvasRect,
                                    const QRect &dismissedUiRect);
+SelectionResizeHandle selectionResizeHandleAt(const QRect &selection,
+                                              const QPoint &position,
+                                              int hitRadius = 10);
+QRect resizedSelectionForHandle(const QRect &selection,
+                                SelectionResizeHandle handle,
+                                const QPoint &position);
+QPen selectionFramePen();
