@@ -3,7 +3,6 @@
 #include <QRect>
 #include <QRegion>
 #include <QSize>
-#include <QPen>
 
 enum class SelectionResizeHandle {
     None,
@@ -17,6 +16,14 @@ enum class SelectionResizeHandle {
     Left,
     Move,
     NewSelection
+};
+
+struct SelectionFrameSegments {
+    QRectF top;
+    QRectF right;
+    QRectF bottom;
+    QRectF left;
+    qreal thickness = 1.0;
 };
 
 bool shouldReleaseToolForResize(bool handleHit, int currentTool, int noneTool);
@@ -43,4 +50,7 @@ SelectionResizeHandle selectionResizeHandleAt(const QRect &selection,
 QRect resizedSelectionForHandle(const QRect &selection,
                                 SelectionResizeHandle handle,
                                 const QPoint &position);
-QPen selectionFramePen();
+SelectionFrameSegments selectionFrameSegments(const QRect &selection, qreal devicePixelRatio);
+QPointF selectionFrameHandleCenter(const QRect &selection, SelectionResizeHandle handle,
+                                   qreal devicePixelRatio);
+QRegion selectionFrameClipRegion(const QRect &selection, const QRect &canvasRect);

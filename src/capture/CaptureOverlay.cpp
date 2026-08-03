@@ -2282,38 +2282,49 @@ void CaptureOverlay::paintEvent(QPaintEvent *event)
         }
 
     // Frame
-    painter.setPen(selectionFramePen());
-    painter.setBrush(Qt::NoBrush);
-    painter.drawRect(selRect);
+    const qreal devicePixelRatio = painter.device()->devicePixelRatioF();
+    const SelectionFrameSegments frameSegments = selectionFrameSegments(selRect, devicePixelRatio);
+    painter.save();
+    painter.setClipRegion(selectionFrameClipRegion(selRect, rect()));
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(QColor(0, 120, 215));
+    painter.drawRect(frameSegments.top);
+    painter.drawRect(frameSegments.right);
+    painter.drawRect(frameSegments.bottom);
+    painter.drawRect(frameSegments.left);
+    painter.restore();
 
     // Corner handles
         int hs = 5; // Handle size radius
         QColor hc(255, 255, 255);
-        QColor hbc(0, 122, 204);
         
-        auto drawHandle = [&](const QPoint &p) {
-            QRect hr(p.x()-hs, p.y()-hs, hs*2, hs*2);
+        auto drawHandle = [&](const QPointF &p) {
+            const QRectF hr(p - QPointF(hs, hs), QSizeF(hs * 2, hs * 2));
             painter.fillRect(hr, hc);
-            painter.setPen(hbc);
-            painter.drawRect(hr);
         };
-        auto drawEdgeHandle = [&](const QPoint &p, bool horizontal) {
+        auto drawEdgeHandle = [&](const QPointF &p, bool horizontal) {
             const QSize size = horizontal ? QSize(10, 4) : QSize(4, 10);
-            const QRect hr(p - QPoint(size.width() / 2, size.height() / 2), size);
+            const QRectF hr(p - QPointF(size.width() / 2.0, size.height() / 2.0), size);
             painter.fillRect(hr, hc);
-            painter.setPen(hbc);
-            painter.drawRect(hr);
         };
 
         if (!windowPreview) {
-            drawHandle(selRect.topLeft());
-            drawHandle(selRect.topRight());
-            drawHandle(selRect.bottomLeft());
-            drawHandle(selRect.bottomRight());
-            drawEdgeHandle(QPoint(selRect.center().x(), selRect.top()), true);
-            drawEdgeHandle(QPoint(selRect.right(), selRect.center().y()), false);
-            drawEdgeHandle(QPoint(selRect.center().x(), selRect.bottom()), true);
-            drawEdgeHandle(QPoint(selRect.left(), selRect.center().y()), false);
+            drawHandle(selectionFrameHandleCenter(selRect, SelectionResizeHandle::TopLeft,
+                                                   devicePixelRatio));
+            drawHandle(selectionFrameHandleCenter(selRect, SelectionResizeHandle::TopRight,
+                                                   devicePixelRatio));
+            drawHandle(selectionFrameHandleCenter(selRect, SelectionResizeHandle::BottomLeft,
+                                                   devicePixelRatio));
+            drawHandle(selectionFrameHandleCenter(selRect, SelectionResizeHandle::BottomRight,
+                                                   devicePixelRatio));
+            drawEdgeHandle(selectionFrameHandleCenter(selRect, SelectionResizeHandle::Top,
+                                                       devicePixelRatio), true);
+            drawEdgeHandle(selectionFrameHandleCenter(selRect, SelectionResizeHandle::Right,
+                                                       devicePixelRatio), false);
+            drawEdgeHandle(selectionFrameHandleCenter(selRect, SelectionResizeHandle::Bottom,
+                                                       devicePixelRatio), true);
+            drawEdgeHandle(selectionFrameHandleCenter(selRect, SelectionResizeHandle::Left,
+                                                       devicePixelRatio), false);
         }
 
         // Size info — always visible (top-left of selection)

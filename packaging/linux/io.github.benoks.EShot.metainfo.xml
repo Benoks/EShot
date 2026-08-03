@@ -34,6 +34,11 @@
   <url type="homepage">https://github.com/Benoks/EShot</url>
   <url type="bugtracker">https://github.com/Benoks/EShot/issues</url>
   <releases>
+    <release version="4.2.6" date="2026-08-03">
+      <description>
+        <p>Fixes capture-selection frame alignment and prevents the frame from showing through resize handles on scaled displays.</p>
+      </description>
+    </release>
     <release version="4.2.5" date="2026-08-02">
       <description>
         <p>Adds single-edge capture selection resizing with compact midpoint handles and keeps the selection border visually consistent at fractional display scales.</p>

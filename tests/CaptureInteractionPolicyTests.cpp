@@ -138,11 +138,36 @@ private slots:
                  QRect(70, 200, 110, 60));
     }
 
-    void selectionFrameUsesAStableTwoPixelCosmeticPen()
+    void selectionFrameSharesPixelAlignedHandleCentersAtFractionalScale()
     {
-        const QPen pen = selectionFramePen();
-        QCOMPARE(pen.width(), 2);
-        QVERIFY(pen.isCosmetic());
+        const QRect selection(20, 10, 22, 20);
+        const qreal scale = 1.25;
+        const SelectionFrameSegments segments = selectionFrameSegments(selection, scale);
+
+        QCOMPARE(segments.thickness, 0.8);
+        QCOMPARE(selectionFrameHandleCenter(selection, SelectionResizeHandle::TopRight, scale).x(),
+                 segments.right.x());
+        QCOMPARE(selectionFrameHandleCenter(selection, SelectionResizeHandle::BottomRight, scale).x(),
+                 segments.right.x());
+        QCOMPARE(selectionFrameHandleCenter(selection, SelectionResizeHandle::BottomLeft, scale).y(),
+                 segments.bottom.y());
+        QCOMPARE(segments.right.x() * scale, qRound(segments.right.x() * scale));
+        QCOMPARE(segments.bottom.y() * scale, qRound(segments.bottom.y() * scale));
+    }
+
+    void selectionFrameDoesNotPaintBelowAnyHandle()
+    {
+        const QRect selection(100, 200, 80, 60);
+        const QRegion frameClip = selectionFrameClipRegion(selection, QRect(0, 0, 400, 400));
+
+        QVERIFY(!frameClip.contains(selection.topLeft()));
+        QVERIFY(!frameClip.contains(QPoint(selection.center().x(), selection.top())));
+        QVERIFY(!frameClip.contains(selection.topRight()));
+        QVERIFY(!frameClip.contains(QPoint(selection.right(), selection.center().y())));
+        QVERIFY(!frameClip.contains(selection.bottomRight()));
+        QVERIFY(!frameClip.contains(QPoint(selection.center().x(), selection.bottom())));
+        QVERIFY(!frameClip.contains(selection.bottomLeft()));
+        QVERIFY(!frameClip.contains(QPoint(selection.left(), selection.center().y())));
     }
 
     void recordingSelectionSkipsStillImageComposition()

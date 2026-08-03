@@ -1,5 +1,7 @@
 #include "CaptureInteractionPolicy.h"
 
+#include <QLineF>
+
 bool shouldReleaseToolForResize(bool handleHit, int currentTool, int noneTool)
 {
     return handleHit && currentTool != noneTool;
@@ -190,9 +192,80 @@ QRect resizedSelectionForHandle(const QRect &selection,
     return result.normalized();
 }
 
-QPen selectionFramePen()
+namespace {
+qreal alignedSelectionFrameCoordinate(qreal coordinate, qreal devicePixelRatio)
 {
-    QPen pen(QColor(0, 120, 215), 2);
-    pen.setCosmetic(true);
-    return pen;
+    const qreal scale = devicePixelRatio > 0.0 ? devicePixelRatio : 1.0;
+    return qRound(coordinate * scale) / scale;
+}
+}
+
+SelectionFrameSegments selectionFrameSegments(const QRect &selection, qreal devicePixelRatio)
+{
+    SelectionFrameSegments segments;
+    const QRect rect = selection.normalized();
+    if (!rect.isValid())
+        return segments;
+
+    const qreal scale = devicePixelRatio > 0.0 ? devicePixelRatio : 1.0;
+    const qreal left = alignedSelectionFrameCoordinate(rect.left(), scale);
+    const qreal top = alignedSelectionFrameCoordinate(rect.top(), scale);
+    const qreal right = alignedSelectionFrameCoordinate(rect.right(), scale);
+    const qreal bottom = alignedSelectionFrameCoordinate(rect.bottom(), scale);
+    const qreal thickness = 1.0 / scale;
+
+    segments.thickness = thickness;
+    segments.top = QRectF(left, top, right - left + thickness, thickness);
+    segments.right = QRectF(right, top, thickness, bottom - top + thickness);
+    segments.bottom = QRectF(left, bottom, right - left + thickness, thickness);
+    segments.left = QRectF(left, top, thickness, bottom - top + thickness);
+    return segments;
+}
+
+QPointF selectionFrameHandleCenter(const QRect &selection, SelectionResizeHandle handle,
+                                   qreal devicePixelRatio)
+{
+    const QRect rect = selection.normalized();
+    if (!rect.isValid())
+        return {};
+
+    const SelectionFrameSegments segments = selectionFrameSegments(rect, devicePixelRatio);
+    const qreal horizontalCenter = alignedSelectionFrameCoordinate(
+        (rect.left() + rect.right()) / 2.0, devicePixelRatio);
+    const qreal verticalCenter = alignedSelectionFrameCoordinate(
+        (rect.top() + rect.bottom()) / 2.0, devicePixelRatio);
+
+    switch (handle) {
+    case SelectionResizeHandle::TopLeft: return {segments.left.x(), segments.top.y()};
+    case SelectionResizeHandle::Top: return {horizontalCenter, segments.top.y()};
+    case SelectionResizeHandle::TopRight: return {segments.right.x(), segments.top.y()};
+    case SelectionResizeHandle::Right: return {segments.right.x(), verticalCenter};
+    case SelectionResizeHandle::BottomRight: return {segments.right.x(), segments.bottom.y()};
+    case SelectionResizeHandle::Bottom: return {horizontalCenter, segments.bottom.y()};
+    case SelectionResizeHandle::BottomLeft: return {segments.left.x(), segments.bottom.y()};
+    case SelectionResizeHandle::Left: return {segments.left.x(), verticalCenter};
+    default: return {};
+    }
+}
+
+QRegion selectionFrameClipRegion(const QRect &selection, const QRect &canvasRect)
+{
+    QRegion clip(canvasRect);
+    const QRect rect = selection.normalized();
+    if (!rect.isValid())
+        return clip;
+
+    const auto excludeHandle = [&clip](const QPoint &center, const QSize &size) {
+        const QRect handle(center - QPoint(size.width() / 2, size.height() / 2), size);
+        clip -= handle.adjusted(-1, -1, 1, 1);
+    };
+    excludeHandle(rect.topLeft(), QSize(10, 10));
+    excludeHandle(QPoint(rect.center().x(), rect.top()), QSize(10, 4));
+    excludeHandle(rect.topRight(), QSize(10, 10));
+    excludeHandle(QPoint(rect.right(), rect.center().y()), QSize(4, 10));
+    excludeHandle(rect.bottomRight(), QSize(10, 10));
+    excludeHandle(QPoint(rect.center().x(), rect.bottom()), QSize(10, 4));
+    excludeHandle(rect.bottomLeft(), QSize(10, 10));
+    excludeHandle(QPoint(rect.left(), rect.center().y()), QSize(4, 10));
+    return clip;
 }
