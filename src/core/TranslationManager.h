@@ -100,6 +100,7 @@ public:
     static QString notifySave()       { return tr("notifySave"); }
     static QString notifyGif()        { return tr("notifyGif"); }
     static QString notifyVideo()      { return tr("notifyVideo"); }
+    static QString notificationOpenFolder() { return tr("notificationOpenFolder"); }
     static QString playSound()        { return tr("playSound"); }
     static QString copyPathAfterSave(){ return tr("copyPathAfterSave"); }
 
@@ -481,6 +482,7 @@ private:
         {"notifySave",{"Görsel kayıt", "Image save", "Bild speichern", "Enregistrement d'image", "Guardar imagen", "画像保存", "图片保存", "Сохранение изображения"}},
         {"notifyGif",{"GIF kaydı", "GIF recording", "GIF-Aufnahme", "Enregistrement GIF", "Grabación GIF", "GIF録画", "GIF 录制", "Запись GIF"}},
         {"notifyVideo",{"Video kaydı", "Video recording", "Videoaufnahme", "Enregistrement vidéo", "Grabación de video", "動画録画", "视频录制", "Запись видео"}},
+        {"notificationOpenFolder",{"Bildirimden klasör açmaya izin ver", "Allow opening the folder from notifications", "Öffnen des Ordners über Benachrichtigungen erlauben", "Autoriser l’ouverture du dossier depuis les notifications", "Permitir abrir la carpeta desde las notificaciones", "通知からフォルダーを開くことを許可", "允许从通知中打开文件夹", "Разрешить открывать папку из уведомлений"}},
         {"playSound",      {"Ses çal", "Play sound", "Ton abspielen", "Jouer le son", "Reproducir sonido", "サウンド再生", "播放声音", "Звук"}},
         {"copyPathAfterSave",{"Kaydettikten sonra yolu kopyala", "Copy path after save", "Pfad nach Speichern kopieren", "Copier le chemin", "Copiar ruta después de guardar", "保存後にパスをコピー", "保存后复制路径", "Копировать путь после сохранения"}},
 

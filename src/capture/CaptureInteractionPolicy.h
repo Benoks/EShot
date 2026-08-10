@@ -33,6 +33,11 @@ bool shouldShowCaptureHints(bool enabled, bool selecting, bool selectionComplete
 QRect captureHintRect(const QRect &monitorRect, const QSize &preferredSize);
 int quickSettingsTabHeight(int textWidth, int availableHeight);
 bool shouldForwardCaptureKeyFromManagedProxy(bool textEditorVisible);
+bool shouldRestoreCaptureKeyboardFocus(bool overlayVisible, bool selectionComplete,
+                                       bool textEditorVisible);
+bool shouldGrabCaptureKeyboardFromManagedProxy(bool managedProxyAvailable,
+                                               bool overlayVisible, bool selectionComplete,
+                                               bool textEditorVisible);
 bool shouldDetachModalFromOverlay(bool xwaylandOverlay);
 bool shouldComposeCaptureResult(bool recordingMode);
 QRegion crosshairUpdateRegion(const QPoint &previousPosition,

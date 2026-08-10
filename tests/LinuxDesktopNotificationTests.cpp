@@ -7,10 +7,10 @@ class LinuxDesktopNotificationTests : public QObject
     Q_OBJECT
 
 private slots:
-    void savedFileNotificationHasClickableDefaultAction()
+    void savedFileNotificationHasExplicitFolderAction()
     {
         const QStringList actions = LinuxDesktopNotification::actions(QStringLiteral("Open Folder"));
-        QCOMPARE(actions, QStringList({QStringLiteral("default"), QStringLiteral("Open Folder")}));
+        QCOMPARE(actions, QStringList({QStringLiteral("open-folder"), QStringLiteral("Open Folder")}));
     }
 
     void failureNotificationHasNoFileAction()

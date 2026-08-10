@@ -31,7 +31,7 @@ QStringList LinuxDesktopNotification::actions(const QString &actionLabel)
 {
     if (actionLabel.isEmpty())
         return {};
-    return {QStringLiteral("default"), actionLabel};
+    return {QStringLiteral("open-folder"), actionLabel};
 }
 
 QVariantMap LinuxDesktopNotification::hintsForPath(const QString &path)
@@ -67,7 +67,7 @@ bool LinuxDesktopNotification::show(const QString &title, const QString &body,
 
 void LinuxDesktopNotification::onActionInvoked(uint id, const QString &actionKey)
 {
-    if (actionKey != QStringLiteral("default"))
+    if (actionKey != QStringLiteral("open-folder"))
         return;
     const QString path = m_paths.take(id);
     if (!path.isEmpty())

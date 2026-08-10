@@ -3388,6 +3388,7 @@ void CaptureOverlay::hideToolbar()
     if (m_recordingDrawer) m_recordingDrawer->hide();
     m_recordingDrawerMode = RecordingDrawerMode::None;
     if (m_textEditPanel) m_textEditPanel->hide();
+    releaseTextKeyboardFocus();
     if (m_textFocusProxy) m_textFocusProxy->hide();
 }
 
@@ -3516,15 +3517,24 @@ void CaptureOverlay::acquireCaptureKeyboardFocus()
         window->requestActivate();
     m_textFocusProxy->activateWindow();
     m_textFocusProxy->setFocus(Qt::ActiveWindowFocusReason);
+    if (shouldGrabCaptureKeyboardFromManagedProxy(
+            m_textFocusProxy != nullptr, isVisible(), m_selectionComplete,
+            m_textEdit && m_textEdit->isVisible())
+        && QWidget::keyboardGrabber() != m_textFocusProxy) {
+        m_textFocusProxy->grabKeyboard();
+    }
     qInfo() << "[CaptureOverlay] managed capture focus requested; activeWindow="
             << QApplication::activeWindow()
-            << "focusWidget=" << QApplication::focusWidget();
+            << "focusWidget=" << QApplication::focusWidget()
+            << "keyboardGrabber=" << QWidget::keyboardGrabber();
 }
 
 void CaptureOverlay::releaseTextKeyboardFocus()
 {
     if (QWidget::keyboardGrabber() == m_textEdit)
         m_textEdit->releaseKeyboard();
+    if (m_textFocusProxy && QWidget::keyboardGrabber() == m_textFocusProxy)
+        m_textFocusProxy->releaseKeyboard();
 }
 
 void CaptureOverlay::moveTextEditorTo(const QPoint &pos)
@@ -3971,6 +3981,11 @@ void CaptureOverlay::selectMonitorAt(const QPoint &pos)
     }
 
     showToolbar();
+    if (shouldRestoreCaptureKeyboardFocus(
+            isVisible(), m_selectionComplete,
+            m_textEdit && m_textEdit->isVisible())) {
+        acquireCaptureKeyboardFocus();
+    }
     updateUndoRedoState();
     updateCursor(pos);
 
@@ -4005,7 +4020,11 @@ void CaptureOverlay::completeSelection(const QRect &selectionRect)
     }
 
     showToolbar();
-    acquireCaptureKeyboardFocus();
+    if (shouldRestoreCaptureKeyboardFocus(
+            isVisible(), m_selectionComplete,
+            m_textEdit && m_textEdit->isVisible())) {
+        acquireCaptureKeyboardFocus();
+    }
     updateUndoRedoState();
     updateCursor(bounded.center());
     update();

@@ -102,6 +102,7 @@ private:
     QCheckBox *m_notifySaveCheck = nullptr;
     QCheckBox *m_notifyGifCheck = nullptr;
     QCheckBox *m_notifyVideoCheck = nullptr;
+    QCheckBox *m_notificationOpenFolderCheck = nullptr;
     QCheckBox *m_playSoundCheck = nullptr;
     QCheckBox *m_copyPathAfterSaveCheck = nullptr;
     QGroupBox *m_updateGroup = nullptr;

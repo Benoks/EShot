@@ -207,7 +207,10 @@ public slots:
 #if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
         if (!path.isEmpty() && m_linuxNotification
             && m_linuxNotification->show(TranslationManager::notifCaptureTitle(), message,
-                                         path, TranslationManager::openFolder(), timeoutMs)) {
+                                         m_notificationOpenFolder ? path : QString(),
+                                         m_notificationOpenFolder
+                                             ? TranslationManager::openFolder() : QString(),
+                                         timeoutMs)) {
             return;
         }
 #endif
@@ -290,6 +293,8 @@ public slots:
 
     void onNotificationClicked()
     {
+        if (!m_notificationOpenFolder)
+            return;
 #ifdef Q_OS_WIN
         constexpr NotificationDesktop desktop = NotificationDesktop::Windows;
 #elif defined(Q_OS_LINUX)
@@ -725,6 +730,7 @@ private:
         m_notifySave = s.value("notifySave", true).toBool();
         m_notifyGif = s.value("notifyGif", true).toBool();
         m_notifyVideo = s.value("notifyVideo", true).toBool();
+        m_notificationOpenFolder = s.value("notificationOpenFolder", true).toBool();
         m_blackTrayIcon = s.value("blackTrayIcon", false).toBool();
     }
 
@@ -1031,6 +1037,7 @@ private:
     bool m_notifySave = true;
     bool m_notifyGif = true;
     bool m_notifyVideo = true;
+    bool m_notificationOpenFolder = true;
     bool m_blackTrayIcon = false;
     bool m_updateAvailable = false;
     QString m_latestVersion;

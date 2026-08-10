@@ -48,6 +48,21 @@ bool shouldForwardCaptureKeyFromManagedProxy(bool textEditorVisible)
     return !textEditorVisible;
 }
 
+bool shouldRestoreCaptureKeyboardFocus(bool overlayVisible, bool selectionComplete,
+                                       bool textEditorVisible)
+{
+    return overlayVisible && selectionComplete && !textEditorVisible;
+}
+
+bool shouldGrabCaptureKeyboardFromManagedProxy(bool managedProxyAvailable,
+                                               bool overlayVisible, bool selectionComplete,
+                                               bool textEditorVisible)
+{
+    return managedProxyAvailable
+        && shouldRestoreCaptureKeyboardFocus(overlayVisible, selectionComplete,
+                                             textEditorVisible);
+}
+
 bool shouldDetachModalFromOverlay(bool xwaylandOverlay)
 {
     return xwaylandOverlay;

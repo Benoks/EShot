@@ -800,14 +800,20 @@ QWidget* SettingsDialog::createGeneralTab()
     m_notifySaveCheck = new QCheckBox(TranslationManager::notifySave(), m_notificationOptionsWidget);
     m_notifyGifCheck = new QCheckBox(TranslationManager::notifyGif(), m_notificationOptionsWidget);
     m_notifyVideoCheck = new QCheckBox(TranslationManager::notifyVideo(), m_notificationOptionsWidget);
+    m_notificationOpenFolderCheck = new QCheckBox(
+        TranslationManager::notificationOpenFolder(), m_notificationOptionsWidget);
     m_notifyCopyCheck->setToolTip(uiLabel("Gorsel panoya kopyalaninca bildirim gosterir.", "Show a notification when an image is copied."));
     m_notifySaveCheck->setToolTip(uiLabel("Gorsel dosyaya kaydedilince klasoru acabilen bildirim gosterir.", "Show a folder-opening notification when an image is saved."));
     m_notifyGifCheck->setToolTip(uiLabel("GIF kaydi bitince klasoru acabilen bildirim gosterir.", "Show a folder-opening notification when a GIF recording finishes."));
     m_notifyVideoCheck->setToolTip(uiLabel("Video kaydi bitince klasoru acabilen bildirim gosterir.", "Show a folder-opening notification when a video recording finishes."));
+    m_notificationOpenFolderCheck->setToolTip(uiLabel(
+        "Kaydedilen dosyalarin bildirimlerinde Klasoru Ac eylemini gosterir.",
+        "Show the Open Folder action in notifications for saved files."));
     notifLayout->addWidget(m_notifyCopyCheck);
     notifLayout->addWidget(m_notifySaveCheck);
     notifLayout->addWidget(m_notifyGifCheck);
     notifLayout->addWidget(m_notifyVideoCheck);
+    notifLayout->addWidget(m_notificationOpenFolderCheck);
     auto updateNotifChildren = [this](bool enabled) {
         if (m_notificationOptionsWidget) m_notificationOptionsWidget->setEnabled(enabled);
     };
@@ -2026,6 +2032,8 @@ void SettingsDialog::loadSettings()
     if (m_notifySaveCheck) m_notifySaveCheck->setChecked(m_settings->value("notifySave", true).toBool());
     if (m_notifyGifCheck) m_notifyGifCheck->setChecked(m_settings->value("notifyGif", true).toBool());
     if (m_notifyVideoCheck) m_notifyVideoCheck->setChecked(m_settings->value("notifyVideo", true).toBool());
+    if (m_notificationOpenFolderCheck) m_notificationOpenFolderCheck->setChecked(
+        m_settings->value("notificationOpenFolder", true).toBool());
     if (m_notificationOptionsWidget) m_notificationOptionsWidget->setEnabled(m_showNotificationsCheck->isChecked());
     m_playSoundCheck->setChecked(m_settings->value("playSound", false).toBool());
     m_copyPathAfterSaveCheck->setChecked(m_settings->value("copyPathAfterSave", false).toBool());
@@ -2517,6 +2525,8 @@ void SettingsDialog::onSave()
     if (m_notifySaveCheck) m_settings->setValue("notifySave", m_notifySaveCheck->isChecked());
     if (m_notifyGifCheck) m_settings->setValue("notifyGif", m_notifyGifCheck->isChecked());
     if (m_notifyVideoCheck) m_settings->setValue("notifyVideo", m_notifyVideoCheck->isChecked());
+    if (m_notificationOpenFolderCheck) m_settings->setValue(
+        "notificationOpenFolder", m_notificationOpenFolderCheck->isChecked());
     m_settings->setValue("playSound",          m_playSoundCheck->isChecked());
     m_settings->setValue("copyPathAfterSave",  m_copyPathAfterSaveCheck->isChecked());
     m_rememberSettingsWindowSizeEnabled = m_rememberSettingsWindowSizeCheck
@@ -2660,6 +2670,8 @@ void SettingsDialog::onExportSettings()
     obj["notifySave"] = m_notifySaveCheck ? m_notifySaveCheck->isChecked() : true;
     obj["notifyGif"] = m_notifyGifCheck ? m_notifyGifCheck->isChecked() : true;
     obj["notifyVideo"] = m_notifyVideoCheck ? m_notifyVideoCheck->isChecked() : true;
+    obj["notificationOpenFolder"] = m_notificationOpenFolderCheck
+        ? m_notificationOpenFolderCheck->isChecked() : true;
     obj["playSound"] = m_playSoundCheck->isChecked();
     obj["copyPathAfterSave"] = m_copyPathAfterSaveCheck->isChecked();
     obj["imageFormat"] = m_formatCombo->currentData().toString();
@@ -2794,6 +2806,9 @@ void SettingsDialog::onImportSettings()
     if (m_notifySaveCheck && obj.contains("notifySave")) m_notifySaveCheck->setChecked(obj["notifySave"].toBool());
     if (m_notifyGifCheck && obj.contains("notifyGif")) m_notifyGifCheck->setChecked(obj["notifyGif"].toBool());
     if (m_notifyVideoCheck && obj.contains("notifyVideo")) m_notifyVideoCheck->setChecked(obj["notifyVideo"].toBool());
+    if (m_notificationOpenFolderCheck && obj.contains("notificationOpenFolder")) {
+        m_notificationOpenFolderCheck->setChecked(obj["notificationOpenFolder"].toBool());
+    }
     if (m_notificationOptionsWidget) m_notificationOptionsWidget->setEnabled(m_showNotificationsCheck->isChecked());
     if (obj.contains("playSound")) m_playSoundCheck->setChecked(obj["playSound"].toBool());
     if (obj.contains("copyPathAfterSave")) m_copyPathAfterSaveCheck->setChecked(obj["copyPathAfterSave"].toBool());

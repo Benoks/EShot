@@ -49,6 +49,23 @@ private slots:
         QVERIFY(!shouldForwardCaptureKeyFromManagedProxy(true));
     }
 
+    void completedScreenSelectionRestoresCaptureKeyboardFocus()
+    {
+        QVERIFY(shouldRestoreCaptureKeyboardFocus(true, true, false));
+        QVERIFY(!shouldRestoreCaptureKeyboardFocus(false, true, false));
+        QVERIFY(!shouldRestoreCaptureKeyboardFocus(true, false, false));
+        QVERIFY(!shouldRestoreCaptureKeyboardFocus(true, true, true));
+    }
+
+    void managedProxyGrabsKeyboardOnlyForCompletedCapture()
+    {
+        QVERIFY(shouldGrabCaptureKeyboardFromManagedProxy(true, true, true, false));
+        QVERIFY(!shouldGrabCaptureKeyboardFromManagedProxy(false, true, true, false));
+        QVERIFY(!shouldGrabCaptureKeyboardFromManagedProxy(true, false, true, false));
+        QVERIFY(!shouldGrabCaptureKeyboardFromManagedProxy(true, true, false, false));
+        QVERIFY(!shouldGrabCaptureKeyboardFromManagedProxy(true, true, true, true));
+    }
+
     void xwaylandModalIsDetachedFromUnmanagedOverlay()
     {
         QVERIFY(shouldDetachModalFromOverlay(true));
@@ -200,7 +217,7 @@ private slots:
             "captureHintDrag", "captureHintScreen", "captureHintRecording",
             "captureHintCopy", "captureHintSave", "captureHintCancel",
             "captureHintQuickSettings",
-            "showCaptureHints", "showCaptureHintsTip",
+            "showCaptureHints", "showCaptureHintsTip", "notificationOpenFolder",
             "gifFpsLabel", "videoFpsLabel"
         };
         TranslationManager::setLanguage(TranslationManager::English, false);
