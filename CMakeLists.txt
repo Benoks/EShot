@@ -231,7 +231,9 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
 # Embed manifest after build
 if(MSVC)
     add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-        COMMAND ${CMAKE_MT} -manifest ${CMAKE_CURRENT_SOURCE_DIR}/EShot.manifest -outputresource:$<TARGET_FILE:${PROJECT_NAME}>\;1
+        # mt.exe is supplied by the Visual Studio developer environment. Some
+        # CMake generators leave CMAKE_MT unset even though mt.exe is on PATH.
+        COMMAND mt.exe -manifest ${CMAKE_CURRENT_SOURCE_DIR}/EShot.manifest -outputresource:$<TARGET_FILE:${PROJECT_NAME}>\;1
         COMMENT "Embedding manifest into executable"
     )
 endif()
