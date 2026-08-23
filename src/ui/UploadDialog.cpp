@@ -213,7 +213,7 @@ void UploadDialog::onSaveAuth()
     if (!m_uploader) return;
     m_uploader->setAuthValue(m_authEdit->text());
     m_authEdit->setText(m_uploader->authValue());
-    m_statusLabel->setText(TranslationManager::exportSuccess());
+    m_statusLabel->setText(TranslationManager::uploadAuthSaved());
 }
 
 void UploadDialog::onUploadClicked()

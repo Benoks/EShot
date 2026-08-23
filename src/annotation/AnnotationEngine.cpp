@@ -30,6 +30,14 @@ QPoint constrainedHighlighterPoint(const QPoint &start, const QPoint &pos)
         ? QPoint(pos.x(), start.y())
         : QPoint(start.x(), pos.y());
 }
+
+// Skip pen/highlighter samples closer than ~2 px to keep the point lists small.
+bool pointTooClose(const QPoint &a, const QPoint &b)
+{
+    const int dx = a.x() - b.x();
+    const int dy = a.y() - b.y();
+    return dx * dx + dy * dy < 4;
+}
 }
 
 AnnotationEngine::AnnotationEngine(QObject *parent)
@@ -87,7 +95,8 @@ void AnnotationEngine::continueDraw(const QPoint &pos)
         const QPoint drawPoint = m_currentTool == Highlighter && m_shiftHeld
             ? constrainedHighlighterPoint(m_currentAnnotation.points.first(), pos)
             : pos;
-        m_currentAnnotation.points.append(drawPoint);
+        if (!pointTooClose(m_currentAnnotation.points.last(), drawPoint))
+            m_currentAnnotation.points.append(drawPoint);
     } else {
         if (m_currentAnnotation.points.size() < 2)
             m_currentAnnotation.points.append(pos);
@@ -106,7 +115,8 @@ void AnnotationEngine::endDraw(const QPoint &pos)
         const QPoint drawPoint = m_currentTool == Highlighter && m_shiftHeld
             ? constrainedHighlighterPoint(m_currentAnnotation.points.first(), pos)
             : pos;
-        m_currentAnnotation.points.append(drawPoint);
+        if (!pointTooClose(m_currentAnnotation.points.last(), drawPoint))
+            m_currentAnnotation.points.append(drawPoint);
     } else {
         if (m_currentAnnotation.points.size() < 2)
             m_currentAnnotation.points.append(pos);
@@ -357,6 +367,9 @@ void AnnotationEngine::undo()
             m_annotations.removeAt(action.index);
         else if (!m_annotations.isEmpty())
             m_annotations.removeLast();
+        if (m_selectedIndex == action.index
+            || m_selectedIndex >= m_annotations.size())
+            m_selectedIndex = -1;
     } else if (action.type == HistoryAction::Remove) {
         int insertAt = qBound(0, action.index, m_annotations.size());
         m_annotations.insert(insertAt, action.annotation);
@@ -428,6 +441,10 @@ bool AnnotationEngine::eraseAnnotationAt(const QPoint &pos)
         if (annotationContainsPoint(ann, pos, 8)) {
             Annotation removed = m_annotations[i];
             m_annotations.removeAt(i);
+            if (m_selectedIndex == i)
+                m_selectedIndex = -1;
+            else if (m_selectedIndex > i)
+                --m_selectedIndex;
             pushHistory(HistoryAction::Remove, removed, i);
             recalculateCounterValue();
             return true;
@@ -448,13 +465,52 @@ int AnnotationEngine::findAnnotationAt(const QPoint &pos)
     return -1;
 }
 
+void AnnotationEngine::beginMove(int index)
+{
+    if (index < 0 || index >= m_annotations.size())
+        return;
+    if (m_moveGestureIndex != index) {
+        m_moveGestureIndex = index;
+        m_moveGestureOriginal = m_annotations[index];
+        m_moveGestureHistoryStarted = false;
+    }
+}
+
 void AnnotationEngine::moveAnnotation(int index, const QPoint &delta)
 {
-    if (index < 0 || index >= m_annotations.size()) return;
+    if (index < 0 || index >= m_annotations.size())
+        return;
+    beginMove(index); // no-op when the caller manages the gesture explicitly
+
     Annotation &ann = m_annotations[index];
     for (int i = 0; i < ann.points.size(); ++i) {
         ann.points[i] += delta;
     }
+    if (!m_moveGestureHistoryStarted
+        || m_undoStack.isEmpty()
+        || m_undoStack.size() != m_moveHistorySize
+        || m_undoStack.last().index != index) {
+        // Record the move as a single undo action (Resize actions restore the
+        // whole annotation), keeping the pre-move snapshot as previous state.
+        HistoryAction action;
+        action.type = HistoryAction::Resize;
+        action.index = index;
+        action.previousAnnotation = m_moveGestureOriginal;
+        action.annotation = ann;
+        appendHistoryAction(action);
+        m_redoStack.clear();
+        m_moveGestureHistoryStarted = true;
+        m_moveHistorySize = m_undoStack.size();
+    } else {
+        m_undoStack.last().annotation = ann;
+    }
+}
+
+void AnnotationEngine::endMove()
+{
+    m_moveGestureIndex = -1;
+    m_moveGestureHistoryStarted = false;
+    m_moveHistorySize = -1;
 }
 
 bool AnnotationEngine::isRotatableTool(Tool tool)
@@ -487,6 +543,34 @@ int AnnotationEngine::textFontSizeOf(int index) const
     return isTextAnnotation(index) ? m_annotations[index].fontSize : 0;
 }
 
+void AnnotationEngine::beginRotate(int index)
+{
+    if (!isRotatable(index))
+        return;
+    m_rotateIndex = index;
+    m_rotateOriginalDegrees = m_annotations[index].rotationDegrees;
+}
+
+void AnnotationEngine::endRotate()
+{
+    if (!isRotatable(m_rotateIndex)) {
+        m_rotateIndex = -1;
+        return;
+    }
+
+    const Annotation &rotated = m_annotations[m_rotateIndex];
+    if (!qFuzzyCompare(rotated.rotationDegrees, m_rotateOriginalDegrees)) {
+        HistoryAction action;
+        action.type = HistoryAction::Rotate;
+        action.index = m_rotateIndex;
+        action.previousRotationDegrees = m_rotateOriginalDegrees;
+        action.rotationDegrees = rotated.rotationDegrees;
+        appendHistoryAction(action);
+        m_redoStack.clear();
+    }
+    m_rotateIndex = -1;
+}
+
 void AnnotationEngine::rotateAnnotation(int index, qreal degrees)
 {
     if (!isRotatable(index))
@@ -496,13 +580,28 @@ void AnnotationEngine::rotateAnnotation(int index, qreal degrees)
     if (qFuzzyCompare(ann.rotationDegrees + 1.0, degrees + 1.0))
         return;
 
-    HistoryAction action;
-    action.type = HistoryAction::Rotate;
-    action.index = index;
-    action.previousRotationDegrees = ann.rotationDegrees;
-    action.rotationDegrees = degrees;
-    appendHistoryAction(action);
-    m_redoStack.clear();
+    if (index != m_rotateIndex) {
+        // Legacy per-move call path: fold consecutive rotations of the same
+        // annotation into one undo action instead of one entry per degree.
+        if (!m_undoStack.isEmpty()
+            && m_undoStack.last().type == HistoryAction::Rotate
+            && m_undoStack.last().index == index) {
+            ann.rotationDegrees = degrees;
+            m_undoStack.last().rotationDegrees = degrees;
+            m_redoStack.clear();
+            return;
+        }
+        HistoryAction action;
+        action.type = HistoryAction::Rotate;
+        action.index = index;
+        action.previousRotationDegrees = ann.rotationDegrees;
+        action.rotationDegrees = degrees;
+        appendHistoryAction(action);
+        m_redoStack.clear();
+        ann.rotationDegrees = degrees;
+        return;
+    }
+    // Explicit begin/end gesture: history is recorded once in endRotate().
     ann.rotationDegrees = degrees;
 }
 
@@ -662,6 +761,14 @@ bool AnnotationEngine::annotationContainsPoint(const Annotation &ann, const QPoi
         inverseTransform.translate(-center.x(), -center.y());
         transformedPos = inverseTransform.map(transformedPos);
     }
+    if (ann.tool == Text
+        && (!qFuzzyCompare(ann.textScaleX, 1.0) || !qFuzzyCompare(ann.textScaleY, 1.0))) {
+        // Invert the text scale around its anchor after the inverse rotation,
+        // mirroring the R∘S transform used when drawing scaled+rotated text.
+        const QPointF anchor = ann.points.first();
+        transformedPos = QPointF(anchor.x() + (transformedPos.x() - anchor.x()) / ann.textScaleX,
+                                 anchor.y() + (transformedPos.y() - anchor.y()) / ann.textScaleY);
+    }
     const QPoint hitPos = transformedPos.toPoint();
 
     const int tolerance = qMax(padding, ann.penWidth + 5);
@@ -689,7 +796,14 @@ bool AnnotationEngine::annotationContainsPoint(const Annotation &ann, const QPoi
     case Rectangle: {
         if (ann.points.size() < 2)
             return rawAnnotationBounds(ann, tolerance).contains(hitPos);
-        const QRect r = QRect(ann.points.first(), ann.points.last()).normalized();
+        QRect r = QRect(ann.points.first(), ann.points.last());
+        if (ann.shiftConstrained) {
+            // Match drawAnnotation's shift-constrained geometry.
+            const int side = qMin(qAbs(r.width()), qAbs(r.height()));
+            r.setWidth(r.width() < 0 ? -side : side);
+            r.setHeight(r.height() < 0 ? -side : side);
+        }
+        r = r.normalized();
         if (!r.adjusted(-tolerance, -tolerance, tolerance, tolerance).contains(hitPos))
             return false;
         const int left = qAbs(hitPos.x() - r.left());
@@ -739,8 +853,16 @@ void AnnotationEngine::pushHistory(HistoryAction::Type type, const Annotation &a
 void AnnotationEngine::appendHistoryAction(const HistoryAction &action)
 {
     constexpr qsizetype MaxUndoActions = 200;
-    if (m_undoStack.size() >= MaxUndoActions)
+    if (m_undoStack.size() >= MaxUndoActions) {
+        const HistoryAction evicted = m_undoStack.first();
         m_undoStack.removeFirst();
+        if (evicted.type == HistoryAction::Add) {
+            // Evicting an Add desynchronises the indices used by redo (and by
+            // later undos); the only safe move is dropping the whole history.
+            m_undoStack.clear();
+            m_redoStack.clear();
+        }
+    }
     m_undoStack.append(action);
 }
 

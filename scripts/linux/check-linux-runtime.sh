@@ -63,6 +63,7 @@ if gst-inspect-1.0 fdkaacenc >/dev/null 2>&1 \
     printf '[ok] GStreamer AAC encoder\n'
 else
     printf '[missing] GStreamer AAC encoder\n'
+    missing=1
 fi
 
 portal_xml=""

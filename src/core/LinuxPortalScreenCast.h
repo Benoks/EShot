@@ -58,6 +58,7 @@ private:
     uint m_response = 2;
     QVariantMap m_results;
     bool m_finished = false;
+    bool m_selectInProgress = false;
     QEventLoop *m_loop = nullptr;
 };
 

@@ -318,6 +318,7 @@ void FirstRunWizard::setupUi()
     skipDeps->setToolTip(tr("Starts EShot without installing optional recording or OCR components. You can reopen this setup from Settings later."));
     connect(skipDeps, &QPushButton::clicked, depsGroup, [this] { m_linuxExplicitSkip = true; m_linuxFfmpegCheck->setChecked(false); m_linuxOcrCheck->setChecked(false); m_linuxDesktopCheck->setChecked(false); m_linuxAppImageIntegrationCheck->setChecked(false); m_linuxInstallStatus->setText(tr("Optional setup will be skipped. Click Finish to continue.")); });
     depsLayout->addWidget(skipDeps);
+    m_skipDepsButton = skipDeps;
     m_linuxInstallStatus = new QLabel(); m_linuxInstallStatus->setWordWrap(true); depsLayout->addWidget(m_linuxInstallStatus);
     mainLayout->addWidget(depsGroup);
 #endif
@@ -679,7 +680,10 @@ void FirstRunWizard::startLinuxDependencyInstaller()
     if (args.isEmpty() && !integrate) { markLinuxSetupCompleted(); accept(); return; }
     const QString script = linuxInstallerPath();
     if (!QFileInfo::exists(script)) { m_linuxInstallStatus->setText(tr("Installer script was not found. Retry after reinstalling EShot, or skip optional setup.")); return; }
-    m_finishButton->setEnabled(false); m_linuxInstallStatus->setText(tr("Installing selected dependencies…"));
+    m_finishButton->setEnabled(false);
+    if (m_skipDepsButton)
+        m_skipDepsButton->setEnabled(false);
+    m_linuxInstallStatus->setText(tr("Installing selected dependencies…"));
     m_linuxInstallerProcess = new QProcess(this);
     QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
     environment.insert(QStringLiteral("ESHOT_LANGUAGE"), TranslationManager::langCode());
@@ -691,6 +695,8 @@ void FirstRunWizard::startLinuxDependencyInstaller()
     connect(m_linuxInstallerProcess, &QProcess::errorOccurred, this, [this](QProcess::ProcessError) {
         if (!m_linuxInstallerProcess) return;
         m_finishButton->setEnabled(true);
+        if (m_skipDepsButton)
+            m_skipDepsButton->setEnabled(true);
         m_linuxInstallStatus->setText(tr("Could not start optional setup. Click Finish to retry, or choose Skip."));
         m_linuxInstallerProcess->deleteLater(); m_linuxInstallerProcess = nullptr;
     });
@@ -698,6 +704,8 @@ void FirstRunWizard::startLinuxDependencyInstaller()
         if (!m_linuxInstallerProcess) return;
         qInfo() << "[FirstRunWizard] Optional setup exit status:" << exitCode << status;
         m_finishButton->setEnabled(true);
+        if (m_skipDepsButton)
+            m_skipDepsButton->setEnabled(true);
         if (status == QProcess::NormalExit && exitCode == 0) {
             const bool integration = m_linuxAppImageIntegrationCheck->isChecked()
                 && shouldOfferAppImageIntegration(qEnvironmentVariable("APPIMAGE"));

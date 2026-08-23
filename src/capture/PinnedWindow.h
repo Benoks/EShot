@@ -57,6 +57,7 @@ private:
     ResizeHandle getResizeHandle(const QPoint &pos) const;
     QPoint m_resizeStartGlobal;
     QSize m_resizeStartSize;
+    double m_resizeStartScale;
 
     // Close button area
     QRect closeButtonRect() const;

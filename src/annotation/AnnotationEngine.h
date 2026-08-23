@@ -72,12 +72,16 @@ public:
 
     // Annotation move
     int findAnnotationAt(const QPoint &pos);
+    void beginMove(int index);
     void moveAnnotation(int index, const QPoint &delta);
+    void endMove();
     bool isRotatable(int index) const;
     bool isTextAnnotation(int index) const;
     qreal rotationDegreesOf(int index) const;
     int textFontSizeOf(int index) const;
     void rotateAnnotation(int index, qreal degrees);
+    void beginRotate(int index);
+    void endRotate();
     void beginTextResize(int index);
     void resizeTextAnnotation(int index, const QRectF &bounds);
     void endTextResize();
@@ -152,6 +156,12 @@ private:
     int m_selectedIndex;
     int m_textResizeIndex = -1;
     Annotation m_textResizeOriginal;
+    int m_rotateIndex = -1;
+    qreal m_rotateOriginalDegrees = 0.0;
+    int m_moveGestureIndex = -1;
+    Annotation m_moveGestureOriginal;
+    bool m_moveGestureHistoryStarted = false;
+    qsizetype m_moveHistorySize = -1;
     QPixmap m_screenSnapshot;
     QRect m_selectionRect;
     qreal m_snapshotScale = 1.0;

@@ -19,7 +19,7 @@ public:
     int frameCount() const { return m_frames.size(); }
 
     void start(const QRect &captureRect, int scrollAmount, int intervalMs, int maxFrames);
-    void stop();
+    void stop(const QString &reason = QString());
 
 signals:
     void started();

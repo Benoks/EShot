@@ -29,7 +29,9 @@ bool isNewerVersion(const QString &latest, const QString &current)
 {
     QVersionNumber latestVersion = QVersionNumber::fromString(latest.trimmed());
     QVersionNumber currentVersion = QVersionNumber::fromString(current.trimmed());
-    if (latestVersion.isNull() || currentVersion.isNull())
+    if (latestVersion.isNull())
+        return false;
+    if (currentVersion.isNull())
         return latest.trimmed() != current.trimmed();
     return QVersionNumber::compare(latestVersion, currentVersion) > 0;
 }
@@ -50,9 +52,18 @@ UpdateManager::UpdateManager(QObject *parent)
 
 UpdateManager::~UpdateManager()
 {
-    if (m_checkReply) m_checkReply->abort();
-    if (m_downloadReply) m_downloadReply->abort();
-    if (m_releaseListReply) m_releaseListReply->abort();
+    if (m_checkReply) {
+        disconnect(m_checkReply, nullptr, this, nullptr);
+        m_checkReply->abort();
+    }
+    if (m_downloadReply) {
+        disconnect(m_downloadReply, nullptr, this, nullptr);
+        m_downloadReply->abort();
+    }
+    if (m_releaseListReply) {
+        disconnect(m_releaseListReply, nullptr, this, nullptr);
+        m_releaseListReply->abort();
+    }
     if (m_downloadFile) {
         m_downloadFile->close();
         delete m_downloadFile;
@@ -83,6 +94,7 @@ void UpdateManager::checkForUpdates(bool manual)
     QNetworkRequest request(url);
     request.setRawHeader("Accept", "application/vnd.github+json");
     request.setRawHeader("User-Agent", "EShot-Updater");
+    request.setTransferTimeout(30000);
     request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
 
     m_checkReply = m_network->get(request);
@@ -177,6 +189,7 @@ void UpdateManager::checkSilentUpdateEligibility()
     QNetworkRequest request(url);
     request.setRawHeader("Accept", "application/vnd.github+json");
     request.setRawHeader("User-Agent", "EShot-Updater");
+    request.setTransferTimeout(30000);
     request.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
                          QNetworkRequest::NoLessSafeRedirectPolicy);
     m_releaseListReply = m_network->get(request);
@@ -276,7 +289,13 @@ void UpdateManager::downloadInstaller()
 #else
         ? QStringLiteral("EShot_Update_%1.AppImage").arg(m_latestVersion)
 #endif
-        : m_installerName;
+        : QFileInfo(m_installerName).fileName();
+    if (fileName.isEmpty() || fileName == QLatin1String(".") || fileName == QLatin1String("..")) {
+        const QString msg = TranslationManager::updateNoInstaller();
+        setStatus(TranslationManager::updateStatusFailed(msg));
+        emit failed(msg);
+        return;
+    }
     const QString path = QDir(updateCacheDir()).filePath(fileName);
     m_downloadFile = new QFile(path);
     if (!m_downloadFile->open(QIODevice::WriteOnly | QIODevice::Truncate)) {
@@ -291,6 +310,7 @@ void UpdateManager::downloadInstaller()
 
     QNetworkRequest request{QUrl(m_installerUrl)};
     request.setRawHeader("User-Agent", "EShot-Updater");
+    request.setTransferTimeout(600000);
     request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
     m_downloadReply = m_network->get(request);
 
@@ -345,13 +365,17 @@ void UpdateManager::finishDownload()
         return;
     }
 
-#ifdef Q_OS_LINUX
-    const bool digestValid = !m_installerSha256.isEmpty()
-        && fileMatchesSha256(path, m_installerSha256);
+    // GitHub exposes a digest for AppImage assets, which is mandatory for a
+    // self-replacing Linux update. Older Windows releases do not always carry
+    // the optional digest field, so keep accepting their size-validated setup
+    // executables while verifying them whenever a digest is present.
+#ifdef Q_OS_WIN
+    const bool digestRequired = false;
 #else
-    const bool digestValid = m_installerSha256.isEmpty()
-        || fileMatchesSha256(path, m_installerSha256);
+    const bool digestRequired = true;
 #endif
+    const bool digestValid = downloadedAssetDigestIsValid(
+        path, m_installerSha256, digestRequired);
     if (!digestValid) {
         if (m_downloadFile) {
             delete m_downloadFile;
@@ -401,6 +425,7 @@ void UpdateManager::launchInstaller(const QString &installerPath)
         emit failed(msg);
         return;
     }
+    file.write(QByteArrayLiteral("\xEF\xBB\xBF"));
     file.write(script.toUtf8());
     file.close();
 

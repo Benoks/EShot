@@ -20,6 +20,7 @@ class QNetworkAccessManager;
 class QNetworkReply;
 class QGroupBox;
 class QFile;
+class QProcess;
 
 class SettingsDialog : public QDialog {
     Q_OBJECT
@@ -123,6 +124,7 @@ private:
     QString m_packageOperationStatus;
     QNetworkAccessManager *m_packageNetwork = nullptr;
     QNetworkReply *m_packageReply = nullptr;
+    QProcess *m_packageExtractProcess = nullptr;
     QFile *m_packageDownloadFile = nullptr;
     QString m_packageDownloadPath;
     qint64 m_packageExpectedSize = 0;

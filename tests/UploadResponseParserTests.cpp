@@ -9,6 +9,7 @@ class UploadResponseParserTests : public QObject
 private slots:
     void parsesTmpFilesLandingUrl();
     void parsesCurrentTmpFilesDirectUrl();
+    void trimsTrailingPunctuationFromDirectUrl();
 };
 
 void UploadResponseParserTests::parsesTmpFilesLandingUrl()
@@ -22,6 +23,15 @@ void UploadResponseParserTests::parsesCurrentTmpFilesDirectUrl()
     const QByteArray html = R"(
         <img src="https://tmpfiles.org/dl/1784410563.acf749b9bd45c45d/abc123/image.png">
         <a href="https://tmpfiles.org/dl/1784410563.acf749b9bd45c45d/abc123/image.png">Download</a>
+    )";
+    QCOMPARE(tmpFilesDirectUrl(html),
+             QUrl(QStringLiteral("https://tmpfiles.org/dl/1784410563.acf749b9bd45c45d/abc123/image.png")));
+}
+
+void UploadResponseParserTests::trimsTrailingPunctuationFromDirectUrl()
+{
+    const QByteArray html = R"(
+        <a href="https://tmpfiles.org/dl/1784410563.acf749b9bd45c45d/abc123/image.png.">Download</a>
     )";
     QCOMPARE(tmpFilesDirectUrl(html),
              QUrl(QStringLiteral("https://tmpfiles.org/dl/1784410563.acf749b9bd45c45d/abc123/image.png")));

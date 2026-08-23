@@ -25,7 +25,8 @@ void DebouncedSettingsWriter::schedule(const QString &key, const QVariant &value
     if (key.isEmpty())
         return;
     m_pendingValues.insert(key, value);
-    m_timer.start();
+    if (!m_timer.isActive())
+        m_timer.start();
 }
 
 void DebouncedSettingsWriter::flush()

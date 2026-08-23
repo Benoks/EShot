@@ -90,6 +90,11 @@ jobs:
       - name: Build
         run: cmake --build "${{ env.BUILD_DIR }}" --parallel
 
+      - name: Test
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: ctest --test-dir "${{ env.BUILD_DIR }}" --output-on-failure
+
       - name: Install
         run: >
           cmake --install "${{ env.BUILD_DIR }}"

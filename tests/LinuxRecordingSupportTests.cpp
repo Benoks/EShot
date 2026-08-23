@@ -49,12 +49,21 @@ private slots:
         QVERIFY(preferredGstAacEncoder({}).isEmpty());
     }
 
+    void choosesEncoderFromGstInspectCatalogOutput()
+    {
+        QCOMPARE(preferredGstAacEncoder({
+                     QStringLiteral("fdkaac:  fdkaacenc: FDK AAC audio encoder"),
+                     QStringLiteral("libav:  avenc_aac: libav AAC audio encoder")}),
+                 QStringLiteral("fdkaacenc"));
+    }
+
     void exposesFriendlyMicrophoneLabelsAndIds()
     {
         const QString pactl = QStringLiteral(
             "Source #12\n\tName: alsa_output.headset.monitor\n\tDescription: Monitor of Headset\n\tMonitor of Sink: alsa_output.headset\n"
             "Source #13\n\tName: alsa_input.headset.mono-fallback\n\tDescription: G432 Gaming Headset Mono\n\tMonitor of Sink: n/a\n"
-            "Source #14\n\tName: easyeffects_source\n\tDescription: Easy Effects Source\n\tMonitor of Sink: n/a\n");
+            "Source #14\n\tName: easyeffects_source\n\tDescription: Easy Effects Source\n\tMonitor of Sink: n/a\n"
+            "Source #15\n\tName: alsa_output.speakers.monitor\n\tDescription: Monitor of Speakers\n\tMonitor of Source: alsa_output.speakers\n");
         const auto devices = linuxMicrophoneDevices(pactl);
         QCOMPARE(devices.size(), 2);
         QCOMPARE(devices.at(0).first, QStringLiteral("G432 Gaming Headset Mono"));

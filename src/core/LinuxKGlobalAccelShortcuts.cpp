@@ -161,6 +161,19 @@ bool LinuxKGlobalAccelShortcuts::setShortcuts(const QHash<int, QPair<UINT, UINT>
     return ensureSignalConnection();
 }
 
+void LinuxKGlobalAccelShortcuts::deRegisterShortcut(int id)
+{
+    QDBusInterface accel(QString::fromLatin1(Service), QString::fromLatin1(RootPath),
+                         QString::fromLatin1(RootInterface), QDBusConnection::sessionBus());
+    const QStringList shortcutId = actionId(id);
+    const QDBusReply<void> removed = accel.call(QStringLiteral("deRegisterShortcut"), shortcutId);
+    if (!removed.isValid()) {
+        qWarning() << "[HotkeyManager] KGlobalAccel deRegisterShortcut failed:"
+                   << removed.error().name() << removed.error().message();
+    }
+    m_ids.remove(shortcutId.at(1));
+}
+
 bool LinuxKGlobalAccelShortcuts::ensureSignalConnection()
 {
     QDBusInterface accel(QString::fromLatin1(Service), QString::fromLatin1(RootPath),

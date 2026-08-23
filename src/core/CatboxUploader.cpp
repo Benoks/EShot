@@ -1,4 +1,5 @@
 #include "CatboxUploader.h"
+#include "SecureCredentialStore.h"
 #include "TranslationManager.h"
 #include <QNetworkRequest>
 #include <QNetworkReply>
@@ -10,10 +11,31 @@
 #include <QSettings>
 #include <QDebug>
 
+namespace {
+QString sanitizedFileName(const QString &filePath)
+{
+    QString name = QFileInfo(filePath).fileName();
+    QString sanitized;
+    sanitized.reserve(name.size());
+    for (const QChar &c : name) {
+        const ushort u = c.unicode();
+        if (u >= 0x20 && u != 0x7f && c != QLatin1Char('"'))
+            sanitized.append(c);
+    }
+    return sanitized;
+}
+}
+
 CatboxUploader::CatboxUploader(QObject *parent) : ImageUploader(parent)
 {
-    QSettings s("EShot", "EShot");
-    m_userHash = s.value("catboxUserHash").toString();
+    m_userHash = SecureCredentialStore::read(QStringLiteral("catboxUserHash")).trimmed();
+    if (m_userHash.isEmpty()) {
+        QSettings s("EShot", "EShot");
+        m_userHash = SecureCredentialStore::migrateLegacyToken(
+            s, QStringLiteral("catboxUserHash"), [](const QString &key, const QString &token) {
+                return token.isEmpty() || SecureCredentialStore::write(key, token);
+            }).trimmed();
+    }
 }
 
 CatboxUploader::~CatboxUploader()
@@ -34,8 +56,7 @@ QString CatboxUploader::authPlaceholder() const
 void CatboxUploader::setUserHash(const QString &hash)
 {
     m_userHash = hash.trimmed();
-    QSettings s("EShot", "EShot");
-    s.setValue("catboxUserHash", m_userHash);
+    SecureCredentialStore::write(QStringLiteral("catboxUserHash"), m_userHash);
 }
 
 void CatboxUploader::upload()
@@ -70,8 +91,8 @@ void CatboxUploader::upload()
     QHttpPart filePart;
     filePart.setHeader(QNetworkRequest::ContentTypeHeader, QVariant(QStringLiteral("image/png")));
     filePart.setHeader(QNetworkRequest::ContentDispositionHeader,
-                       QVariant(QStringLiteral("form-data; name=\"fileToUpload\"; filename=\"%1\"")
-                                    .arg(QFileInfo(imagePath()).fileName())));
+                   QVariant(QStringLiteral("form-data; name=\"fileToUpload\"; filename=\"%1\"")
+                                .arg(sanitizedFileName(imagePath()))));
     QFile *file = new QFile(imagePath(), m_multipart);
     if (!file->open(QIODevice::ReadOnly)) {
         delete m_multipart;
@@ -108,7 +129,7 @@ void CatboxUploader::upload()
             finishWithError(TranslationManager::uploadErrorNetwork(errStr));
             return;
         }
-        if (code != 200) {
+        if (code < 200 || code >= 300) {
             finishWithError(TranslationManager::uploadErrorHttp(code));
             return;
         }

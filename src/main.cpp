@@ -103,6 +103,9 @@ void prepareKWinScreenshotPermission()
         return;
     }
 
+    // KWin checks the service cache before allowing ScreenShot2 access. Wait
+    // for this small, one-time rebuild so the very first capture is not raced
+    // against authorization setup.
     QElapsedTimer timer;
     timer.start();
     const int exitCode = QProcess::execute(cacheBuilder, {});
@@ -239,8 +242,12 @@ public slots:
 
     void onCaptureCompleted(const QPixmap &pixmap)
     {
-        if (m_skipNextCaptureNotification) {
-            m_skipNextCaptureNotification = false;
+        // Suppress only a capture-completed notification that arrives shortly
+        // after a save (the save shows its own notification); stale tokens
+        // must not swallow later captures.
+        if (m_skipNextCaptureNotificationMs > 0
+            && QDateTime::currentMSecsSinceEpoch() - m_skipNextCaptureNotificationMs < 2000) {
+            m_skipNextCaptureNotificationMs = 0;
             return;
         }
         m_lastNotificationPath.clear();
@@ -254,7 +261,7 @@ public slots:
     void onCaptureSaved(const QString &path)
     {
         m_lastNotificationPath = path;
-        m_skipNextCaptureNotification = true;
+        m_skipNextCaptureNotificationMs = QDateTime::currentMSecsSinceEpoch();
         if (m_trayIcon && m_showNotifications && m_notifySave) {
             QTimer::singleShot(250, this, [this, path]() {
                 if (!m_trayIcon || !m_showNotifications || !m_notifySave)
@@ -341,10 +348,12 @@ public slots:
         }
         dlg.show();
         QApplication::processEvents(); // Let ARM64 DWM finalize frame geometry and draw the title bar
-        if (QScreen *screen = QGuiApplication::screenAt(QCursor::pos())) {
-            if (!screen) screen = QGuiApplication::primaryScreen();
+        QScreen *screen = QGuiApplication::screenAt(QCursor::pos());
+        if (!screen)
+            screen = QGuiApplication::primaryScreen();
+        if (screen) {
             QRect avail = screen->availableGeometry();
-            
+
             if (settingsDialogUsesAdaptiveSize(dlg.remembersWindowSize())) {
                 // Programmatically simulate a user resize to force layout compression and fix Sandbox double-render.
                 dlg.resize(dlg.minimumSizeHint());
@@ -436,10 +445,12 @@ public slots:
         }
         dlg.show();
         QApplication::processEvents();
-        if (QScreen *screen = QGuiApplication::screenAt(QCursor::pos())) {
-            if (!screen) screen = QGuiApplication::primaryScreen();
+        QScreen *screen = QGuiApplication::screenAt(QCursor::pos());
+        if (!screen)
+            screen = QGuiApplication::primaryScreen();
+        if (screen) {
             QRect avail = screen->availableGeometry();
-            
+
             dlg.resize(dlg.minimumSizeHint());
             QApplication::processEvents();
             
@@ -453,6 +464,8 @@ public slots:
 
     void onCloseAllPins()
     {
+        // Prune dangling QPointers left behind by closed pin windows.
+        m_pinnedWindows.removeAll(QPointer<PinnedWindow>());
         for (auto &w : m_pinnedWindows) {
             if (w) w->close();
         }
@@ -624,6 +637,7 @@ public slots:
                     m_screenRecorder->cancel();
                 if (m_recordingIndicator) {
                     m_recordingIndicator->stop();
+                    m_recordingIndicator->deleteLater();
                     m_recordingIndicator = nullptr;
                 }
             });
@@ -634,7 +648,7 @@ public slots:
 
     void onRecordingStopped(QString outputPath)
     {
-        if (m_recordingIndicator) { m_recordingIndicator->stop(); m_recordingIndicator = nullptr; }
+        if (m_recordingIndicator) { m_recordingIndicator->stop(); m_recordingIndicator->deleteLater(); m_recordingIndicator = nullptr; }
         if (m_trayIcon && m_showNotifications && m_notifyGif) {
             QFileInfo fi(outputPath);
             showSuccessNotification(TranslationManager::recordingSaved() + QStringLiteral("\n") + QDir::toNativeSeparators(fi.absoluteFilePath()),
@@ -645,7 +659,7 @@ public slots:
 
     void onRecordingFailed(QString reason)
     {
-        if (m_recordingIndicator) { m_recordingIndicator->stop(); m_recordingIndicator = nullptr; }
+        if (m_recordingIndicator) { m_recordingIndicator->stop(); m_recordingIndicator->deleteLater(); m_recordingIndicator = nullptr; }
         m_lastNotificationPath.clear();
         reason = localizedRecordingFailureReason(reason);
         showFailureNotification(TranslationManager::recordingFailed() + QStringLiteral(": ") + reason,
@@ -693,7 +707,7 @@ public slots:
             connect(m_recordingIndicator, &RecordingIndicator::cancelRequested, this, [this]() {
                 if (m_videoRecorder && m_videoRecorder->isRecording())
                     m_videoRecorder->cancel();
-                if (m_recordingIndicator) { m_recordingIndicator->stop(); m_recordingIndicator = nullptr; }
+                if (m_recordingIndicator) { m_recordingIndicator->stop(); m_recordingIndicator->deleteLater(); m_recordingIndicator = nullptr; }
             });
             m_recordingIndicator->startCaptureSafePresentation();
         }
@@ -702,7 +716,7 @@ public slots:
 
     void onVideoRecordingStopped(QString outputPath)
     {
-        if (m_recordingIndicator) { m_recordingIndicator->stop(); m_recordingIndicator = nullptr; }
+        if (m_recordingIndicator) { m_recordingIndicator->stop(); m_recordingIndicator->deleteLater(); m_recordingIndicator = nullptr; }
         if (m_trayIcon && m_showNotifications && m_notifyVideo) {
             QFileInfo fi(outputPath);
             showSuccessNotification(TranslationManager::videoSaved() + QStringLiteral("\n") + QDir::toNativeSeparators(fi.absoluteFilePath()),
@@ -713,7 +727,7 @@ public slots:
 
     void onVideoRecordingFailed(QString reason)
     {
-        if (m_recordingIndicator) { m_recordingIndicator->stop(); m_recordingIndicator = nullptr; }
+        if (m_recordingIndicator) { m_recordingIndicator->stop(); m_recordingIndicator->deleteLater(); m_recordingIndicator = nullptr; }
         m_lastNotificationPath.clear();
         reason = localizedRecordingFailureReason(reason);
         showFailureNotification(TranslationManager::videoFailed() + QStringLiteral(": ") + reason,
@@ -824,6 +838,7 @@ private:
                     m_screenRecorder->cancel();
                 if (m_recordingIndicator) {
                     m_recordingIndicator->stop();
+                    m_recordingIndicator->deleteLater();
                     m_recordingIndicator = nullptr;
                 }
             });
@@ -915,6 +930,7 @@ private:
         connect(m_overlay, &CaptureOverlay::videoCaptureRequested, this, &EShotApp::onRecordVideoSelected);
         connect(m_overlay, &CaptureOverlay::pinnedWindowCreated, this, [this](PinnedWindow *w) {
             m_pinnedWindows.append(QPointer<PinnedWindow>(w));
+            m_pinnedWindows.removeAll(QPointer<PinnedWindow>());
         });
         // Pre-warm: force first paint of overlay + toolbar offscreen at startup
         // to avoid 2-3 s stall on first user capture.
@@ -949,10 +965,10 @@ private:
         connect(&HotkeyManager::instance(), &HotkeyManager::recordingCancelRequested, this, [this]() {
             if (m_videoRecorder && m_videoRecorder->isRecording()) {
                 m_videoRecorder->cancel();
-                if (m_recordingIndicator) { m_recordingIndicator->stop(); m_recordingIndicator = nullptr; }
+                if (m_recordingIndicator) { m_recordingIndicator->stop(); m_recordingIndicator->deleteLater(); m_recordingIndicator = nullptr; }
             } else if (m_screenRecorder && m_screenRecorder->isRecording()) {
                 m_screenRecorder->cancel();
-                if (m_recordingIndicator) { m_recordingIndicator->stop(); m_recordingIndicator = nullptr; }
+                if (m_recordingIndicator) { m_recordingIndicator->stop(); m_recordingIndicator->deleteLater(); m_recordingIndicator = nullptr; }
             }
         });
     }
@@ -1046,7 +1062,7 @@ private:
 #if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
     LinuxDesktopNotification *m_linuxNotification = nullptr;
 #endif
-    bool m_skipNextCaptureNotification = false;
+    qint64 m_skipNextCaptureNotificationMs = 0;
     bool m_hotkeysInitialized = false;
     QList<QPointer<PinnedWindow>> m_pinnedWindows;
     ScreenRecorder *m_screenRecorder = nullptr;
@@ -1322,9 +1338,14 @@ int main(int argc, char *argv[])
     }
 
     const QString instanceName = QStringLiteral("EShot.SingleInstance");
-    QLocalSocket instanceSocket;
-    instanceSocket.connectToServer(instanceName);
-    if (instanceSocket.waitForConnected(150)) {
+    // Returns true if the command was forwarded to an already-running instance.
+    auto forwardToRunningInstance = [&parser, &controlOption, &captureOption,
+                                     &settingsOption, &saveOption, &quitOption,
+                                     &instanceName]() {
+        QLocalSocket socket;
+        socket.connectToServer(instanceName);
+        if (!socket.waitForConnected(150))
+            return false;
         const auto command = parser.isSet(controlOption)
             ? ApplicationInstanceCommand::Control
             : ApplicationInstanceCommand::fromInvocation(
@@ -1332,22 +1353,32 @@ int main(int argc, char *argv[])
                 parser.isSet(saveOption), parser.isSet(quitOption), true);
         const QByteArray wireCommand = ApplicationInstanceCommand::toWire(command);
         if (!wireCommand.isEmpty()) {
-            instanceSocket.write(wireCommand);
-            instanceSocket.waitForBytesWritten(500);
+            socket.write(wireCommand);
+            socket.waitForBytesWritten(500);
         }
-        instanceSocket.disconnectFromServer();
+        socket.disconnectFromServer();
         qDebug() << "[EShot] Forwarded command to the running instance:"
                  << wireCommand.trimmed();
+        return true;
+    };
+    if (forwardToRunningInstance())
         return 0;
-    }
 
     if (parser.isSet(quitOption))
         return 0;
 
-    QLocalServer::removeServer(instanceName);
     QLocalServer instanceServer;
     if (!instanceServer.listen(instanceName)) {
-        qWarning() << "[EShot] Could not create single-instance lock:" << instanceServer.errorString();
+        // Another instance may have grabbed the lock between the probe above
+        // and this listen() call. Retry the connection before removing the
+        // socket file so a live server is never clobbered.
+        if (forwardToRunningInstance())
+            return 0;
+        // Stale socket file left behind by a crashed instance.
+        QLocalServer::removeServer(instanceName);
+        if (!instanceServer.listen(instanceName)) {
+            qWarning() << "[EShot] Could not create single-instance lock:" << instanceServer.errorString();
+        }
     }
     const bool silent = parser.isSet(silentOption);
     const bool controlRequested = parser.isSet(controlOption)
@@ -1398,10 +1429,12 @@ int main(int argc, char *argv[])
             wizard->setAttribute(Qt::WA_DeleteOnClose);
             wizard->show();
             QApplication::processEvents();
-            if (QScreen *screen = QGuiApplication::screenAt(QCursor::pos())) {
-                if (!screen) screen = QGuiApplication::primaryScreen();
+            QScreen *screen = QGuiApplication::screenAt(QCursor::pos());
+            if (!screen)
+                screen = QGuiApplication::primaryScreen();
+            if (screen) {
                 QRect avail = screen->availableGeometry();
-                
+
                 const int targetWidth = qMin(680, qMax(wizard->minimumWidth(), avail.width() - 40));
                 const int targetHeight = qMin(760, qMax(wizard->minimumHeight(), avail.height() - 80));
                 wizard->resize(targetWidth, targetHeight);
@@ -1430,8 +1463,9 @@ int main(int argc, char *argv[])
         } else {
             QFileInfo fi(cliSavePath);
             QDir().mkpath(fi.absolutePath());
+            // Do not persist savePath here: a one-shot --save invocation must
+            // not permanently change the configured save directory.
             QSettings s("EShot", "EShot");
-            s.setValue("savePath", fi.absolutePath());
             s.setValue("cliSaveFullPath", fi.absoluteFilePath());
         }
     }

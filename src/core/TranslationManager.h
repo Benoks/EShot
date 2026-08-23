@@ -4,6 +4,7 @@
 #include <QString>
 #include <QSettings>
 #include <QLocale>
+#include <QHash>
 #include <cstring>
 
 class TranslationManager {
@@ -61,11 +62,19 @@ public:
     };
 
     static QString tr(const char *key) {
-        for (int i = s_transCount - 1; i >= 0; --i) {
-            if (std::strcmp(s_trans[i].key, key) == 0) {
-                return QString::fromUtf8(s_trans[i].vals[static_cast<int>(m_lang)]);
-            }
-        }
+        // Lazy-built hash lookup: forward iteration + insert makes later
+        // duplicate rows overwrite earlier ones, so the last duplicate wins —
+        // the same precedence as the previous reverse linear scan.
+        static const QHash<QByteArray, const Trans *> cache = [] {
+            QHash<QByteArray, const Trans *> table;
+            table.reserve(s_transCount);
+            for (int i = 0; i < s_transCount; ++i)
+                table.insert(s_trans[i].key, &s_trans[i]);
+            return table;
+        }();
+        const auto it = cache.constFind(key);
+        if (it != cache.constEnd())
+            return QString::fromUtf8(it.value()->vals[static_cast<int>(m_lang)]);
         return QString::fromUtf8(key);
     }
 
@@ -422,6 +431,7 @@ public:
     static QString uploadAuthHelpYandex() { return tr("uploadAuthHelpYandex"); }
     static QString uploadAuthHelpGoogleDrive() { return tr("uploadAuthHelpGoogleDrive"); }
     static QString uploadAuthHelpCatbox() { return tr("uploadAuthHelpCatbox"); }
+    static QString uploadAuthSaved()  { return tr("uploadAuthSaved"); }
     static QString uploadAuthHelpApiKey(const QString &service) { return tr("uploadAuthHelpApiKey").arg(service); }
     static QString uploadErrorInProgress() { return tr("uploadErrorInProgress"); }
     static QString uploadErrorImageMissing() { return tr("uploadErrorImageMissing"); }
@@ -593,9 +603,9 @@ private:
         {"toolLine",       {"Çizgi (L)", "Line (L)", "Linie (L)", "Ligne (L)", "Línea (L)", "線 (L)", "线条 (L)", "Линия (L)"}},
         {"toolColor",      {"Renk Seç", "Pick Color", "Farbe wählen", "Couleur", "Elegir color", "色を選択", "选择颜色", "Выбрать цвет"}},
         {"toolWidth",      {"Kalınlık", "Width", "Breite", "Épaisseur", "Grosor", "太さ", "粗细", "Толщина"}},
-        {"toolFont",       {"Yazi Tipi", "Font", "Schriftart", "Police", "Fuente", "Font", "Font", "Font"}},
+        {"toolFont",       {"Yazi Tipi", "Font", "Schriftart", "Police", "Fuente", "フォント", "字体", "Шрифт"}},
         {"toolFontSize",   {"Yazi Boyutu", "Font Size", "Schriftgroesse", "Taille de police", "Tamano de fuente", "Font Size", "Font Size", "Font Size"}},
-        {"toolMove",       {"Tasi", "Move", "Verschieben", "Deplacer", "Mover", "Move", "Move", "Move"}},
+        {"toolMove",       {"Tasi", "Move", "Verschieben", "Deplacer", "Mover", "移動", "移动", "Переместить"}},
         {"toolUndo",       {"Geri Al (Ctrl+Z)", "Undo (Ctrl+Z)", "Rückgängig (Strg+Z)", "Annuler (Ctrl+Z)", "Deshacer (Ctrl+Z)", "元に戻す (Ctrl+Z)", "撤销 (Ctrl+Z)", "Отменить (Ctrl+Z)"}},
         {"toolRedo",       {"İleri Al (Ctrl+Y)", "Redo (Ctrl+Y)", "Wiederholen (Strg+Y)", "Rétablir (Ctrl+Y)", "Rehacer (Ctrl+Y)", "やり直し (Ctrl+Y)", "重做 (Ctrl+Y)", "Повторить (Ctrl+Y)"}},
         {"actionPin",      {"Ekrana Sabitle", "Pin to Screen", "Heften", "Épingler", "Fijar", "ピン留め", "固定", "Закрепить"}},
@@ -611,7 +621,7 @@ private:
         {"visualSearchAction", {"Görselle Ara", "Search by Image", "Mit Bild suchen", "Rechercher par image", "Buscar por imagen", "画像で検索", "以图搜索", "Поиск по картинке"}},
         {"visualSearchGoogleTooltip", {"Google Lens ile ara", "Search with Google Lens", "Mit Google Lens suchen", "Rechercher avec Google Lens", "Buscar con Google Lens", "Google Lens で検索", "使用 Google Lens 搜索", "Искать через Google Lens"}},
         {"visualSearchYandexTooltip", {"Yandex Görseller ile ara", "Search with Yandex Images", "Mit Yandex Bilder suchen", "Rechercher avec Yandex Images", "Buscar con Yandex Imágenes", "Yandex Images で検索", "使用 Yandex 图片搜索", "Искать через Yandex Картинки"}},
-        {"toolEyedropper", {"Renk Seçici", "Eyedropper", "Pipette", "Pipette", "Cuentagotas", " eyedropper", "取色器", "Пипетка"}},
+        {"toolEyedropper", {"Renk Seçici", "Eyedropper", "Pipette", "Pipette", "Cuentagotas", "Eyedropper", "取色器", "Пипетка"}},
         {"toolSemiRect",   {"Saydam Kare", "Semi-Transparent", "Halbtransparent", "Semi-transparent", "Semi-transparente", "半透明", "半透明矩形", "Полупрозрачный"}},
         {"toolBlurIntensity",{"Bulanıklık Şiddeti", "Blur Intensity", "Unschärfeintensität", "Intensité du flou", "Intensidad de desenfoque", "ぼかし強度", "模糊强度", "Сила размытия"}},
 
@@ -802,6 +812,7 @@ private:
         {"uploadAuthHelpYandex",{"Yandex Disk icin Data access altında cloud_api:disk.write ve cloud_api:disk.read izinleri olan OAuth access_token gerekir. Client ID, Client secret veya code degil; tokeni ya da access_token iceren tam yonlendirme URL'sini yapistirin. <a href=\"https://yandex.com/dev/disk-api/doc/en/concepts/quickstart\">Disk API</a> | <a href=\"https://yandex.com/dev/id/doc/en/tokens/debug-token\">Token alma</a>", "Yandex Disk needs an OAuth access_token with cloud_api:disk.write and cloud_api:disk.read enabled under Data access. Do not paste the Client ID, Client secret, or code; paste the token or the full redirect URL that contains access_token. <a href=\"https://yandex.com/dev/disk-api/doc/en/concepts/quickstart\">Disk API</a> | <a href=\"https://yandex.com/dev/id/doc/en/tokens/debug-token\">Get token</a>", "Yandex Disk needs an OAuth access_token with cloud_api:disk.write and cloud_api:disk.read enabled under Data access. Do not paste the Client ID, Client secret, or code; paste the token or the full redirect URL that contains access_token. <a href=\"https://yandex.com/dev/disk-api/doc/en/concepts/quickstart\">Disk API</a> | <a href=\"https://yandex.com/dev/id/doc/en/tokens/debug-token\">Get token</a>", "Yandex Disk needs an OAuth access_token with cloud_api:disk.write and cloud_api:disk.read enabled under Data access. Do not paste the Client ID, Client secret, or code; paste the token or the full redirect URL that contains access_token. <a href=\"https://yandex.com/dev/disk-api/doc/en/concepts/quickstart\">Disk API</a> | <a href=\"https://yandex.com/dev/id/doc/en/tokens/debug-token\">Get token</a>", "Yandex Disk needs an OAuth access_token with cloud_api:disk.write and cloud_api:disk.read enabled under Data access. Do not paste the Client ID, Client secret, or code; paste the token or the full redirect URL that contains access_token. <a href=\"https://yandex.com/dev/disk-api/doc/en/concepts/quickstart\">Disk API</a> | <a href=\"https://yandex.com/dev/id/doc/en/tokens/debug-token\">Get token</a>", "Yandex Disk needs an OAuth access_token with cloud_api:disk.write and cloud_api:disk.read enabled under Data access. Do not paste the Client ID, Client secret, or code; paste the token or the full redirect URL that contains access_token. <a href=\"https://yandex.com/dev/disk-api/doc/en/concepts/quickstart\">Disk API</a> | <a href=\"https://yandex.com/dev/id/doc/en/tokens/debug-token\">Get token</a>", "Yandex Disk needs an OAuth access_token with cloud_api:disk.write and cloud_api:disk.read enabled under Data access. Do not paste the Client ID, Client secret, or code; paste the token or the full redirect URL that contains access_token. <a href=\"https://yandex.com/dev/disk-api/doc/en/concepts/quickstart\">Disk API</a> | <a href=\"https://yandex.com/dev/id/doc/en/tokens/debug-token\">Get token</a>", "Yandex Disk needs an OAuth access_token with cloud_api:disk.write and cloud_api:disk.read enabled under Data access. Do not paste the Client ID, Client secret, or code; paste the token or the full redirect URL that contains access_token. <a href=\"https://yandex.com/dev/disk-api/doc/en/concepts/quickstart\">Disk API</a> | <a href=\"https://yandex.com/dev/id/doc/en/tokens/debug-token\">Get token</a>"}},
         {"uploadAuthHelpGoogleDrive",{"Google Drive icin OAuth Playground access_token gerekir. Tokeni ya da Playground JSON yanitini yapistirin. <a href=\"https://github.com/Benoks/EShot#google-drive-token-setup\">README adimlari</a>", "Google Drive needs an OAuth Playground access_token. Paste the token or the full Playground JSON response. <a href=\"https://github.com/Benoks/EShot#google-drive-token-setup\">README steps</a>", "Google Drive needs an OAuth Playground access_token. Paste the token or the full Playground JSON response. <a href=\"https://github.com/Benoks/EShot#google-drive-token-setup\">README steps</a>", "Google Drive needs an OAuth Playground access_token. Paste the token or the full Playground JSON response. <a href=\"https://github.com/Benoks/EShot#google-drive-token-setup\">README steps</a>", "Google Drive needs an OAuth Playground access_token. Paste the token or the full Playground JSON response. <a href=\"https://github.com/Benoks/EShot#google-drive-token-setup\">README steps</a>", "Google Drive needs an OAuth Playground access_token. Paste the token or the full Playground JSON response. <a href=\"https://github.com/Benoks/EShot#google-drive-token-setup\">README steps</a>", "Google Drive needs an OAuth Playground access_token. Paste the token or the full Playground JSON response. <a href=\"https://github.com/Benoks/EShot#google-drive-token-setup\">README steps</a>", "Google Drive needs an OAuth Playground access_token. Paste the token or the full Playground JSON response. <a href=\"https://github.com/Benoks/EShot#google-drive-token-setup\">README steps</a>"}},
         {"uploadAuthHelpCatbox",{"Catbox user hash isteğe bağlıdır. Boş bırakırsanız anonim yüklenir; user hash girerseniz dosya hesabınızda görünür.", "Catbox user hash is optional. Leave it empty for anonymous upload, or paste your user hash to attach uploads to your account.", "Der Catbox-User-Hash ist optional. Leer lassen für anonymes Hochladen oder einfügen, damit Uploads Ihrem Konto zugeordnet werden.", "Le hash utilisateur Catbox est facultatif. Laissez vide pour un envoi anonyme ou collez votre hash pour lier les envois à votre compte.", "El hash de usuario de Catbox es opcional. Déjalo vacío para subir de forma anónima o pégalo para vincular las subidas a tu cuenta.", "Catbox ユーザーハッシュは任意です。匿名アップロードなら空のまま、アカウントに紐付ける場合は貼り付けてください。", "Catbox 用户哈希是可选的。留空即匿名上传；粘贴用户哈希可将上传关联到你的账户。", "User hash Catbox необязателен. Оставьте пустым для анонимной загрузки или вставьте hash, чтобы привязать файлы к аккаунту."}},
+        {"uploadAuthSaved", {"Kimlik bilgisi kaydedildi.", "Credentials saved.", "Anmeldedaten gespeichert.", "Identifiants enregistrés.", "Credenciales guardadas.", "認証情報を保存しました。", "凭据已保存。", "Учётные данные сохранены."}},
         {"uploadAuthHelpApiKey",{"%1 API key gerekir. API key'i servisin API/account sayfasından alın ve buraya yapıştırın.", "%1 needs an API key. Get it from the service API/account page and paste it here.", "%1 needs an API key. Get it from the service API/account page and paste it here.", "%1 needs an API key. Get it from the service API/account page and paste it here.", "%1 needs an API key. Get it from the service API/account page and paste it here.", "%1 needs an API key. Get it from the service API/account page and paste it here.", "%1 needs an API key. Get it from the service API/account page and paste it here.", "%1 needs an API key. Get it from the service API/account page and paste it here."}},
         {"uploadErrorInProgress",{"Yükleme zaten devam ediyor", "Upload already in progress", "Upload läuft bereits", "Téléversement déjà en cours", "La subida ya está en curso", "アップロードは既に進行中です", "上传已在进行中", "Загрузка уже выполняется"}},
         {"uploadErrorImageMissing",{"Yüklenecek görsel yok", "Image missing", "Bild fehlt", "Image manquante", "Falta la imagen", "画像がありません", "缺少图片", "Нет изображения"}},

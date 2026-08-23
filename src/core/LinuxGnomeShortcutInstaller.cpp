@@ -155,6 +155,12 @@ Result installCaptureShortcut(const QString &command, const QString &binding)
     }
 
     QStringList paths = parseStringArray(pathsValue);
+    // Re-read the array immediately before the write to shrink the
+    // read-modify-write race with other tools editing the same key.
+    QString rereadValue;
+    if (runGSettings({QStringLiteral("get"), QString::fromLatin1(MediaKeysSchema),
+                      QStringLiteral("custom-keybindings")}, &rereadValue, &error))
+        paths = parseStringArray(rereadValue);
     if (!paths.contains(QString::fromLatin1(CustomPath))) {
         paths.append(QString::fromLatin1(CustomPath));
         if (!setValue(QString::fromLatin1(MediaKeysSchema),
@@ -231,6 +237,12 @@ Result uninstallCaptureShortcut(bool restoreBuiltInPrintScreen)
     }
 
     QStringList paths = parseStringArray(pathsValue);
+    // Re-read the array immediately before the write to shrink the
+    // read-modify-write race with other tools editing the same key.
+    QString rereadValue;
+    if (runGSettings({QStringLiteral("get"), QString::fromLatin1(MediaKeysSchema),
+                      QStringLiteral("custom-keybindings")}, &rereadValue, &error))
+        paths = parseStringArray(rereadValue);
     if (paths.removeAll(QString::fromLatin1(CustomPath)) > 0
         && !setValue(QString::fromLatin1(MediaKeysSchema),
                      QStringLiteral("custom-keybindings"),

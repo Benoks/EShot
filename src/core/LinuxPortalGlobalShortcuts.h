@@ -56,11 +56,15 @@ private:
     void disconnectBindRequests();
     void createSession();
     void bindShortcuts();
+#if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
+    void updateAssignedTriggers(const QVariantMap &results);
+#endif
     void closeSession();
     QString shortcutIdForInt(int id) const;
     QString descriptionForInt(int id) const;
     QHash<int, QPair<UINT, UINT>> m_shortcuts;
     QHash<QString, int> m_ids;
+    QHash<QString, QString> m_triggers;
     QString m_sessionHandle;
     bool m_available = false;
     bool m_createPending = false;

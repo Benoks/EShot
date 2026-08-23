@@ -234,6 +234,9 @@ VideoRecorder::~VideoRecorder()
 {
     if (isRecording())
         cancel();
+    // cancel() is asynchronous (the encoder exits via the event loop), so make
+    // sure the system-audio thread is joined here; the call is idempotent.
+    stopSystemAudioCapture();
     cleanupMuxProcess();
 }
 
@@ -498,7 +501,7 @@ void VideoRecorder::stop()
         resume();
     m_stopping = true;
 #if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
-    if (m_usesGStreamer)
+    if (m_usesGStreamer && m_process->processId() > 0)
         QProcess::execute(QStringLiteral("kill"),
                           {QStringLiteral("-INT"), QString::number(m_process->processId())});
     else
@@ -506,12 +509,15 @@ void VideoRecorder::stop()
 #else
     m_process->write("q\n");
 #endif
-    QTimer::singleShot(2500, this, [this]() {
-        if (m_process && m_recording)
+    // Capture the process pointer so a fast stop()->start() cannot make these
+    // deferred timers tear down the NEW recording's encoder process.
+    QProcess *process = m_process;
+    QTimer::singleShot(2500, this, [this, process]() {
+        if (m_process == process && m_recording)
             m_process->terminate();
     });
-    QTimer::singleShot(5000, this, [this]() {
-        if (m_process && m_recording)
+    QTimer::singleShot(5000, this, [this, process]() {
+        if (m_process == process && m_recording)
             m_process->kill();
     });
 }
@@ -618,10 +624,6 @@ void VideoRecorder::onProcessFinished(int exitCode, QProcess::ExitStatus status)
         if (startSystemAudioMux())
             return;
         emit recordingFailed(QStringLiteral("failed to start system audio mux"));
-        return;
-    }
-    if (!ok) {
-        emit recordingFailed(QStringLiteral("failed to mux system audio"));
         return;
     }
 

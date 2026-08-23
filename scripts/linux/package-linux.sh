@@ -30,6 +30,13 @@ if command -v dpkg-deb >/dev/null 2>&1; then
     "${deb_root}/usr/share/metainfo/io.github.benoks.EShot.metainfo.xml"
   install -Dm644 "${repo_root}/LICENSE" "${deb_root}/usr/share/doc/eshot/copyright"
   install -Dm644 "${repo_root}/README.md" "${deb_root}/usr/share/doc/eshot/README.md"
+  # Mirror the CMake install layout: runtime helper scripts go to lib/eshot.
+  install -Dm755 "${repo_root}/scripts/linux/runtime-common.sh" \
+    "${deb_root}/usr/lib/eshot/runtime-common.sh"
+  install -Dm755 "${repo_root}/scripts/linux/install-runtime-deps.sh" \
+    "${deb_root}/usr/lib/eshot/install-runtime-deps.sh"
+  install -Dm755 "${repo_root}/scripts/linux/packagekit-install.sh" \
+    "${deb_root}/usr/lib/eshot/packagekit-install.sh"
 
   installed_size="$(du -sk "${deb_root}/usr" | cut -f1)"
   mkdir -p "${deb_root}/DEBIAN"
@@ -41,7 +48,7 @@ Priority: optional
 Architecture: amd64
 Installed-Size: ${installed_size}
 Maintainer: Benoks <benoks@users.noreply.github.com>
-Depends: libc6, libstdc++6, libqt6core6t64 | libqt6core6, libqt6gui6, libqt6widgets6, libqt6network6, libqt6dbus6, libqt6svg6, qt6-qpa-plugins, qt6-wayland, libx11-6, libxcb-cursor0, libsecret-1-0, ffmpeg, tesseract-ocr, gstreamer1.0-tools, gstreamer1.0-pipewire, xdg-desktop-portal, xdg-desktop-portal-gnome | xdg-desktop-portal-gtk | xdg-desktop-portal-kde | xdg-desktop-portal-wlr
+Depends: libc6, libstdc++6, libqt6core6t64 | libqt6core6, libqt6gui6, libqt6widgets6, libqt6network6, libqt6dbus6, libqt6svg6, qt6-qpa-plugins, qt6-wayland, libx11-6, libxcb-cursor0, libsecret-1-0, ffmpeg, tesseract-ocr, gstreamer1.0-tools, gstreamer1.0-pipewire, gstreamer1.0-plugins-good, gstreamer1.0-plugins-bad, gstreamer1.0-plugins-ugly, gstreamer1.0-libav, xdg-desktop-portal, xdg-desktop-portal-gnome | xdg-desktop-portal-gtk | xdg-desktop-portal-kde | xdg-desktop-portal-wlr
 Description: Screenshot, annotation, OCR, upload, GIF and video capture tool
  EShot is a native desktop screenshot workflow tool for Windows and Linux.
 EOF

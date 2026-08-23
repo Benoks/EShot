@@ -54,7 +54,10 @@ bool portalMayIdentifyApp(LinuxPortalHostRegistrationState state)
 LinuxPortalHostRegistrationState registerApplication()
 {
 #if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
-    if (registrationState != LinuxPortalHostRegistrationState::NotAttempted)
+    // A transient failure (e.g. the portal not yet running) must not disable
+    // registration for the whole session; only stable states are cached.
+    if (registrationState != LinuxPortalHostRegistrationState::NotAttempted
+        && registrationState != LinuxPortalHostRegistrationState::Failed)
         return registrationState;
 
     const QDBusConnection bus = QDBusConnection::sessionBus();

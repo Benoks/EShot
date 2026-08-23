@@ -9,6 +9,7 @@
 #include <QSize>
 #include <QString>
 #include <QDateTime>
+#include <QElapsedTimer>
 
 #include "RecordingTimeline.h"
 
@@ -91,11 +92,13 @@ private:
     bool m_hasPendingFrame = false;
     QImage m_pendingFrame;
     int m_pendingDelayCs = 0;
+    qint64 m_lastFrameMs = -1;
     QString m_outputPath;
     QString m_portalVideoPath;
     int m_loopCount = 0;
     QString m_portalSessionHandle;
     RecordingTimeline m_timeline;
+    QElapsedTimer m_monotonicClock;
 
 #ifdef Q_OS_WIN
     HDC m_screenDC = nullptr;

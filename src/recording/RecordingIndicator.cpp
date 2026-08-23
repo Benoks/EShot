@@ -5,6 +5,7 @@
 #include <QAction>
 #include <QFrame>
 #include <QGuiApplication>
+#include <QHash>
 #include <QHBoxLayout>
 #include <QIcon>
 #include <QLabel>
@@ -41,6 +42,31 @@ QRect recordingScreenWorkArea(QScreen *screen)
 {
     if (!screen)
         return {};
+    // Cache the _NET_WORKAREA query per screen; opening a fresh X display on
+    // every call is expensive. The cache is dropped whenever a screen's work
+    // area or geometry changes (panel resize, screen added/removed, ...).
+    static QHash<QScreen *, QRect> workAreaCache;
+    static const bool cacheConnected = []() {
+        auto *app = qobject_cast<QGuiApplication *>(QGuiApplication::instance());
+        if (!app)
+            return true;
+        auto watchScreen = [app](QScreen *screen) {
+            QObject::connect(screen, &QScreen::availableGeometryChanged, app,
+                             [](const QRect &) { workAreaCache.clear(); });
+            QObject::connect(screen, &QScreen::geometryChanged, app,
+                             [](const QRect &) { workAreaCache.clear(); });
+        };
+        for (QScreen *screen : QGuiApplication::screens())
+            watchScreen(screen);
+        QObject::connect(app, &QGuiApplication::screenAdded, app, watchScreen);
+        QObject::connect(app, &QGuiApplication::screenRemoved, app,
+                         [](QScreen *) { workAreaCache.clear(); });
+        return true;
+    }();
+    Q_UNUSED(cacheConnected);
+    if (const auto it = workAreaCache.constFind(screen); it != workAreaCache.cend())
+        return *it;
+
     QRect workArea = screen->availableGeometry();
 #if defined(Q_OS_LINUX) && defined(ESHOT_HAVE_X11)
     if (QGuiApplication::platformName().contains(QStringLiteral("xcb"),
@@ -75,6 +101,7 @@ QRect recordingScreenWorkArea(QScreen *screen)
         }
     }
 #endif
+    workAreaCache.insert(screen, workArea);
     return workArea;
 }
 

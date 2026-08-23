@@ -98,6 +98,8 @@ QString OcrEngine::mapLanguageTag(const QString &bcp47) {
         {QStringLiteral("ja-JP"), QStringLiteral("jpn")},
         {QStringLiteral("zh"),  QStringLiteral("chi_sim")},
         {QStringLiteral("zh-CN"), QStringLiteral("chi_sim")},
+        {QStringLiteral("zh-Hant"), QStringLiteral("chi_tra")},
+        {QStringLiteral("zh-TW"), QStringLiteral("chi_tra")},
         {QStringLiteral("ko"),  QStringLiteral("kor")},
         {QStringLiteral("ko-KR"), QStringLiteral("kor")},
         {QStringLiteral("pt"),  QStringLiteral("por")},
@@ -233,8 +235,13 @@ void OcrEngine::startAutomaticRecognition(const QString &imagePath,
         arguments << QStringLiteral("--tessdata-dir")
                   << QDir::toNativeSeparators(tessdataDirectory);
     m_proc->start(tesseractPath(), arguments);
+    // Starting Tesseract is normally immediate, but cold AppImages and slow
+    // network-mounted home directories can legitimately take longer. This is
+    // an error path only, so retain the reliable startup allowance.
     if (!m_proc->waitForStarted(10000)) {
         qWarning() << "[EShot] OCR script detection could not start:" << m_proc->errorString();
+        if (m_proc->state() != QProcess::NotRunning)
+            m_proc->kill();
         m_proc->deleteLater();
         m_proc = nullptr;
         continueWithScript(QString());
@@ -305,6 +312,8 @@ void OcrEngine::startRecognitionProcess(const QString &imagePath,
     m_proc->start(tesseractPath(), args);
     if (!m_proc->waitForStarted(10000)) {
         QString errStr = m_proc->errorString();
+        if (m_proc->state() != QProcess::NotRunning)
+            m_proc->kill();
         m_proc->deleteLater();
         m_proc = nullptr;
         failAndRemoveImage(imagePath, QStringLiteral("Cannot start Tesseract: ") + errStr);

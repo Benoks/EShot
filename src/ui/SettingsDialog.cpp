@@ -497,6 +497,15 @@ static QKeySequence win32ToKeySequence(UINT modifiers, UINT vkey)
 bool SettingsDialog::isAutoStartEnabled()
 {
 #ifdef Q_OS_WIN
+    // Fast path: the HKCU Run key check needs no external process. Only fall
+    // back to schtasks when the Run entry is absent.
+    QSettings runKey(QStringLiteral("HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run"),
+                     QSettings::NativeFormat);
+    const QString runEntry = runKey.value(QStringLiteral("EShot")).toString();
+    QString appPath = QCoreApplication::applicationFilePath().replace('/', '\\');
+    if (!runEntry.isEmpty())
+        return runEntry.contains(appPath, Qt::CaseInsensitive);
+
     auto queryTaskXml = [](const QString &taskName) {
         QProcess query;
         query.start(QStringLiteral("schtasks"),
@@ -512,7 +521,6 @@ bool SettingsDialog::isAutoStartEnabled()
     if (xml.isEmpty())
         return false;
 
-    QString appPath = QCoreApplication::applicationFilePath().replace('/', '\\');
     return xml.contains(appPath, Qt::CaseInsensitive);
 #else
     const QString path = QDir(QStandardPaths::writableLocation(QStandardPaths::ConfigLocation))
@@ -1639,7 +1647,7 @@ void SettingsDialog::downloadOcrLanguage(const QString &code)
 {
     if (code.isEmpty())
         return;
-    if (m_packageReply) {
+    if (m_packageReply || m_packageExtractProcess) {
         if (!m_pendingOcrDownloads.contains(code))
             m_pendingOcrDownloads.append(code);
         refreshPackageStatus();
@@ -1725,7 +1733,7 @@ void SettingsDialog::deleteOcrLanguage(const QString &code)
 
 void SettingsDialog::onTesseractComponentAction()
 {
-    if (m_packageReply)
+    if (m_packageReply || m_packageExtractProcess)
         return;
     const QString dirPath = bundledTesseractDir();
     if (dirPath.isEmpty()) {
@@ -1768,7 +1776,7 @@ void SettingsDialog::downloadReleaseComponent(const QString &componentDir, const
                                      "On Linux, components should be installed through the system package manager or a future Linux package."));
     return;
 #endif
-    if (m_packageReply)
+    if (m_packageReply || m_packageExtractProcess)
         return;
     m_packageOperationStatus = QStringLiteral("%1: %2").arg(
         statusPrefix,
@@ -1907,6 +1915,8 @@ void SettingsDialog::extractComponentArchive(const QString &archivePath, const Q
     refreshPackageStatus();
     return;
 #endif
+    if (m_packageExtractProcess)
+        return;
     m_packageOperationStatus = QStringLiteral("%1: %2").arg(statusPrefix, uiLabel("kuruluyor...", "installing..."));
     refreshPackageStatus();
 
@@ -1931,22 +1941,43 @@ void SettingsDialog::extractComponentArchive(const QString &archivePath, const Q
              psQuote(exeName),
              psQuote(componentDir));
 
-    const int exitCode = QProcess::execute(QStringLiteral("powershell.exe"),
-        {QStringLiteral("-NoProfile"),
-         QStringLiteral("-ExecutionPolicy"), QStringLiteral("Bypass"),
-         QStringLiteral("-Command"), script});
-    if (exitCode != 0) {
+    // Run the extraction asynchronously: QProcess::execute() would freeze the
+    // dialog and the whole GUI thread for the duration of the unpack.
+    m_packageExtractProcess = new QProcess(this);
+    connect(m_packageExtractProcess, &QProcess::errorOccurred, this, [this](QProcess::ProcessError) {
+        if (!m_packageExtractProcess)
+            return;
+        m_packageExtractProcess->deleteLater();
+        m_packageExtractProcess = nullptr;
         QMessageBox::warning(this, TranslationManager::errTitle(),
                              uiLabel("OCR bileşeni kurulamadı. Kurulum klasörü için yönetici izni gerekebilir.",
                                      "Could not install the OCR component. Administrator permission may be required for the install folder."));
-    }
-    m_packageOperationStatus.clear();
-    refreshPackageStatus();
+        m_packageOperationStatus.clear();
+        refreshPackageStatus();
+    });
+    connect(m_packageExtractProcess, &QProcess::finished, this,
+            [this](int exitCode, QProcess::ExitStatus status) {
+        if (!m_packageExtractProcess)
+            return;
+        m_packageExtractProcess->deleteLater();
+        m_packageExtractProcess = nullptr;
+        if (status == QProcess::NormalExit && exitCode != 0) {
+            QMessageBox::warning(this, TranslationManager::errTitle(),
+                                 uiLabel("OCR bileşeni kurulamadı. Kurulum klasörü için yönetici izni gerekebilir.",
+                                         "Could not install the OCR component. Administrator permission may be required for the install folder."));
+        }
+        m_packageOperationStatus.clear();
+        refreshPackageStatus();
+    });
+    m_packageExtractProcess->start(QStringLiteral("powershell.exe"),
+        {QStringLiteral("-NoProfile"),
+         QStringLiteral("-ExecutionPolicy"), QStringLiteral("Bypass"),
+         QStringLiteral("-Command"), script});
 }
 
 void SettingsDialog::onFfmpegComponentAction()
 {
-    if (m_packageReply)
+    if (m_packageReply || m_packageExtractProcess)
         return;
     const QString dirPath = QCoreApplication::applicationDirPath() + QStringLiteral("/ffmpeg");
     if (bundledFfmpegDir().isEmpty()) {
@@ -2024,7 +2055,12 @@ void SettingsDialog::loadSettings()
 #ifdef Q_OS_WIN
     m_autoStartCheck->setChecked(isAutoStartEnabled());
 #else
-    m_autoStartCheck->setChecked(m_settings->value("autoStart", false).toBool());
+    // Reflect the actual autostart desktop entry instead of a stale
+    // QSettings flag.
+    const QString autostartDesktopPath =
+        QDir(QStandardPaths::writableLocation(QStandardPaths::ConfigLocation))
+            .filePath(QStringLiteral("autostart/io.github.benoks.EShot.desktop"));
+    m_autoStartCheck->setChecked(QFileInfo::exists(autostartDesktopPath));
 #endif
     m_loadedAutoStart = m_autoStartCheck->isChecked();
     m_showNotificationsCheck->setChecked(m_settings->value("showNotifications", true).toBool());
@@ -2043,7 +2079,8 @@ void SettingsDialog::loadSettings()
         m_rememberSettingsWindowSizeCheck->setChecked(m_rememberSettingsWindowSizeEnabled);
 
     // Language (saved as int, convert to string)
-    int langInt = m_settings->value("language", 1).toInt(); // 1=English default
+    int langInt = m_settings->value("language",
+                                    static_cast<int>(TranslationManager::currentLanguage())).toInt();
     static const char* langCodes[] = {"tr","en","de","fr","es","ja","zh","ru"};
     QString lang = (langInt >= 0 && langInt <= 7) ? langCodes[langInt] : "en";
     int li = m_langCombo->findData(lang);
@@ -2140,15 +2177,13 @@ void SettingsDialog::loadSettings()
         !m_settings->value("toolbarControlsMigratedVideo", false).toBool()) {
         if (!visibleToolbarControls.contains(QStringLiteral("Video")))
             visibleToolbarControls.append(QStringLiteral("Video"));
-        m_settings->setValue("toolbarControlsMigratedVideo", true);
-        m_settings->setValue("visibleToolbarControls", visibleToolbarControls);
+        // Migration flags are persisted in onSave so that merely opening the
+        // dialog leaves no settings side effects.
     }
     if (m_settings->contains("visibleToolbarControls") &&
         !m_settings->value("toolbarControlsMigratedGoogleLens", false).toBool()) {
         if (!visibleToolbarControls.contains(QStringLiteral("GoogleLens")))
             visibleToolbarControls.append(QStringLiteral("GoogleLens"));
-        m_settings->setValue("toolbarControlsMigratedGoogleLens", true);
-        m_settings->setValue("visibleToolbarControls", visibleToolbarControls);
     }
     auto applyVisibility = [](QListWidget *list, const QStringList &visible) {
         if (!list) return;
@@ -2202,9 +2237,6 @@ void SettingsDialog::loadSettings()
     m_hotkeyStatusLabel->setText(TranslationManager::hotkeyValid());
     m_hotkeyStatusLabel->setStyleSheet("color: #4caf50; font-size: 12px;");
     updatePrintScreenConflictUi();
-    HotkeyManager::instance().reRegisterCaptureHotkey(
-        HotkeyManager::instance().captureModifiers(),
-        HotkeyManager::instance().captureVirtualKey());
 
     const QSize restoredSize = settingsDialogRestoredSize(
         m_rememberSettingsWindowSizeEnabled,
@@ -2215,7 +2247,15 @@ void SettingsDialog::loadSettings()
 
 void SettingsDialog::done(int result)
 {
-    if (m_rememberSettingsWindowSizeEnabled)
+    if (result != QDialog::Accepted) {
+        // Cancel/reject: revert any live theme preview back to the persisted
+        // settings (theme changes are only persisted by onSave).
+        applyEShotApplicationTheme(*qApp,
+                                   m_settings->value("darkMode", true).toBool(),
+                                   m_settings->value("highContrast", false).toBool());
+    }
+    // Only remember the window size when the dialog was actually accepted.
+    if (result == QDialog::Accepted && m_rememberSettingsWindowSizeEnabled)
         m_settings->setValue("settingsWindowSize", size());
     QDialog::done(result);
 }
@@ -2501,6 +2541,16 @@ void SettingsDialog::onSave()
         return;
     }
 
+    // Apply the autostart change before persisting anything: if the task
+    // registration fails, no partial settings are written (onSave partial
+    // success guard).
+    if (m_autoStartCheck->isChecked() != m_loadedAutoStart && !setAutoStartTask(m_autoStartCheck->isChecked())) {
+        QMessageBox::warning(this, TranslationManager::errTitle(),
+                             TranslationManager::autoStartSaveFailed());
+        return;
+    }
+    m_loadedAutoStart = m_autoStartCheck->isChecked();
+
     // Save language
     QString newLang = m_langCombo->currentData().toString();
     TranslationManager::Language lang = TranslationManager::English;
@@ -2513,7 +2563,6 @@ void SettingsDialog::onSave()
     else if (newLang == "zh") lang = TranslationManager::Chinese;
     TranslationManager::setLanguage(lang);
 
-    m_settings->setValue("language",          static_cast<int>(lang));
     m_settings->setValue("savePath",          savePath);
     m_settings->setValue("screenshotSavePath", screenshotPath);
     m_settings->setValue("gifSavePath",        gifPath);
@@ -2574,6 +2623,10 @@ void SettingsDialog::onSave()
     visibleToolbarControls = collectVisible(m_toolbarControlVisibilityList);
     m_settings->setValue("visibleTools", visibleTools);
     m_settings->setValue("visibleToolbarControls", visibleToolbarControls);
+    if (!m_settings->value("toolbarControlsMigratedVideo", false).toBool())
+        m_settings->setValue("toolbarControlsMigratedVideo", true);
+    if (!m_settings->value("toolbarControlsMigratedGoogleLens", false).toBool())
+        m_settings->setValue("toolbarControlsMigratedGoogleLens", true);
 
     m_settings->setValue("hotkeyModifiers", newMod);
     m_settings->setValue("hotkeyVKey",      newVKey);
@@ -2627,13 +2680,6 @@ void SettingsDialog::onSave()
         : microphoneAudio ? QStringLiteral("microphone")
         : QStringLiteral("none"));
 
-    if (m_autoStartCheck->isChecked() != m_loadedAutoStart && !setAutoStartTask(m_autoStartCheck->isChecked())) {
-        QMessageBox::warning(this, TranslationManager::errTitle(),
-                             TranslationManager::autoStartSaveFailed());
-        return;
-    }
-
-    m_loadedAutoStart = m_autoStartCheck->isChecked();
     m_settings->sync();
     accept();
 }
@@ -2645,6 +2691,9 @@ void SettingsDialog::onReset()
             QMessageBox::Yes | QMessageBox::No, QMessageBox::No) == QMessageBox::Yes) {
         m_settings->clear();
         m_settings->sync();
+        // clear() wiped the hotkey config; restore the default PrintScreen
+        // binding so capture keeps working without reopening Settings.
+        HotkeyManager::instance().reRegisterCaptureHotkey(0, VK_SNAPSHOT);
         TranslationManager::init();
         loadSettings();
     }

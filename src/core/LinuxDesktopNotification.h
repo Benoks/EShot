@@ -29,6 +29,7 @@ private slots:
 
 private:
     QHash<uint, QString> m_paths;
+    uint m_lastId = 0;
 };
 
 #endif

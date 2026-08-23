@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(EShot VERSION 4.2.7 LANGUAGES CXX)
+project(EShot VERSION 4.2.8 LANGUAGES CXX)
 
 include(CTest)
 
@@ -231,7 +231,7 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
 # Embed manifest after build
 if(MSVC)
     add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-        COMMAND mt.exe -manifest ${CMAKE_CURRENT_SOURCE_DIR}/EShot.manifest -outputresource:$<TARGET_FILE:${PROJECT_NAME}>\;1
+        COMMAND ${CMAKE_MT} -manifest ${CMAKE_CURRENT_SOURCE_DIR}/EShot.manifest -outputresource:$<TARGET_FILE:${PROJECT_NAME}>\;1
         COMMENT "Embedding manifest into executable"
     )
 endif()
@@ -340,6 +340,9 @@ if(BUILD_TESTING)
     if(UNIX AND NOT APPLE)
         target_link_libraries(eshot_secure_credential_store_tests PRIVATE PkgConfig::LIBSECRET)
     endif()
+    if(WIN32)
+        target_link_libraries(eshot_secure_credential_store_tests PRIVATE Advapi32)
+    endif()
     add_test(NAME secure_credential_store COMMAND eshot_secure_credential_store_tests)
 
     qt_add_executable(eshot_settings_translation_tests
@@ -388,7 +391,7 @@ if(BUILD_TESTING)
     target_include_directories(eshot_window_snap_policy_tests PRIVATE src)
     target_link_libraries(eshot_window_snap_policy_tests PRIVATE Qt6::Core Qt6::Test)
     if(WIN32)
-        target_link_libraries(eshot_window_snap_policy_tests PRIVATE Dwmapi)
+        target_link_libraries(eshot_window_snap_policy_tests PRIVATE User32 Dwmapi)
     endif()
     add_test(NAME window_snap_policy COMMAND eshot_window_snap_policy_tests)
 
@@ -568,6 +571,48 @@ if(BUILD_TESTING)
             NAME linux_packagekit_installer
             COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/tests/linux/packagekit-installer-tests.sh
         )
+
+        if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/tests/linux/apprun-integration-tests.sh)
+            add_test(
+                NAME linux_apprun_integration
+                COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/tests/linux/apprun-integration-tests.sh
+            )
+        endif()
+
+        if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/tests/linux/aur-package-contract-tests.sh)
+            add_test(
+                NAME linux_aur_package_contract
+                COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/tests/linux/aur-package-contract-tests.sh
+            )
+        endif()
+
+        if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/tests/linux/package-contract-tests.sh)
+            add_test(
+                NAME linux_package_contract
+                COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/tests/linux/package-contract-tests.sh
+            )
+        endif()
+
+        if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/tests/linux/runtime-common-tests.sh)
+            add_test(
+                NAME linux_runtime_common
+                COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/tests/linux/runtime-common-tests.sh
+            )
+        endif()
+
+        if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/tests/linux/native-wayland-overlay-tests.sh)
+            add_test(
+                NAME linux_native_wayland_overlay
+                COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/tests/linux/native-wayland-overlay-tests.sh
+            )
+        endif()
+
+        if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/tests/linux/annotation-gesture-wiring-tests.sh)
+            add_test(
+                NAME linux_annotation_gesture_wiring
+                COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/tests/linux/annotation-gesture-wiring-tests.sh
+            )
+        endif()
     endif()
 
     qt_add_executable(eshot_linux_recording_support_tests
@@ -672,6 +717,10 @@ if(UNIX AND NOT APPLE)
         scripts/linux/packagekit-install.sh
         DESTINATION lib/eshot
     )
+    # NOTE: the runtime helper scripts live under lib/eshot while the launcher
+    # and the app go to bin/ (and package-linux.sh mirrors this layout for the
+    # deb). Unifying this install layout is a packaging refactor that is
+    # intentionally out of scope here.
 endif()
 
 # Bundle Tesseract OCR (third_party/tesseract/) next to the executable so the

@@ -40,16 +40,23 @@ void ScrollingCapture::start(const QRect &captureRect, int scrollAmount, int int
 
     m_running = true;
     emit started();
-    QTimer::singleShot(250, this, &ScrollingCapture::captureNext);
-    m_timer->start();
+    QTimer::singleShot(250, this, [this]() {
+        if (!m_running || !m_timer) return;
+        captureNext();
+        if (m_running && m_timer) m_timer->start();
+    });
 }
 
-void ScrollingCapture::stop()
+void ScrollingCapture::stop(const QString &reason)
 {
     if (!m_running) return;
     m_running = false;
     if (m_timer) { m_timer->stop(); m_timer->deleteLater(); m_timer = nullptr; }
 
+    if (!reason.isEmpty()) {
+        emit failed(reason);
+        return;
+    }
     if (m_frames.isEmpty()) {
         emit failed(QStringLiteral("no frames captured"));
         return;
@@ -64,8 +71,7 @@ void ScrollingCapture::captureNext()
 
     QImage frame = grabScreenRegion(m_captureRect);
     if (frame.isNull()) {
-        stop();
-        emit failed(QStringLiteral("capture failed"));
+        stop(QStringLiteral("capture failed"));
         return;
     }
 
@@ -173,42 +179,58 @@ QImage ScrollingCapture::stitchFrames() const
 
     const int w = m_frames.first().width();
     const int h = m_frames.first().height();
-    int totalH = m_frames.size() * h;
 
-    // Try to detect overlap using top vs bottom row matching
-    int overlap = 0;
-    int bestOverlap = 0;
-    int bestOffset = 0;
-    for (int off = 1; off < h * 0.8; ++off) {
-        // Compare m_frames[i].top row at offset y vs m_frames[i+1].top row at y
-        int matched = 0;
-        int samples = 0;
-        for (int y = 0; y < h - off; y += 8) {
-            const quint32 *a = reinterpret_cast<const quint32 *>(m_frames[0].constScanLine(y + off));
-            const quint32 *b = reinterpret_cast<const quint32 *>(m_frames[1].constScanLine(y));
-            for (int x = 0; x < w; x += 16) {
-                int d = std::abs(static_cast<int>(a[x] & 0xFF) - static_cast<int>(b[x] & 0xFF));
-                if (d < 20) ++matched;
-                ++samples;
+    // Detect vertical overlap between consecutive frames. A coarse pass keeps
+    // finalization responsive for long 4K captures, then a local full-step
+    // refinement preserves pixel-level placement around the best candidate.
+    QList<int> frameOffsets;
+    frameOffsets.append(0);
+    for (int i = 0; i + 1 < m_frames.size(); ++i) {
+        const auto scoreOffset = [&](int off) {
+            int matched = 0;
+            int samples = 0;
+            for (int y = 0; y < h - off; y += 8) {
+                const quint32 *a = reinterpret_cast<const quint32 *>(m_frames[i].constScanLine(y + off));
+                const quint32 *b = reinterpret_cast<const quint32 *>(m_frames[i + 1].constScanLine(y));
+                for (int x = 0; x < w; x += 16) {
+                    const QRgb ca = static_cast<QRgb>(a[x]);
+                    const QRgb cb = static_cast<QRgb>(b[x]);
+                    if (std::abs(qRed(ca) - qRed(cb)) < 20
+                        && std::abs(qGreen(ca) - qGreen(cb)) < 20
+                        && std::abs(qBlue(ca) - qBlue(cb)) < 20) {
+                        ++matched;
+                    }
+                    ++samples;
+                }
             }
-        }
-        if (samples > 0) {
-            int score = (matched * 100) / samples;
+            return samples > 0 ? (matched * 100) / samples : 0;
+        };
+
+        const int maxOffset = qMax(1, (h * 4) / 5);
+        constexpr int CoarseStep = 8;
+        int bestOverlap = 0;
+        int bestOffset = 0;
+        for (int off = 1; off < maxOffset; off += CoarseStep) {
+            const int score = scoreOffset(off);
             if (score > bestOverlap) {
                 bestOverlap = score;
                 bestOffset = off;
             }
         }
-    }
-    Q_UNUSED(overlap)
-    if (bestOverlap > 60) {
-        overlap = bestOffset;
-    } else {
-        overlap = 0;
+        const int refineStart = qMax(1, bestOffset - CoarseStep);
+        const int refineEnd = qMin(maxOffset - 1, bestOffset + CoarseStep);
+        for (int off = refineStart; off <= refineEnd; ++off) {
+            const int score = scoreOffset(off);
+            if (score > bestOverlap) {
+                bestOverlap = score;
+                bestOffset = off;
+            }
+        }
+        const int stepOverlap = bestOverlap > 60 ? bestOffset : 0;
+        frameOffsets.append(frameOffsets.last() + h - stepOverlap);
     }
 
-    int step = h - overlap;
-    int stitchedH = (m_frames.size() - 1) * step + h;
+    const int stitchedH = frameOffsets.last() + h;
 
     QImage result(w, stitchedH, QImage::Format_RGB32);
     result.fill(Qt::white);
@@ -216,8 +238,7 @@ QImage ScrollingCapture::stitchFrames() const
     p.setRenderHint(QPainter::SmoothPixmapTransform, false);
 
     for (int i = 0; i < m_frames.size(); ++i) {
-        int y = i * step;
-        p.drawImage(0, y, m_frames[i]);
+        p.drawImage(0, frameOffsets[i], m_frames[i]);
     }
     p.end();
     return result;

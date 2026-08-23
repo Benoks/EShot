@@ -133,6 +133,21 @@ private slots:
             QStringLiteral("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")));
         QVERIFY(!fileMatchesSha256(file.fileName(), QString()));
     }
+
+    void acceptsMissingOptionalDigestButRejectsMissingRequiredDigest()
+    {
+        QTemporaryFile file;
+        QVERIFY(file.open());
+        QCOMPARE(file.write("hello"), 5);
+        file.flush();
+
+        QVERIFY(downloadedAssetDigestIsValid(file.fileName(), QString(), false));
+        QVERIFY(!downloadedAssetDigestIsValid(file.fileName(), QString(), true));
+        QVERIFY(downloadedAssetDigestIsValid(
+            file.fileName(),
+            QStringLiteral("2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"),
+            true));
+    }
 };
 
 QTEST_APPLESS_MAIN(UpdateAssetSelectorTests)

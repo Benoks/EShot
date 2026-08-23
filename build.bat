@@ -56,7 +56,7 @@ REM CMAKE_PREFIX_PATH is how CMake's find_package(Qt6) locates Qt. Prefer an
 REM explicit QT_DIR; otherwise probe a couple of standard install paths.
 if not defined QT_DIR (
     if /I "%ARCH%"=="x64"   set "QT_GUESS=C:\Qt\6.8.2\msvc2022_64"
-    if /I "%ARCH%"=="arm64" set "QT_GUESS=C:\Qt\6.8.2\msvc2022_arm64"
+    if /I "%ARCH%"=="arm64" set "QT_GUESS=C:\Qt\6.8.2\msvc2022_arm64_cross_compiled"
     REM Validate on Qt6Core.dll, not windeployqt.exe: the cross-compiled arm64
     REM kit has no windeployqt (it's a host-only tool in the companion x64 kit).
     if exist "!QT_GUESS!\bin\Qt6Core.dll" set "QT_DIR=!QT_GUESS!"
@@ -128,11 +128,15 @@ if not exist "%EXE%" (
     goto :fail
 )
 
+REM Derive the windeployqt flavor flag from the build configuration.
+set "WDQ_CONF=--release"
+if /I "%CONFIG%"=="Debug" set "WDQ_CONF=--debug"
+
 set "WDQ=%QT_DIR%\bin\windeployqt.exe"
 if exist "%WDQ%" (
     REM Native kit (x64): windeployqt ships in the kit, deploy directly.
     echo Using windeployqt: %WDQ%
-    "%WDQ%" --release --no-translations "%EXE%"
+    "%WDQ%" %WDQ_CONF% --no-translations "%EXE%"
     if errorlevel 1 goto :fail
 ) else (
     REM Cross-compiled kit (arm64): windeployqt is a host-only x64 tool in the
@@ -152,7 +156,7 @@ if exist "%WDQ%" (
         goto :fail
     )
     echo Using host windeployqt: !WDQ!
-    "!WDQ!" --release --no-translations --qtpaths "%QT_DIR%\bin\qtpaths6.bat" "%EXE%"
+    "!WDQ!" !WDQ_CONF! --no-translations --qtpaths "%QT_DIR%\bin\qtpaths6.bat" "%EXE%"
     if errorlevel 1 goto :fail
 )
 

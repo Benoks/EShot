@@ -15,8 +15,8 @@ QString read(const QString &key);
 bool write(const QString &key, const QString &secret);
 bool remove(const QString &key);
 
-// Removes a legacy QSettings value even when the operating-system credential
-// store is unavailable, so OAuth tokens are never retained as plain text.
+// Removes a legacy QSettings value only after the replacement credential was
+// written successfully to the operating-system credential store.
 QString migrateLegacyToken(QSettings &settings, const QString &legacyKey,
                            const WriteFunction &writeSecret);
 

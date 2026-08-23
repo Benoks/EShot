@@ -57,6 +57,7 @@ private:
     QList<QCheckBox *> m_linuxLanguageChecks;
     QLabel *m_linuxInstallStatus = nullptr;
     QPushButton *m_finishButton = nullptr;
+    QPushButton *m_skipDepsButton = nullptr;
     QProcess *m_linuxInstallerProcess = nullptr;
     bool m_linuxExplicitSkip = false;
 #endif

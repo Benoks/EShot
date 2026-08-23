@@ -52,7 +52,8 @@ QVector<QRect> windowsForCaptureOverlay(quintptr overlayWindowId,
         }
 
         const LONG_PTR exStyle = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
-        if ((exStyle & WS_EX_TOOLWINDOW) && (exStyle & WS_EX_NOACTIVATE))
+        if (((exStyle & WS_EX_TOOLWINDOW) && (exStyle & WS_EX_NOACTIVATE))
+            || (exStyle & WS_EX_TRANSPARENT))
             return TRUE;
 
         wchar_t className[128] = {};

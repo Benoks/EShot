@@ -7,6 +7,7 @@
 #include <QCoreApplication>
 #include <QDebug>
 #include <QGuiApplication>
+#include <QSettings>
 #include <QStringList>
 
 #if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
@@ -159,7 +160,7 @@ bool LinuxPortalGlobalShortcuts::requestRebind()
 
     closeSession();
     createSession();
-    return true;
+    return m_createPending || !m_sessionHandle.isEmpty();
 #else
     return false;
 #endif
@@ -367,6 +368,7 @@ QString LinuxPortalGlobalShortcuts::preferredTrigger(UINT modifiers, UINT virtua
     if (modifiers & MOD_SHIFT) parts << QStringLiteral("SHIFT");
     if (modifiers & MOD_WIN) parts << QStringLiteral("SUPER");
 
+    const int modifierCount = parts.size();
     if (virtualKey >= 'A' && virtualKey <= 'Z') {
         parts << QString(QChar(static_cast<char>(virtualKey))).toLower();
     } else if (virtualKey >= '0' && virtualKey <= '9') {
@@ -396,6 +398,9 @@ QString LinuxPortalGlobalShortcuts::preferredTrigger(UINT modifiers, UINT virtua
         }
     }
 
+    // A modifiers-only string is not a usable trigger; report none instead.
+    if (parts.size() <= modifierCount)
+        return {};
     return parts.join(QStringLiteral("+"));
 }
 
@@ -453,18 +458,41 @@ void LinuxPortalGlobalShortcuts::onBindShortcutsResponse(uint response, const QV
     }
     qInfo() << "[HotkeyManager] Global shortcuts portal bound:" << results;
     m_bindCompleted = true;
+    updateAssignedTriggers(results);
 
     const LinuxDesktopEnvironment desktop = LinuxDesktopIntegration::detect(
         qEnvironmentVariable("XDG_CURRENT_DESKTOP"),
         qEnvironmentVariable("XDG_SESSION_DESKTOP"));
     if (desktop == LinuxDesktopEnvironment::Gnome) {
-        const auto cleanup = LinuxGnomeShortcutInstaller::uninstallCaptureShortcut(false);
-        if (!cleanup.success) {
-            qWarning() << "[HotkeyManager] Could not remove the legacy GNOME shortcut:"
-                       << cleanup.error;
-        } else {
-            qInfo() << "[HotkeyManager] Removed the legacy GNOME shortcut after portal binding";
+        QSettings once(QStringLiteral("EShot"), QStringLiteral("EShot"));
+        if (!once.value(QStringLiteral("gnomeLegacyShortcutCleanupDone"), false).toBool()) {
+            const auto cleanup = LinuxGnomeShortcutInstaller::uninstallCaptureShortcut(false);
+            if (!cleanup.success) {
+                qWarning() << "[HotkeyManager] Could not remove the legacy GNOME shortcut:"
+                           << cleanup.error;
+            } else {
+                once.setValue(QStringLiteral("gnomeLegacyShortcutCleanupDone"), true);
+                qInfo() << "[HotkeyManager] Removed the legacy GNOME shortcut after portal binding";
+            }
         }
+    }
+}
+
+void LinuxPortalGlobalShortcuts::updateAssignedTriggers(const QVariantMap &results)
+{
+    m_triggers.clear();
+    const QVariant shortcuts = results.value(QStringLiteral("shortcuts"));
+    if (!shortcuts.isValid())
+        return;
+    const QList<PortalShortcut> parsed = shortcuts.value<QList<PortalShortcut>>();
+    for (const PortalShortcut &shortcut : parsed) {
+        const QString trigger = shortcut.options.value(
+            QStringLiteral("trigger_description")).toString();
+        if (trigger.isEmpty())
+            continue;
+        m_triggers.insert(shortcut.id, trigger);
+        qInfo() << "[HotkeyManager] Global shortcut" << shortcut.id
+                << "assigned trigger:" << trigger;
     }
 }
 

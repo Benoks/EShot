@@ -38,6 +38,7 @@ bool GifEncoder::open(const QString &path, int width, int height, int loopCount)
     }
 
     m_fileOpen = true;
+    m_cachedLutValid = false;
     if (!writeHeader()) {
         m_file.close();
         m_fileOpen = false;
@@ -71,10 +72,11 @@ bool GifEncoder::addFrame(const QImage &image, int delayCs)
 
     QVector<Color> palette;
     const QByteArray indices = quantizeToPalette(frame, palette);
+    const int tableBits = colorTableBitsForPalette(palette.size());
     return writeGraphicControlExtension(qMax(1, delayCs))
-        && writeImageDescriptor(0, 0, m_width, m_height)
-        && writeColorTable(palette)
-        && writeIndexedImageData(indices);
+        && writeImageDescriptor(0, 0, m_width, m_height, tableBits)
+        && writeColorTable(palette, 1 << tableBits)
+        && writeIndexedImageData(indices, tableBits);
 }
 
 bool GifEncoder::close()
@@ -130,9 +132,17 @@ bool GifEncoder::writeLogicalScreenDescriptor(int width, int height)
         && writeByte(0);
 }
 
-bool GifEncoder::writeColorTable(const QVector<Color> &palette)
+int GifEncoder::colorTableBitsForPalette(int paletteSize)
 {
-    for (int i = 0; i < 256; ++i) {
+    int bits = 1;
+    while (bits < 8 && (1 << bits) < paletteSize)
+        ++bits;
+    return bits;
+}
+
+bool GifEncoder::writeColorTable(const QVector<Color> &palette, int tableSize)
+{
+    for (int i = 0; i < tableSize; ++i) {
         const Color c = i < palette.size() ? palette[i] : Color{0, 0, 0};
         if (!writeByte(c.r) || !writeByte(c.g) || !writeByte(c.b)) return false;
     }
@@ -163,14 +173,15 @@ bool GifEncoder::writeGraphicControlExtension(int delayCs)
         && writeByte(0x00);
 }
 
-bool GifEncoder::writeImageDescriptor(int left, int top, int width, int height)
+bool GifEncoder::writeImageDescriptor(int left, int top, int width, int height, int colorTableBits)
 {
     return writeByte(0x2C)
         && writeShort(static_cast<quint16>(left))
         && writeShort(static_cast<quint16>(top))
         && writeShort(static_cast<quint16>(width))
         && writeShort(static_cast<quint16>(height))
-        && writeByte(0x87);
+        // Local color table present; its size is 2^colorTableBits entries.
+        && writeByte(static_cast<quint8>(0x80 | ((colorTableBits - 1) & 0x07)));
 }
 
 QByteArray GifEncoder::quantizeToPalette(const QImage &image, QVector<Color> &palette) const
@@ -216,27 +227,40 @@ QByteArray GifEncoder::quantizeToPalette(const QImage &image, QVector<Color> &pa
             static_cast<quint8>(bSum[e.key] / c)
         });
     }
-    while (palette.size() < 256) palette.append(Color{0, 0, 0});
+    // Pad the palette up to the next power-of-two color table size so the
+    // per-frame local color table only carries the entries actually used.
+    const int tableSize = 1 << colorTableBitsForPalette(palette.size());
+    while (palette.size() < tableSize) palette.append(Color{0, 0, 0});
 
-    QVector<quint8> lut(BUCKETS);
-    for (int key = 0; key < BUCKETS; ++key) {
-        const int r = (((key >> 10) & 31) << 3) | 4;
-        const int g = (((key >> 5) & 31) << 3) | 4;
-        const int b = ((key & 31) << 3) | 4;
-        int best = 0;
-        int bestDist = INT_MAX;
-        for (int i = 0; i < palette.size(); ++i) {
-            const int dr = r - palette[i].r;
-            const int dg = g - palette[i].g;
-            const int db = b - palette[i].b;
-            const int dist = dr * dr + dg * dg + db * db;
-            if (dist < bestDist) {
-                bestDist = dist;
-                best = i;
-                if (dist == 0) break;
+    QVector<quint8> lut;
+    if (m_cachedLutValid && m_cachedLutPalette == palette) {
+        // Same palette as the previous frame: reuse the LZW LUT instead of
+        // rebuilding the nearest-color table for all buckets.
+        lut = m_cachedLut;
+    } else {
+        lut.resize(BUCKETS);
+        for (int key = 0; key < BUCKETS; ++key) {
+            const int r = (((key >> 10) & 31) << 3) | 4;
+            const int g = (((key >> 5) & 31) << 3) | 4;
+            const int b = ((key & 31) << 3) | 4;
+            int best = 0;
+            int bestDist = INT_MAX;
+            for (int i = 0; i < palette.size(); ++i) {
+                const int dr = r - palette[i].r;
+                const int dg = g - palette[i].g;
+                const int db = b - palette[i].b;
+                const int dist = dr * dr + dg * dg + db * db;
+                if (dist < bestDist) {
+                    bestDist = dist;
+                    best = i;
+                    if (dist == 0) break;
+                }
             }
+            lut[key] = static_cast<quint8>(best);
         }
-        lut[key] = static_cast<quint8>(best);
+        m_cachedLutPalette = palette;
+        m_cachedLut = lut;
+        m_cachedLutValid = true;
     }
 
     QByteArray indices;
@@ -266,12 +290,12 @@ bool GifEncoder::writeDataBlock(QByteArray &block)
     return true;
 }
 
-bool GifEncoder::writeIndexedImageData(const QByteArray &indices)
+bool GifEncoder::writeIndexedImageData(const QByteArray &indices, int colorTableBits)
 {
-    constexpr int MIN_CODE_SIZE = 8;
-    constexpr int CLEAR_CODE = 1 << MIN_CODE_SIZE;
-    constexpr int END_CODE = CLEAR_CODE + 1;
-    constexpr int CODE_SIZE = MIN_CODE_SIZE + 1;
+    const int MIN_CODE_SIZE = qBound(2, colorTableBits, 8);
+    const int CLEAR_CODE = 1 << MIN_CODE_SIZE;
+    const int END_CODE = CLEAR_CODE + 1;
+    const int CODE_SIZE = MIN_CODE_SIZE + 1;
 
     if (!writeByte(MIN_CODE_SIZE)) return false;
 

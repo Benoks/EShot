@@ -49,6 +49,9 @@ private slots:
         QCOMPARE(LinuxPortalGlobalShortcuts::preferredTrigger(MOD_CONTROL, VK_F12),
                  QStringLiteral("CTRL+F12"));
         QVERIFY(LinuxPortalGlobalShortcuts::preferredTrigger(0, 0).isEmpty());
+        // Modifiers-only triggers (unmapped key) must not produce dangling "+" parts.
+        QVERIFY(LinuxPortalGlobalShortcuts::preferredTrigger(
+                    MOD_CONTROL | MOD_ALT, VK_APPS).isEmpty());
     }
 
     void prefersPortalThenFallsBackToX11()

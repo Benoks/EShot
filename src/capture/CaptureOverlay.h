@@ -10,6 +10,8 @@
 #include <QTimer>
 #include <QElapsedTimer>
 #include <QList>
+#include <QHash>
+#include <QKeySequence>
 #include <QStringList>
 #include <QTextEdit>
 #include <QPointer>
@@ -164,6 +166,8 @@ private:
     void releaseTextKeyboardFocus();
     void updateUndoRedoState();
     bool matchesOverlayShortcut(QKeyEvent *event, const QString &key, const QString &fallback) const;
+    // Overlay shortcut cache (cleared in startCaptureInternal)
+    mutable QHash<QString, QKeySequence> m_overlayShortcutCache;
     void selectAnnotationTool(int toolId);
     void restoreAfterModalDialog();
     void startNextVisualSearchUpload(quint64 generation, VisualSearchProvider provider);

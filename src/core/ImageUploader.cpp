@@ -18,10 +18,24 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QRegularExpression>
+#include <QTemporaryFile>
 #include <QUrl>
 #include <QUrlQuery>
 
 namespace {
+QString sanitizedFileName(const QString &filePath)
+{
+    QString name = QFileInfo(filePath).fileName();
+    QString sanitized;
+    sanitized.reserve(name.size());
+    for (const QChar &c : name) {
+        const ushort u = c.unicode();
+        if (u >= 0x20 && u != 0x7f && c != QLatin1Char('"'))
+            sanitized.append(c);
+    }
+    return sanitized;
+}
+
 QString tokenFromQueryLikeString(QString text)
 {
     text = text.trimmed();
@@ -181,7 +195,7 @@ public:
         filePart.setHeader(QNetworkRequest::ContentTypeHeader, QVariant(QStringLiteral("image/png")));
         filePart.setHeader(QNetworkRequest::ContentDispositionHeader,
                            QVariant(QStringLiteral("form-data; name=\"%1\"; filename=\"%2\"")
-                                        .arg(m_fileField, QFileInfo(imagePath()).fileName())));
+                                        .arg(m_fileField, sanitizedFileName(imagePath()))));
         QFile *file = new QFile(imagePath(), m_multipart);
         if (!file->open(QIODevice::ReadOnly)) {
             delete m_multipart;
@@ -295,7 +309,7 @@ public:
         filePart.setHeader(QNetworkRequest::ContentTypeHeader, QVariant(QStringLiteral("image/png")));
         filePart.setHeader(QNetworkRequest::ContentDispositionHeader,
                            QVariant(QStringLiteral("form-data; name=\"%1\"; filename=\"%2\"")
-                                        .arg(m_fileField, QFileInfo(imagePath()).fileName())));
+                                        .arg(m_fileField, sanitizedFileName(imagePath()))));
         QFile *file = new QFile(imagePath(), m_multipart);
         if (!file->open(QIODevice::ReadOnly)) {
             delete m_multipart;
@@ -428,8 +442,14 @@ public:
         , m_url(url)
         , m_settingsKey(settingsKey)
     {
-        QSettings s("EShot", "EShot");
-        m_apiKey = s.value(m_settingsKey).toString().trimmed();
+        m_apiKey = SecureCredentialStore::read(m_settingsKey).trimmed();
+        if (m_apiKey.isEmpty()) {
+            QSettings s("EShot", "EShot");
+            m_apiKey = SecureCredentialStore::migrateLegacyToken(
+                s, m_settingsKey, [](const QString &key, const QString &token) {
+                    return token.isEmpty() || SecureCredentialStore::write(key, token);
+                }).trimmed();
+        }
     }
 
     ~CheveretoUploader() override { cancel(); }
@@ -442,8 +462,7 @@ public:
     void setAuthValue(const QString &value) override
     {
         m_apiKey = value.trimmed();
-        QSettings s("EShot", "EShot");
-        s.setValue(m_settingsKey, m_apiKey);
+        SecureCredentialStore::write(m_settingsKey, m_apiKey);
     }
 
     void upload() override
@@ -480,7 +499,7 @@ public:
         filePart.setHeader(QNetworkRequest::ContentTypeHeader, QVariant(QStringLiteral("image/png")));
         filePart.setHeader(QNetworkRequest::ContentDispositionHeader,
                            QVariant(QStringLiteral("form-data; name=\"source\"; filename=\"%1\"")
-                                        .arg(QFileInfo(imagePath()).fileName())));
+                                        .arg(sanitizedFileName(imagePath()))));
         QFile *file = new QFile(imagePath(), m_multipart);
         if (!file->open(QIODevice::ReadOnly)) {
             delete m_multipart;
@@ -704,7 +723,7 @@ private:
                 return;
             }
             const QUrl href(QJsonDocument::fromJson(data).object().value(QStringLiteral("href")).toString());
-            if (!href.isValid()) {
+            if (href.isEmpty() || !href.isValid() || href.scheme() != QStringLiteral("https")) {
                 finishWithError(TranslationManager::uploadErrorYandexUploadUrlMissing());
                 return;
             }
@@ -1004,18 +1023,21 @@ void ImageUploader::setImage(const QPixmap &pixmap)
     QByteArray bytes;
     QBuffer buf(&bytes);
     buf.open(QIODevice::WriteOnly);
-    pixmap.save(&buf, "PNG");
+    if (!pixmap.save(&buf, "PNG")) {
+        qWarning() << "ImageUploader: cannot encode pixmap to PNG";
+        return;
+    }
 
-    QString path = QDir::temp().filePath(
-        QStringLiteral("eshot_upload_%1.png").arg(QDateTime::currentMSecsSinceEpoch()));
-    QFile f(path);
-    if (f.open(QIODevice::WriteOnly)) {
-        f.write(bytes);
-        f.close();
-        m_imagePath = path;
+    QTemporaryFile tempFile(QDir::temp().filePath(
+        QStringLiteral("eshot_upload_XXXXXX.png")));
+    tempFile.setAutoRemove(false);
+    if (tempFile.open()) {
+        tempFile.write(bytes);
+        tempFile.close();
+        m_imagePath = tempFile.fileName();
         m_ownsTempFile = true;
     } else {
-        qWarning() << "ImageUploader: cannot write temp file:" << path;
+        qWarning() << "ImageUploader: cannot write temp file:" << tempFile.fileName();
         m_imagePath.clear();
         m_ownsTempFile = false;
     }

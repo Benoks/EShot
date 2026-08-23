@@ -63,34 +63,48 @@ QString preferredGstAacEncoder(const QStringList &availableElements)
 {
     const QStringList preference = {QStringLiteral("fdkaacenc"), QStringLiteral("avenc_aac"),
                                     QStringLiteral("faac"), QStringLiteral("voaacenc")};
-    for (const QString &encoder : preference)
-        if (availableElements.contains(encoder)) return encoder;
+    for (const QString &encoder : preference) {
+        for (const QString &element : availableElements) {
+            if (element == encoder)
+                return encoder;
+
+            // `gst-inspect-1.0` without an element argument prints catalog
+            // rows as "plugin: element: description". Accept that form too
+            // so the fast, single-process discovery path sees installed AAC
+            // encoders instead of treating the full row as an element name.
+            const int firstColon = element.indexOf(QLatin1Char(':'));
+            const int secondColon = firstColon < 0
+                ? -1
+                : element.indexOf(QLatin1Char(':'), firstColon + 1);
+            if (firstColon >= 0 && secondColon > firstColon
+                && element.mid(firstColon + 1, secondColon - firstColon - 1).trimmed() == encoder) {
+                return encoder;
+            }
+        }
+    }
     return {};
 }
 
 QString discoverGstAacEncoder()
 {
-    for (const QString &encoder : {QStringLiteral("fdkaacenc"), QStringLiteral("avenc_aac"),
-                                   QStringLiteral("faac"), QStringLiteral("voaacenc")}) {
-        QProcess inspect;
-        inspect.setProgram(QStringLiteral("gst-inspect-1.0"));
-        inspect.setArguments({encoder});
-        inspect.setStandardOutputFile(QProcess::nullDevice());
-        inspect.setStandardErrorFile(QProcess::nullDevice());
-        inspect.start();
-        if (!inspect.waitForStarted(2000))
-            continue;
-        if (inspect.waitForFinished(15000)
-            && inspect.exitStatus() == QProcess::NormalExit
-            && inspect.exitCode() == 0) {
-            return encoder;
-        }
-        if (inspect.state() != QProcess::NotRunning) {
-            inspect.kill();
-            inspect.waitForFinished(1000);
-        }
+    // A single bare gst-inspect-1.0 call lists every installed element,
+    // replacing the per-encoder probes that used to block this thread for
+    // up to a minute across four spawned processes.
+    QProcess inspect;
+    inspect.setProgram(QStringLiteral("gst-inspect-1.0"));
+    inspect.setStandardErrorFile(QProcess::nullDevice());
+    inspect.start();
+    if (!inspect.waitForStarted(2000))
+        return {};
+    if (!inspect.waitForFinished(15000)) {
+        inspect.kill();
+        inspect.waitForFinished(1000);
     }
-    return {};
+    if (inspect.exitStatus() != QProcess::NormalExit || inspect.exitCode() != 0)
+        return {};
+    const QStringList elements = QString::fromLocal8Bit(inspect.readAllStandardOutput())
+        .split(QLatin1Char('\n'), Qt::SkipEmptyParts);
+    return preferredGstAacEncoder(elements);
 }
 
 QStringList waylandRecordingAudioArguments(bool desktopEnabled, int desktopVolume,
@@ -196,6 +210,7 @@ QList<QPair<QString, QString>> linuxMicrophoneDevices(const QString &pactlSource
         if (trimmed.startsWith(QStringLiteral("Name:"))) name = trimmed.mid(5).trimmed();
         else if (trimmed.startsWith(QStringLiteral("Description:"))) description = trimmed.mid(12).trimmed();
         else if (trimmed.startsWith(QStringLiteral("Monitor of Sink:"))) monitor = trimmed.mid(16).trimmed();
+        else if (trimmed.startsWith(QStringLiteral("Monitor of Source:"))) monitor = trimmed.mid(18).trimmed();
     }
     flush();
     return result;
@@ -206,7 +221,13 @@ QList<QPair<QString, QString>> discoverLinuxMicrophoneDevices()
 #if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
     QProcess pactl;
     pactl.start(QStringLiteral("pactl"), {QStringLiteral("list"), QStringLiteral("sources")});
-    if (!pactl.waitForFinished(2000) || pactl.exitCode() != 0) return {};
+    if (!pactl.waitForStarted(2000)) return {};
+    if (!pactl.waitForFinished(2000)) {
+        pactl.kill();
+        pactl.waitForFinished(1000);
+        return {};
+    }
+    if (pactl.exitCode() != 0) return {};
     return linuxMicrophoneDevices(QString::fromLocal8Bit(pactl.readAllStandardOutput()));
 #else
     return {};

@@ -123,6 +123,16 @@ LinuxPortalScreenCast::Stream LinuxPortalScreenCast::select(
     QWidget *parent, int timeoutMs, const QString &persistenceId)
 {
 #if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
+    if (m_selectInProgress) {
+        qWarning() << "[LinuxScreenCast] a screen cast selection is already in progress";
+        return {};
+    }
+    m_selectInProgress = true;
+    struct SelectGuard {
+        LinuxPortalScreenCast *portal;
+        ~SelectGuard() { portal->m_selectInProgress = false; }
+    } selectGuard{this};
+
     QDBusConnection bus = QDBusConnection::sessionBus();
     if (!bus.isConnected())
         return {};

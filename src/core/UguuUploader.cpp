@@ -12,6 +12,19 @@
 #include <QJsonArray>
 
 namespace {
+QString sanitizedFileName(const QString &filePath)
+{
+    QString name = QFileInfo(filePath).fileName();
+    QString sanitized;
+    sanitized.reserve(name.size());
+    for (const QChar &c : name) {
+        const ushort u = c.unicode();
+        if (u >= 0x20 && u != 0x7f && c != QLatin1Char('"'))
+            sanitized.append(c);
+    }
+    return sanitized;
+}
+
 QString responsePreview(const QByteArray &data)
 {
     QString text = QString::fromUtf8(data).trimmed();
@@ -65,7 +78,7 @@ void UguuUploader::upload()
     filePart.setHeader(QNetworkRequest::ContentTypeHeader, QVariant(QStringLiteral("image/png")));
     filePart.setHeader(QNetworkRequest::ContentDispositionHeader,
                        QVariant(QStringLiteral("form-data; name=\"files[]\"; filename=\"%1\"")
-                                    .arg(QFileInfo(imagePath()).fileName())));
+                                    .arg(sanitizedFileName(imagePath()))));
     QFile *file = new QFile(imagePath(), m_multipart);
     if (!file->open(QIODevice::ReadOnly)) {
         delete m_multipart;

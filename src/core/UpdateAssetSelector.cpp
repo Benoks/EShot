@@ -30,6 +30,14 @@ bool fileMatchesSha256(const QString &path, const QString &expectedSha256)
     return QString::fromLatin1(hash.result().toHex()) == expectedSha256.toLower();
 }
 
+bool downloadedAssetDigestIsValid(const QString &path, const QString &expectedSha256,
+                                  bool digestRequired)
+{
+    if (expectedSha256.isEmpty())
+        return !digestRequired;
+    return fileMatchesSha256(path, expectedSha256);
+}
+
 UpdateAsset selectUpdateAsset(const QJsonArray &assets,
                               UpdatePlatform platform,
                               const QString &architecture)

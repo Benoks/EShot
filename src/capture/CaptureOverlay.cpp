@@ -45,6 +45,7 @@
 #include <QFrame>
 #include <QToolButton>
 #include <QFontComboBox>
+#include <QLineEdit>
 #include <QSpinBox>
 #include <QAbstractSpinBox>
 #include <QSlider>
@@ -1715,10 +1716,10 @@ void CaptureOverlay::prewarm()
             m_actionPanel->move(20, 90);
             m_actionPanel->show();
         }
-        QCoreApplication::processEvents();
+        QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
         if (m_toolbar) m_toolbar->grab();
         if (m_actionPanel) m_actionPanel->grab();
-        QCoreApplication::processEvents();
+        QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
         if (m_toolbar) m_toolbar->hide();
         if (m_actionPanel) m_actionPanel->hide();
         hide();
@@ -1782,6 +1783,8 @@ void CaptureOverlay::startCaptureInternal(CaptureSelectionMode selectionMode, bo
 
     // Load settings
     QSettings s("EShot", "EShot");
+    // Overlay shortcuts are re-resolved from settings once per capture
+    m_overlayShortcutCache.clear();
     const int initialTool = initialAnnotationTool(
         s.value("rememberLastAnnotationTool", false).toBool(),
         s.value("lastAnnotationTool", AnnotationEngine::None).toInt(),
@@ -1929,10 +1932,13 @@ void CaptureOverlay::captureAllScreens()
         return;
     }
 
-    // GetSystemMetrics returns physical pixels (the process is per-monitor DPI
-    // aware), but the overlay window and all selection math run in logical
-    // pixels. Keep the snapshot at full physical resolution and store the
-    // virtual desktop in logical coordinates, bridged by m_dpr.
+    // The captured virtual desktop is one contiguous physical bitmap, while
+    // the overlay currently maps it with one canvas transform. Keep that
+    // transform derived from the same primary ratio as the bitmap dimensions.
+    // A union of Qt's mixed-DPI screen geometries has gaps by design and would
+    // stretch this snapshot between monitors. Proper per-monitor rendering is
+    // a separate, piecewise-coordinate change rather than a safe one-line
+    // optimization here.
     m_virtualDesktopRect = QRect(qRound(vx / m_dpr), qRound(vy / m_dpr),
                                  qRound(vw / m_dpr), qRound(vh / m_dpr));
 
@@ -2207,7 +2213,9 @@ void CaptureOverlay::paintEvent(QPaintEvent *event)
 {
     Q_UNUSED(event);
     QPainter painter(this);
-    painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
+    const bool snapshotOneToOne =
+        m_screenSnapshot.size() == (QSizeF(width(), height()) * devicePixelRatioF()).toSize();
+    painter.setRenderHint(QPainter::SmoothPixmapTransform, !snapshotOneToOne);
 
     painter.drawPixmap(0, 0, width(), height(), m_screenSnapshot);
     // Draw once beneath the dim layer so annotations outside the selection
@@ -2222,13 +2230,15 @@ void CaptureOverlay::paintEvent(QPaintEvent *event)
         ? (m_animatedWindowRect.isValid() ? m_animatedWindowRect : m_hoveredWindowRect)
         : normalizedSelectionRect();
 
-    if (!selRect.isEmpty()) {
-        // Clean area
+    if (!selRect.isEmpty() && selRect != rect()) {
+        // Clean area. When the selection covers the whole overlay the base
+        // blit above already painted it; skip the redundant second blit.
         painter.save();
         painter.setClipRect(selRect);
         painter.setCompositionMode(QPainter::CompositionMode_Source);
         // Keep the preview aligned to the full canvas. Cropping and rescaling
         // the selection itself causes subpixel shimmer at fractional DPI.
+        painter.setRenderHint(QPainter::SmoothPixmapTransform, !snapshotOneToOne);
         painter.drawPixmap(rect(), m_screenSnapshot, m_screenSnapshot.rect());
         painter.restore();
 
@@ -2514,6 +2524,7 @@ void CaptureOverlay::mousePressEvent(QMouseEvent *event)
                 const QPointF handleCenter = AnnotationRotationGeometry::handleCenter(annotationRect);
                 if (QLineF(event->pos(), handleCenter).length() <= 14.0) {
                     m_isRotatingAnnotation = true;
+                    m_annotationEngine->beginRotate(selectedIndex);
                     m_rotationCenter = m_annotationEngine->rotatedBoundingRectOf(selectedIndex).center();
                     m_rotationDragStartAngle = AnnotationRotationGeometry::angleAt(m_rotationCenter, event->pos());
                     m_rotationStartDegrees = m_annotationEngine->rotationDegreesOf(selectedIndex);
@@ -2566,6 +2577,7 @@ void CaptureOverlay::mousePressEvent(QMouseEvent *event)
                     m_isDraggingAnnotation = true;
                     m_dragAnnotationStart = rel;
                     m_annotationEngine->setSelectedIndex(idx);
+                    m_annotationEngine->beginMove(idx);
                     setCursor(Qt::SizeAllCursor);
                     update();
                     return;
@@ -2608,6 +2620,7 @@ void CaptureOverlay::mousePressEvent(QMouseEvent *event)
                     m_isDraggingAnnotation = true;
                     m_dragAnnotationStart = rel;
                     m_annotationEngine->setSelectedIndex(idx);
+                    m_annotationEngine->beginMove(idx);
                     setCursor(Qt::SizeAllCursor);
                     update();
                     return;
@@ -2660,6 +2673,7 @@ void CaptureOverlay::mousePressEvent(QMouseEvent *event)
         if (m_eyedropperActive) {
             // Eyedropper cancel
             m_eyedropperActive = false;
+            m_eyedropperImage = QImage();
             setCursor(Qt::CrossCursor);
             update();
             return;
@@ -2702,9 +2716,21 @@ void CaptureOverlay::mouseDoubleClickEvent(QMouseEvent *event)
 
 void CaptureOverlay::mouseMoveEvent(QMouseEvent *event)
 {
-    // In Eyedropper mode — only repaint
+    // In Eyedropper mode — only repaint the preview circle + color label
     if (m_eyedropperActive) {
-        update();
+        constexpr int EyedropperRepaintMargin = 120;
+        const QPoint previousPosition = m_hasCrosshairPosition
+            ? m_crosshairPosition : event->pos();
+        m_crosshairPosition = event->pos();
+        m_hasCrosshairPosition = true;
+        QRegion dirty;
+        const QPoint positions[] = { previousPosition, event->pos() };
+        for (const QPoint &position : positions) {
+            dirty += QRect(position - QPoint(EyedropperRepaintMargin, EyedropperRepaintMargin),
+                           QSize(EyedropperRepaintMargin * 2, EyedropperRepaintMargin * 2))
+                         .intersected(rect());
+        }
+        update(dirty);
         return;
     }
 
@@ -2849,8 +2875,12 @@ void CaptureOverlay::mouseMoveEvent(QMouseEvent *event)
             int w = oldSel.width();
             int h = oldSel.height();
             QRect bounds = rect();   // logical overlay bounds
-            newTopLeft.setX(qBound(bounds.left(), newTopLeft.x(), bounds.right() - w + 1));
-            newTopLeft.setY(qBound(bounds.top(), newTopLeft.y(), bounds.bottom() - h + 1));
+            // qMax guard: a selection larger than the overlay must not make
+            // the clamp maximum underflow below the minimum.
+            const int maxX = qMax(bounds.left(), bounds.right() - w + 1);
+            const int maxY = qMax(bounds.top(), bounds.bottom() - h + 1);
+            newTopLeft.setX(qBound(bounds.left(), newTopLeft.x(), maxX));
+            newTopLeft.setY(qBound(bounds.top(), newTopLeft.y(), maxY));
             m_selectionStart = newTopLeft;
             m_selectionEnd = newTopLeft + QPoint(w - 1, h - 1);
         } 
@@ -2970,6 +3000,8 @@ void CaptureOverlay::mouseReleaseEvent(QMouseEvent *event)
 
         // Annotation rotation end
         if (m_isRotatingAnnotation) {
+            if (m_annotationEngine)
+                m_annotationEngine->endRotate();
             m_isRotatingAnnotation = false;
             setCursor(Qt::CrossCursor);
             updateUndoRedoState();
@@ -2979,8 +3011,11 @@ void CaptureOverlay::mouseReleaseEvent(QMouseEvent *event)
 
         // Annotation move end
         if (m_isDraggingAnnotation) {
+            if (m_annotationEngine)
+                m_annotationEngine->endMove();
             m_isDraggingAnnotation = false;
             setCursor(Qt::CrossCursor);
+            updateUndoRedoState();
             update();
             return;
         }
@@ -3049,6 +3084,7 @@ void CaptureOverlay::keyPressEvent(QKeyEvent *event)
         // If eyedropper is active, just close it
         if (m_eyedropperActive) {
             m_eyedropperActive = false;
+            m_eyedropperImage = QImage();
             update();
             return;
         }
@@ -3184,13 +3220,26 @@ bool CaptureOverlay::eventFilter(QObject *obj, QEvent *event)
     // back to the capture canvas unless the user is actively editing text.
     if (obj != this && isVisible() && m_selectionComplete
         && (!m_textEdit || !m_textEdit->isVisible())) {
-        if (event->type() == QEvent::KeyPress) {
-            keyPressEvent(static_cast<QKeyEvent *>(event));
-            return true;
+        // Let overlay child editors (spin boxes, combos incl. their popups,
+        // line edits) keep their keystrokes instead of consuming them here.
+        QWidget *focused = QApplication::focusWidget();
+        bool editorHasFocus = false;
+        for (QWidget *w = focused; w; w = w->parentWidget()) {
+            if (qobject_cast<QLineEdit *>(w) || qobject_cast<QAbstractSpinBox *>(w)
+                || qobject_cast<QComboBox *>(w)) {
+                editorHasFocus = true;
+                break;
+            }
         }
-        if (event->type() == QEvent::KeyRelease) {
-            keyReleaseEvent(static_cast<QKeyEvent *>(event));
-            return true;
+        if (!editorHasFocus) {
+            if (event->type() == QEvent::KeyPress) {
+                keyPressEvent(static_cast<QKeyEvent *>(event));
+                return true;
+            }
+            if (event->type() == QEvent::KeyRelease) {
+                keyReleaseEvent(static_cast<QKeyEvent *>(event));
+                return true;
+            }
         }
     }
     return QWidget::eventFilter(obj, event);
@@ -3644,11 +3693,16 @@ bool CaptureOverlay::matchesOverlayShortcut(QKeyEvent *event, const QString &key
     const Qt::KeyboardModifiers relevantMods =
         event->modifiers() & (Qt::ControlModifier | Qt::AltModifier | Qt::ShiftModifier | Qt::MetaModifier);
     QKeySequence pressed(static_cast<int>(relevantMods) | event->key());
-    QSettings s("EShot", "EShot");
-    const QString configured = s.value(QStringLiteral("overlayShortcut/%1").arg(key), fallback).toString().trimmed();
-    if (configured.isEmpty())
-        return false;
-    const QKeySequence target(configured);
+    // Resolved once per capture (cache cleared in startCaptureInternal)
+    // instead of opening QSettings on every key event.
+    QKeySequence target = m_overlayShortcutCache.value(key);
+    if (target.isEmpty()) {
+        QSettings s("EShot", "EShot");
+        const QString configured = s.value(QStringLiteral("overlayShortcut/%1").arg(key), fallback).toString().trimmed();
+        if (!configured.isEmpty())
+            target = QKeySequence(configured);
+        m_overlayShortcutCache.insert(key, target);
+    }
     return !target.isEmpty() && target.matches(pressed) == QKeySequence::ExactMatch;
 }
 
@@ -3888,7 +3942,23 @@ QRect CaptureOverlay::selectedDisplayRect() const
 QRect CaptureOverlay::monitorRectAt(const QPoint &pos) const
 {
 #ifdef Q_OS_WIN
-    // pos is logical (widget-local); Win32 monitor APIs work in physical pixels.
+    // pos is logical (widget-local). Resolve against the per-monitor capture
+    // table so mixed-DPI setups pick the correct monitor geometry instead of
+    // scaling everything with the primary screen ratio.
+    const QPoint globalLogical = pos + m_virtualDesktopRect.topLeft();
+    for (const CaptureMonitorGeometry &monitor : m_captureMonitors) {
+        if (!monitor.logical.isValid() || !monitor.physical.isValid() || monitor.scale <= 0.0)
+            continue;
+        const QPoint physicalPoint(
+            monitor.physical.x() + qRound((globalLogical.x() - monitor.logical.x()) * monitor.scale),
+            monitor.physical.y() + qRound((globalLogical.y() - monitor.logical.y()) * monitor.scale));
+        if (monitor.physical.contains(physicalPoint)) {
+            return displayRectFromPhysical(monitor.physical, m_captureMonitors)
+                .translated(-m_virtualDesktopRect.topLeft()).intersected(rect());
+        }
+    }
+
+    // Fallback: Win32 monitor lookup bridged by the primary ratio.
     POINT nativePoint = {
         (LONG)qRound((pos.x() + m_virtualDesktopRect.x()) * m_dpr),
         (LONG)qRound((pos.y() + m_virtualDesktopRect.y()) * m_dpr)

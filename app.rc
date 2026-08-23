@@ -2,3 +2,35 @@
 
 // Application icon
 IDI_ICON1 ICON "app.ico"
+
+// Version info — keep in sync with project(EShot VERSION ...) in CMakeLists.txt.
+#define VER_FILE 4,2,8,0
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION VER_FILE
+ PRODUCTVERSION VER_FILE
+ FILEFLAGSMASK 0x3fL
+ FILEFLAGS 0x0L
+ FILEOS VOS_NT_WINDOWS32
+ FILETYPE VFT_APP
+ FILESUBTYPE 0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904b0"
+        BEGIN
+            VALUE "CompanyName", "EShot"
+            VALUE "FileDescription", "EShot Screenshot Tool"
+            VALUE "FileVersion", "4.2.8.0"
+            VALUE "InternalName", "EShot"
+            VALUE "LegalCopyright", "Copyright (C) EShot"
+            VALUE "OriginalFilename", "EShot.exe"
+            VALUE "ProductName", "EShot"
+            VALUE "ProductVersion", "4.2.8.0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x0409, 1200
+    END
+END

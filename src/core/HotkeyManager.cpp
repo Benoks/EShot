@@ -78,12 +78,22 @@ QList<unsigned int> lockModifierVariants(unsigned int base)
         base,
         base | LockMask,
         base | Mod2Mask,
-        base | LockMask | Mod2Mask
+        base | LockMask | Mod2Mask,
+        base | Mod5Mask,
+        base | LockMask | Mod5Mask,
+        base | Mod2Mask | Mod5Mask,
+        base | LockMask | Mod2Mask | Mod5Mask
     };
 }
 
-int ignoreX11HotkeyError(Display *, XErrorEvent *)
+// Set while the scoped error handler below observes BadAccess, i.e. another
+// client already owns the requested passive grab.
+bool x11GrabFailed = false;
+
+int x11HotkeyErrorHandler(Display *, XErrorEvent *error)
 {
+    if (error && error->error_code == BadAccess)
+        x11GrabFailed = true;
     return 0;
 }
 #endif
@@ -97,7 +107,9 @@ HotkeyManager& HotkeyManager::instance()
 
 QString HotkeyManager::shortcutText(UINT modifiers, UINT virtualKey)
 {
-    const QString portable = LinuxPortalGlobalShortcuts::preferredTrigger(modifiers, virtualKey);
+    QString portable = LinuxPortalGlobalShortcuts::preferredTrigger(modifiers, virtualKey);
+    // QKeySequence knows "Meta" but not the portal-style "SUPER".
+    portable.replace(QStringLiteral("SUPER"), QStringLiteral("Meta"));
     return QKeySequence::fromString(portable, QKeySequence::PortableText)
         .toString(QKeySequence::NativeText);
 }
@@ -173,7 +185,6 @@ HotkeyManager::HotkeyManager(QObject *parent) : QObject(parent)
 #if defined(ESHOT_HAVE_X11)
     else if (backend == LinuxHotkeyBackend::X11) {
         m_x11RootWindow = DefaultRootWindow(static_cast<Display *>(m_x11Display));
-        XSetErrorHandler(ignoreX11HotkeyError);
         QTimer *pollTimer = new QTimer(this);
         pollTimer->setInterval(40);
         connect(pollTimer, &QTimer::timeout, this, [this]() {
@@ -186,7 +197,7 @@ HotkeyManager::HotkeyManager(QObject *parent) : QObject(parent)
                 if (event.type != KeyPress)
                     continue;
                 const unsigned int keycode = event.xkey.keycode;
-                const unsigned int state = event.xkey.state & ~(LockMask | Mod2Mask);
+                const unsigned int state = event.xkey.state & ~(LockMask | Mod2Mask | Mod5Mask);
                 for (auto it = m_registeredHotkeyDefs.constBegin(); it != m_registeredHotkeyDefs.constEnd(); ++it) {
                     const UINT modifiers = it.value().first;
                     const UINT virtualKey = it.value().second;
@@ -328,6 +339,12 @@ bool HotkeyManager::registerHotkey(int id, UINT modifiers, UINT virtualKey)
         }
         m_registeredHotkeyDefs = previous;
         m_registeredHotkeys.removeAll(id);
+        // Push the previous definitions back so partially applied
+        // registrations do not leave ghost entries in kglobalaccel.
+        if (!previous.isEmpty())
+            m_kdeShortcuts->setShortcuts(previous);
+        else
+            m_kdeShortcuts->deRegisterShortcut(id);
         return false;
     }
     Display *display = static_cast<Display *>(m_x11Display);
@@ -351,8 +368,20 @@ bool HotkeyManager::registerHotkey(int id, UINT modifiers, UINT virtualKey)
 
     const unsigned int baseModifiers = x11ModifiersForHotkey(modifiers);
     XSync(display, False);
+    x11GrabFailed = false;
+    XErrorHandler previousHandler = XSetErrorHandler(x11HotkeyErrorHandler);
     for (unsigned int variant : lockModifierVariants(baseModifiers)) {
         XGrabKey(display, keycode, variant, m_x11RootWindow, True, GrabModeAsync, GrabModeAsync);
+    }
+    XSync(display, False);
+    XSetErrorHandler(previousHandler);
+    if (x11GrabFailed) {
+        qWarning() << "[HotkeyManager] XGrabKey failed (BadAccess):"
+                      " the key combination is already grabbed by another client";
+        for (unsigned int variant : lockModifierVariants(baseModifiers))
+            XUngrabKey(display, keycode, variant, m_x11RootWindow);
+        XSync(display, False);
+        return false;
     }
     XSelectInput(display, m_x11RootWindow, KeyPressMask);
     XSync(display, False);
@@ -390,6 +419,12 @@ bool HotkeyManager::registerHotkey(int id, UINT modifiers, UINT virtualKey)
         }
         m_registeredHotkeyDefs = previous;
         m_registeredHotkeys.removeAll(id);
+        // Push the previous definitions back so partially applied
+        // registrations do not leave ghost entries in kglobalaccel.
+        if (!previous.isEmpty())
+            m_kdeShortcuts->setShortcuts(previous);
+        else
+            m_kdeShortcuts->deRegisterShortcut(id);
         return false;
     }
     if (!m_portalShortcuts || !m_portalShortcuts->isAvailable())
@@ -474,8 +509,10 @@ void HotkeyManager::unregisterHotkey(int id)
     m_registeredHotkeys.removeAll(id);
     m_registeredHotkeyDefs.remove(id);
 #if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
-    if (m_kdeShortcuts && m_kdeShortcuts->isAvailable() && !m_usePortalShortcuts)
+    if (m_kdeShortcuts && m_kdeShortcuts->isAvailable() && !m_usePortalShortcuts) {
+        m_kdeShortcuts->deRegisterShortcut(id);
         m_kdeShortcuts->setShortcuts(m_registeredHotkeyDefs);
+    }
 #endif
     refreshPortalShortcuts();
 }

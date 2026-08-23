@@ -38,6 +38,7 @@ Build/
 build_test/
 build_release/
 build_v*/
+build-*/
 build-linux/
 build-appimage/
 build-appimage-tools/
@@ -110,3 +111,6 @@ debug_output.txt
 ocr_test_output.txt
 
 ROADMAP.md
+
+# Local Codex planning artifacts
+docs/superpowers/

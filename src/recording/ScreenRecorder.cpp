@@ -56,7 +56,10 @@ bool configurePipeWireRemote(QProcess *process, int fd)
 #endif
 }
 
-ScreenRecorder::ScreenRecorder(QObject *parent) : QObject(parent) {}
+ScreenRecorder::ScreenRecorder(QObject *parent) : QObject(parent)
+{
+    m_monotonicClock.start();
+}
 
 ScreenRecorder::~ScreenRecorder()
 {
@@ -86,6 +89,7 @@ void ScreenRecorder::start(const QRect &captureRect, int fps, int maxSeconds, in
     m_maxSeconds = maxSeconds;
     m_frameCount = 0;
     m_delayCs = qMax(1, qRound(100.0 / m_fps));
+    m_lastFrameMs = -1;
     m_outputPath = outputPath;
     m_loopCount = loopCount;
     m_portalVideoPath.clear();
@@ -124,7 +128,7 @@ void ScreenRecorder::start(const QRect &captureRect, int fps, int maxSeconds, in
     m_recording = true;
     m_timeline.start(nowMs());
     emit recordingStarted();
-    emit remainingTimeChanged(m_maxSeconds);
+    emit remainingTimeChanged(m_maxSeconds > 0 ? m_maxSeconds : -1);
     emit elapsedTimeChanged(0);
 
     m_frameTimer = new QTimer(this);
@@ -203,17 +207,21 @@ void ScreenRecorder::stop()
         resume();
     if (m_portalRecording && m_process) {
 #if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
-        QProcess::execute(QStringLiteral("kill"),
-                          {QStringLiteral("-INT"), QString::number(m_process->processId())});
+        if (m_process->processId() > 0)
+            QProcess::execute(QStringLiteral("kill"),
+                              {QStringLiteral("-INT"), QString::number(m_process->processId())});
 #else
         m_process->write("q\n");
 #endif
-        QTimer::singleShot(2500, this, [this]() {
-            if (m_process && m_recording)
+        // Capture the process pointer so a fast stop()->start() cannot make
+        // these deferred timers tear down the NEW recording's gst process.
+        QProcess *process = m_process;
+        QTimer::singleShot(2500, this, [this, process]() {
+            if (m_process == process && m_recording)
                 m_process->terminate();
         });
-        QTimer::singleShot(5000, this, [this]() {
-            if (m_process && m_recording)
+        QTimer::singleShot(5000, this, [this, process]() {
+            if (m_process == process && m_recording)
                 m_process->kill();
         });
         return;
@@ -290,6 +298,7 @@ void ScreenRecorder::finishRecording()
             m_hasPendingFrame = true;
         }
     }
+    const bool hasCapturedFrame = m_frameCount > 0 || m_hasPendingFrame;
     releaseCaptureResources();
 
     QString savedPath = m_outputPath;
@@ -307,6 +316,12 @@ void ScreenRecorder::finishRecording()
             emit recordingFailed(err);
             return;
         }
+    }
+    if (!hasCapturedFrame) {
+        if (QFile::exists(savedPath))
+            QFile::remove(savedPath);
+        emit recordingFailed(QStringLiteral("no frames captured"));
+        return;
     }
     emit recordingStopped(savedPath);
 }
@@ -376,12 +391,21 @@ void ScreenRecorder::captureFrame()
         return;
     }
 
+    // Derive GIF frame delays from the real elapsed time (monotonic,
+    // pause-aware) instead of accumulating the nominal 1000/fps interval,
+    // whose truncation makes playback speed drift over long recordings.
+    const qint64 frameMs = m_timeline.activeElapsedMs(nowMs());
+    if (m_lastFrameMs >= 0 && m_hasPendingFrame)
+        m_pendingDelayCs += static_cast<int>(qMax<qint64>(0, (frameMs - m_lastFrameMs + 5) / 10));
+    m_lastFrameMs = frameMs;
+
     if (!m_hasPendingFrame) {
         m_pendingFrame = frame;
-        m_pendingDelayCs = m_delayCs;
+        m_pendingDelayCs = 0;
         m_hasPendingFrame = true;
     } else if (framesEqual(m_pendingFrame, frame) && m_pendingDelayCs < 65000) {
-        m_pendingDelayCs += m_delayCs;
+        // Identical frame: its delay was already extended by the measured
+        // delta above.
     } else {
         if (!flushPendingFrame()) {
             QString err = m_encoder->errorString();
@@ -390,7 +414,7 @@ void ScreenRecorder::captureFrame()
             return;
         }
         m_pendingFrame = frame;
-        m_pendingDelayCs = m_delayCs;
+        m_pendingDelayCs = 0;
         m_hasPendingFrame = true;
     }
     ++m_frameCount;
@@ -554,7 +578,7 @@ bool ScreenRecorder::startWaylandPortalRecording(const QRect &captureRect)
     m_portalRecording = true;
     m_timeline.start(nowMs());
     emit recordingStarted();
-    emit remainingTimeChanged(m_maxSeconds);
+    emit remainingTimeChanged(m_maxSeconds > 0 ? m_maxSeconds : -1);
     emit elapsedTimeChanged(0);
 
     m_countdownTimer = new QTimer(this);
@@ -582,7 +606,8 @@ bool ScreenRecorder::setPortalProcessSuspended(bool suspended)
 #if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
     if (!m_process)
         return false;
-    return QProcess::execute(QStringLiteral("kill"),
+    return m_process->processId() > 0
+        && QProcess::execute(QStringLiteral("kill"),
                              {suspended ? QStringLiteral("-STOP") : QStringLiteral("-CONT"),
                               QString::number(m_process->processId())}) == 0;
 #else
@@ -593,7 +618,9 @@ bool ScreenRecorder::setPortalProcessSuspended(bool suspended)
 
 qint64 ScreenRecorder::nowMs() const
 {
-    return QDateTime::currentMSecsSinceEpoch();
+    // Monotonic clock: wall-clock time (QDateTime) jumps on NTP/DST changes and
+    // would corrupt the recording timeline. VideoRecorder already works this way.
+    return m_monotonicClock.elapsed();
 }
 
 QString ScreenRecorder::gstLaunchPath() const

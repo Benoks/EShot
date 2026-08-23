@@ -71,15 +71,27 @@ QPixmap grabKWinScreenshot(const QString &method, QList<QVariant> arguments, int
         QStringLiteral("/org/kde/KWin/ScreenShot2"),
         QStringLiteral("org.kde.KWin.ScreenShot2"),
         method);
-    arguments.append(QVariant::fromValue(QDBusUnixFileDescriptor(pipeFds[1])));
-    message.setArguments(arguments);
+    QPixmap result;
+    QDBusPendingReply<QVariantMap> pending;
+    {
+        // Send the request with the write-end fd, then drop EVERY copy of the
+        // fd (QDBusMessage internals included) before waiting. Any surviving
+        // dup of the write end keeps the pipe from ever reaching EOF: after
+        // KWin writes the frame and closes its end, read() would block forever
+        // instead of returning 0.
+        arguments.append(QVariant::fromValue(QDBusUnixFileDescriptor(pipeFds[1])));
+        message.setArguments(arguments);
+        pending = bus.asyncCall(message, timeoutMs);
+        close(pipeFds[1]);
+        pipeFds[1] = -1;
+        message.setArguments({});
+        arguments.clear();
+    }
 
-    QDBusPendingCallWatcher watcher(bus.asyncCall(message, timeoutMs));
-    close(pipeFds[1]);
+    QDBusPendingCallWatcher watcher(pending);
 
     QEventLoop loop;
-    QPixmap result;
-    QObject::connect(&watcher, &QDBusPendingCallWatcher::finished, &loop, [&]() {
+        QObject::connect(&watcher, &QDBusPendingCallWatcher::finished, &loop, [&]() {
         QDBusPendingReply<QVariantMap> reply = watcher;
         if (reply.isError()) {
             qWarning() << "[LinuxScreenshot] KWin" << method << "failed:"
@@ -116,10 +128,31 @@ QPixmap grabKWinScreenshot(const QString &method, QList<QVariant> arguments, int
             return;
         }
 
-        const qint64 bytesRead = file.read(reinterpret_cast<char *>(image.bits()), image.sizeInBytes());
-        if (bytesRead != image.sizeInBytes()) {
-            qWarning() << "[LinuxScreenshot] KWin" << method << "short image read:"
-                       << bytesRead << "of" << image.sizeInBytes();
+        // The pipe delivers data asynchronously: keep reading until the image
+        // is fully populated, one row at a time, and distinguish EOF/error
+        // truncation from partial progress.
+        const qint64 totalBytes = image.sizeInBytes();
+        const qint64 stride = image.bytesPerLine();
+        qint64 offset = 0;
+        bool truncated = false;
+        while (offset < totalBytes) {
+            const qint64 rowEnd = qMin((offset / stride + 1) * stride, totalBytes);
+            const qint64 bytesRead = file.read(
+                reinterpret_cast<char *>(image.bits()) + offset, rowEnd - offset);
+            if (bytesRead <= 0) {
+                if (bytesRead < 0)
+                    qWarning() << "[LinuxScreenshot] KWin" << method
+                               << "image pipe read error:" << file.errorString();
+                else
+                    qWarning() << "[LinuxScreenshot] KWin" << method
+                               << "short image read (EOF):"
+                               << offset << "of" << totalBytes;
+                truncated = true;
+                break;
+            }
+            offset += bytesRead;
+        }
+        if (truncated) {
             loop.quit();
             return;
         }

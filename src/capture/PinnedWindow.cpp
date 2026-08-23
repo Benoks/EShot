@@ -2,6 +2,7 @@
 
 #include <QPainter>
 #include <QPainterPath>
+#include <QLineF>
 #include <QMouseEvent>
 #include <QKeyEvent>
 #include <QWheelEvent>
@@ -185,6 +186,7 @@ void PinnedWindow::mousePressEvent(QMouseEvent *event)
             m_resizeHandle = handle;
             m_resizeStartGlobal = event->globalPosition().toPoint();
             m_resizeStartSize = QSize(width(), height());
+            m_resizeStartScale = m_scale;
             return;
         }
 
@@ -222,17 +224,12 @@ void PinnedWindow::mouseMoveEvent(QMouseEvent *event)
                 return;
         }
 
-        // Keep aspect ratio (against the logical base size)
-        const QSizeF base = baseSize();
-        double aspect = base.width() / base.height();
-        double avgDim = (newW + newH) / 2.0;
-        newW = avgDim;
-        newH = avgDim / aspect;
-
-        // Scale limits
-        double newScaleW = newW / base.width();
-        double newScaleH = newH / base.height();
-        m_scale = qBound(MIN_SCALE, qMin(newScaleW, newScaleH), MAX_SCALE);
+        // Keep aspect ratio: scale from the diagonal length ratio so both
+        // axes contribute proportionally
+        QLineF startDiag(0.0, 0.0, m_resizeStartSize.width(), m_resizeStartSize.height());
+        QLineF newDiag(0.0, 0.0, newW, newH);
+        double ratio = startDiag.length() > 0.0 ? newDiag.length() / startDiag.length() : 1.0;
+        m_scale = qBound(MIN_SCALE, m_resizeStartScale * ratio, MAX_SCALE);
 
         updateWindowSize();
         update();
@@ -291,7 +288,7 @@ void PinnedWindow::leaveEvent(QEvent *event)
 
 void PinnedWindow::wheelEvent(QWheelEvent *event)
 {
-    double delta = event->angleDelta().y() > 0 ? 0.05 : -0.05;
+    double delta = (event->angleDelta().y() / 120.0) * 0.05;
     if (event->modifiers() & Qt::ShiftModifier) {
         // Shift + Scroll → scale (zoom)
         m_scale = qBound(MIN_SCALE, m_scale + delta, MAX_SCALE);

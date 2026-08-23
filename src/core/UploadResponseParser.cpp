@@ -28,11 +28,15 @@ QUrl tmpFilesDirectUrl(const QByteArray &html)
     static const QRegularExpression directUrlPattern(
         QStringLiteral(R"(https://tmpfiles\.org/dl/[^\s\"'<>]+)"),
         QRegularExpression::CaseInsensitiveOption);
+    static const QRegularExpression trailingPunctuationPattern(
+        QStringLiteral(R"([.,;:)]+$)"));
     QString page = QString::fromUtf8(html);
     page.replace(QStringLiteral("&amp;"), QStringLiteral("&"));
     const QRegularExpressionMatch match = directUrlPattern.match(page);
     if (!match.hasMatch())
         return {};
-    const QUrl url(match.captured());
+    QString captured = match.captured();
+    captured.remove(trailingPunctuationPattern);
+    const QUrl url(captured);
     return isTmpFilesHttpsUrl(url) ? url : QUrl();
 }

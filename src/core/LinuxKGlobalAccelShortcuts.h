@@ -14,6 +14,7 @@ public:
 
     bool isAvailable() const;
     bool setShortcuts(const QHash<int, QPair<UINT, UINT>> &shortcuts);
+    void deRegisterShortcut(int id);
     static bool isKdeDesktop(const QString &desktop);
     static QStringList actionId(int id);
     static uint registrationFlags();

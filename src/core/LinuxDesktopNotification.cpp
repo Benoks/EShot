@@ -4,6 +4,7 @@
 #include <QDBusInterface>
 #include <QDBusReply>
 #include <QUrl>
+#include <limits>
 
 namespace {
 constexpr auto NotificationsService = "org.freedesktop.Notifications";
@@ -54,20 +55,35 @@ bool LinuxDesktopNotification::show(const QString &title, const QString &body,
     if (!notifications.isValid())
         return false;
 
+    QStringList actionList = actions(actionLabel);
+    // The implicit "default" action fires when the notification body itself
+    // is activated, so a click always opens the captured file.
+    actionList << QStringLiteral("default") << title;
+
     const QDBusReply<uint> reply = notifications.call(
-        QStringLiteral("Notify"), QStringLiteral("EShot"), uint(0),
+        QStringLiteral("Notify"), QStringLiteral("EShot"), m_lastId,
         QStringLiteral("io.github.benoks.EShot-v4"), title, body,
-        actions(actionLabel), hintsForPath(path), timeoutMs);
+        actionList, hintsForPath(path), timeoutMs);
     if (!reply.isValid())
         return false;
 
-    m_paths.insert(reply.value(), path);
+    m_lastId = reply.value();
+    // Cap the tracked paths so long sessions cannot grow the map unbounded.
+    constexpr int kMaxTrackedPaths = 32;
+    while (m_paths.size() >= kMaxTrackedPaths) {
+        uint oldestId = std::numeric_limits<uint>::max();
+        for (uint trackedId : m_paths.keys())
+            oldestId = qMin(oldestId, trackedId);
+        m_paths.remove(oldestId);
+    }
+    m_paths.insert(m_lastId, path);
     return true;
 }
 
 void LinuxDesktopNotification::onActionInvoked(uint id, const QString &actionKey)
 {
-    if (actionKey != QStringLiteral("open-folder"))
+    if (actionKey != QStringLiteral("open-folder")
+        && actionKey != QStringLiteral("default"))
         return;
     const QString path = m_paths.take(id);
     if (!path.isEmpty())

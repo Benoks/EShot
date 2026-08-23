@@ -169,9 +169,10 @@ void AnnotationToolbar::selectTool(int toolId)
 void AnnotationToolbar::setUndoEnabled(bool enabled)
 {
     if (m_undoButton) {
-        m_undoButton->setEnabled(enabled);
-        m_undoButton->setStyleSheet(enabled ?
-            R"(
+        // Set the stylesheet once and toggle only enabled state: swapping the
+        // whole stylesheet on every call forces a full restyle each time.
+        if (m_undoButton->styleSheet().isEmpty()) {
+            m_undoButton->setStyleSheet(R"(
                 QPushButton {
                     background-color: #3a3a3a;
                     border: 1px solid #505050;
@@ -184,23 +185,21 @@ void AnnotationToolbar::setUndoEnabled(bool enabled)
                 QPushButton:pressed {
                     background-color: #333333;
                 }
-            )" :
-            R"(
-                QPushButton {
+                QPushButton:disabled {
                     background-color: #2d2d2d;
                     border: 1px solid #353535;
-                    border-radius: 8px;
                 }
             )");
+        }
+        m_undoButton->setEnabled(enabled);
     }
 }
 
 void AnnotationToolbar::setRedoEnabled(bool enabled)
 {
     if (m_redoButton) {
-        m_redoButton->setEnabled(enabled);
-        m_redoButton->setStyleSheet(enabled ?
-            R"(
+        if (m_redoButton->styleSheet().isEmpty()) {
+            m_redoButton->setStyleSheet(R"(
                 QPushButton {
                     background-color: #3a3a3a;
                     border: 1px solid #505050;
@@ -213,14 +212,13 @@ void AnnotationToolbar::setRedoEnabled(bool enabled)
                 QPushButton:pressed {
                     background-color: #333333;
                 }
-            )" :
-            R"(
-                QPushButton {
+                QPushButton:disabled {
                     background-color: #2d2d2d;
                     border: 1px solid #353535;
-                    border-radius: 8px;
                 }
             )");
+        }
+        m_redoButton->setEnabled(enabled);
     }
 }
 

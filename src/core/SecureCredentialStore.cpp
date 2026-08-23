@@ -43,9 +43,9 @@ QString read(const QString &key)
     if (!CredReadW(reinterpret_cast<LPCWSTR>(target.utf16()), CRED_TYPE_GENERIC, 0, &credential))
         return QString();
 
-    const QString secret = QString::fromWCharArray(
-        reinterpret_cast<const wchar_t *>(credential->CredentialBlob),
-        credential->CredentialBlobSize / sizeof(wchar_t));
+    const QString secret = QString::fromUtf8(
+        reinterpret_cast<const char *>(credential->CredentialBlob),
+        static_cast<qsizetype>(credential->CredentialBlobSize));
     CredFree(credential);
     return secret;
 #elif defined(Q_OS_UNIX)
@@ -124,11 +124,13 @@ QString migrateLegacyToken(QSettings &settings, const QString &legacyKey,
         return QString();
 
     const QString token = settings.value(legacyKey).toString().trimmed();
+
+    if (!token.isEmpty() && !writeSecret(legacyKey, token)) {
+        qWarning() << "Secure credential storage is unavailable; token will only be kept for this session";
+        return token;
+    }
     settings.remove(legacyKey);
     settings.sync();
-
-    if (!token.isEmpty() && !writeSecret(legacyKey, token))
-        qWarning() << "Secure credential storage is unavailable; token will only be kept for this session";
     return token;
 }
 
