@@ -85,6 +85,7 @@ private:
     bool m_overlayVisible = true;
     bool m_captureSafePresentationStarted = false;
     bool m_platformCanExcludeOverlay = false;
+    bool m_hideFullscreenBorderForCapture = false;
     bool m_borderLocked = true;
     bool m_dragging = false;
     QPoint m_dragOffset;

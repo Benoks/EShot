@@ -247,6 +247,24 @@ private slots:
         QTRY_VERIFY(border->isVisible());
     }
 
+    void hidesFullscreenBorderWhenTheCaptureBackendCannotExcludeIt()
+    {
+        QScreen *screen = QGuiApplication::primaryScreen();
+        QVERIFY(screen);
+        RecordingIndicator indicator(screen->geometry(), nullptr, 2, true,
+                                     RecordingIndicatorMode::Video);
+
+        QWidget *border = nullptr;
+        for (QWidget *widget : QApplication::topLevelWidgets()) {
+            if (widget && widget->objectName() == QStringLiteral("recordingBorderOverlay")) {
+                border = widget;
+                break;
+            }
+        }
+        QVERIFY(border);
+        QVERIFY(!border->isVisible());
+    }
+
 };
 
 QTEST_MAIN(RecordingIndicatorTests)

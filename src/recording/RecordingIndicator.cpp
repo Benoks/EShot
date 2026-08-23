@@ -300,6 +300,11 @@ RecordingIndicator::RecordingIndicator(const QRect &captureRect, QWidget *parent
         RecordingCaptureBackend::LinuxPortal;
 #endif
     m_platformCanExcludeOverlay = recordingCaptureBackendCanExcludeOverlay(captureBackend);
+    // A full-screen capture has no outside edge where the border can live.
+    // Backends that cannot exclude individual windows would therefore record
+    // the blue border itself, even when it is locked.
+    m_hideFullscreenBorderForCapture = !m_platformCanExcludeOverlay
+        && isFullScreenRecordingRect(m_captureRect);
 #ifdef Q_OS_LINUX
     // Linux portals cannot exclude an individual overlay window. Keep the
     // controls as an ordinary, non-always-on-top tool window so other apps can
@@ -330,7 +335,7 @@ RecordingIndicator::RecordingIndicator(const QRect &captureRect, QWidget *parent
     updatePauseButton();
 
     show();
-    if (m_borderOverlay)
+    if (m_borderOverlay && !m_hideFullscreenBorderForCapture)
         m_borderOverlay->show();
     QTimer::singleShot(100, this, [this, globalWindowRect]() {
         qInfo() << "[RecordingIndicator] capture=" << m_captureRect
@@ -589,7 +594,7 @@ void RecordingIndicator::setOverlayVisible(bool visible)
     if (m_controlBar)
         m_controlBar->setVisible(visible);
     if (m_borderOverlay)
-        m_borderOverlay->setVisible(visible);
+        m_borderOverlay->setVisible(visible && !m_hideFullscreenBorderForCapture);
     updateControlMask();
     update();
 }

@@ -615,6 +615,13 @@ if(BUILD_TESTING)
                 COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/tests/linux/annotation-gesture-wiring-tests.sh
             )
         endif()
+
+        if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/tests/linux/recording-drawer-input-contract-tests.sh)
+            add_test(
+                NAME linux_recording_drawer_input_contract
+                COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/tests/linux/recording-drawer-input-contract-tests.sh
+            )
+        endif()
     endif()
 
     qt_add_executable(eshot_linux_recording_support_tests

@@ -1186,11 +1186,11 @@ void CaptureOverlay::setupRecordingDrawer()
     gifForm->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
     m_recordingGifFpsSpin = new QSpinBox(m_recordingGifOptions);
     m_recordingGifFpsSpin->setRange(1, gifRecordingFpsLimit());
-    m_recordingGifFpsSpin->setAlignment(Qt::AlignCenter);
+    configureOverlaySpinBox(m_recordingGifFpsSpin);
     m_recordingGifSecondsSpin = new QSpinBox(m_recordingGifOptions);
     m_recordingGifSecondsSpin->setRange(0, 600);
     m_recordingGifSecondsSpin->setSpecialValueText(TranslationManager::recordingUnlimited());
-    m_recordingGifSecondsSpin->setAlignment(Qt::AlignCenter);
+    configureOverlaySpinBox(m_recordingGifSecondsSpin);
     m_recordingGifLoopCombo = new QComboBox(m_recordingGifOptions);
     m_recordingGifLoopCombo->addItem(TranslationManager::recordingLoopInfinite(), 0);
     for (int loops : {1, 2, 3, 5, 10})
@@ -1208,14 +1208,14 @@ void CaptureOverlay::setupRecordingDrawer()
     videoForm->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
     m_recordingVideoFpsSpin = new QSpinBox(m_recordingVideoOptions);
     m_recordingVideoFpsSpin->setRange(1, videoRecordingFpsLimit());
-    m_recordingVideoFpsSpin->setAlignment(Qt::AlignCenter);
+    configureOverlaySpinBox(m_recordingVideoFpsSpin);
     m_recordingVideoSecondsSpin = new QSpinBox(m_recordingVideoOptions);
     m_recordingVideoSecondsSpin->setRange(0, 3600);
     m_recordingVideoSecondsSpin->setSpecialValueText(TranslationManager::recordingUnlimited());
-    m_recordingVideoSecondsSpin->setAlignment(Qt::AlignCenter);
+    configureOverlaySpinBox(m_recordingVideoSecondsSpin);
     m_recordingVideoCrfSpin = new QSpinBox(m_recordingVideoOptions);
     m_recordingVideoCrfSpin->setRange(18, 32);
-    m_recordingVideoCrfSpin->setAlignment(Qt::AlignCenter);
+    configureOverlaySpinBox(m_recordingVideoCrfSpin);
     m_recordingVideoCrfSpin->setToolTip(TranslationManager::videoCrfHint());
     m_recordingDesktopAudioCheck = new QCheckBox(TranslationManager::audioDesktop(), m_recordingVideoOptions);
     m_recordingMicrophoneCheck = new QCheckBox(TranslationManager::audioMicrophone(), m_recordingVideoOptions);
