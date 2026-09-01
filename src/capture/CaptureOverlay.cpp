@@ -97,6 +97,16 @@ void addOverlayPanelSection(QVBoxLayout *layout, QWidget *parent,
     layout->addWidget(label);
 }
 
+QLineEdit *overlaySpinBoxEditor(QObject *object)
+{
+    for (QWidget *widget = qobject_cast<QWidget *>(object); widget;
+         widget = widget->parentWidget()) {
+        if (auto *spinBox = qobject_cast<QAbstractSpinBox *>(widget))
+            return spinBox->findChild<QLineEdit *>();
+    }
+    return nullptr;
+}
+
 void drawCaptureHintShortcut(QPainter &painter, int &x, int y,
                              const QString &key, const QString &label,
                              bool compact)
@@ -3164,15 +3174,87 @@ void CaptureOverlay::keyReleaseEvent(QKeyEvent *event)
     }
 }
 
+QWidget *CaptureOverlay::managedOverlayInputAt(const QPoint &globalPosition) const
+{
+    QList<QRect> editorRects;
+    QList<QWidget *> inputs;
+    const QList<QLineEdit *> lineEdits = findChildren<QLineEdit *>();
+    for (QLineEdit *editor : lineEdits) {
+        if (!editor || !editor->isVisible() || !editor->isEnabled())
+            continue;
+        editorRects.append(QRect(editor->mapToGlobal(QPoint()), editor->size()));
+        inputs.append(editor);
+    }
+
+    const QList<QComboBox *> comboBoxes = findChildren<QComboBox *>();
+    for (QComboBox *combo : comboBoxes) {
+        if (!combo || !combo->isVisible() || !combo->isEnabled())
+            continue;
+        editorRects.append(QRect(combo->mapToGlobal(QPoint()), combo->size()));
+        inputs.append(combo);
+    }
+
+    const int index = overlayEditorIndexAt(editorRects, globalPosition);
+    return index >= 0 ? inputs.at(index) : nullptr;
+}
+
 bool CaptureOverlay::eventFilter(QObject *obj, QEvent *event)
 {
-    if (obj == m_textFocusProxy
-        && shouldForwardCaptureKeyFromManagedProxy(m_textEdit && m_textEdit->isVisible())) {
-        if (event->type() == QEvent::KeyPress) {
+    if (event->type() == QEvent::MouseButtonPress) {
+        const QPoint globalPosition = static_cast<QMouseEvent *>(event)
+            ->globalPosition().toPoint();
+        QWidget *input = managedOverlayInputAt(globalPosition);
+        if (!input)
+            input = overlaySpinBoxEditor(obj);
+        if (input) {
+            auto *lineEdit = qobject_cast<QLineEdit *>(input);
+            m_managedOverlayEditorSelectAll = lineEdit != nullptr;
+            m_managedOverlayEditor = input;
+            input->setFocus(Qt::MouseFocusReason);
+            if (lineEdit && shouldSelectOverlayEditorOnPointerPress(true)) {
+                const QPointer<QLineEdit> guardedEditor(lineEdit);
+                QTimer::singleShot(0, this, [guardedEditor]() {
+                    if (guardedEditor)
+                        guardedEditor->selectAll();
+                });
+            }
+        } else {
+            m_managedOverlayEditor = nullptr;
+            m_managedOverlayEditorSelectAll = false;
+        }
+    }
+
+    const bool proxyWindow = m_textFocusProxy && obj == m_textFocusProxy->windowHandle();
+    if (m_textFocusProxy
+        && isManagedProxyInputSource(obj == m_textFocusProxy, proxyWindow)) {
+        if (m_managedOverlayEditor.isNull()) {
+            m_managedOverlayEditor = managedOverlayInputAt(QCursor::pos());
+            m_managedOverlayEditorSelectAll =
+                qobject_cast<QLineEdit *>(m_managedOverlayEditor.data()) != nullptr;
+        }
+        const ManagedProxyKeyDestination destination = managedProxyKeyDestination(
+            m_textEdit && m_textEdit->isVisible(), !m_managedOverlayEditor.isNull());
+        if (destination == ManagedProxyKeyDestination::OverlayInput
+            && m_managedOverlayEditor->isVisible() && m_managedOverlayEditor->isEnabled()
+            && (event->type() == QEvent::KeyPress || event->type() == QEvent::KeyRelease)) {
+            auto *keyEvent = static_cast<QKeyEvent *>(event);
+            if (event->type() == QEvent::KeyPress && m_managedOverlayEditorSelectAll) {
+                if (auto *lineEdit = qobject_cast<QLineEdit *>(m_managedOverlayEditor.data()))
+                    lineEdit->selectAll();
+                m_managedOverlayEditorSelectAll = false;
+            }
+            QKeyEvent forwarded(event->type(), keyEvent->key(), keyEvent->modifiers(),
+                                keyEvent->text(), keyEvent->isAutoRepeat(), keyEvent->count());
+            QCoreApplication::sendEvent(m_managedOverlayEditor, &forwarded);
+            return true;
+        }
+        if (destination == ManagedProxyKeyDestination::CaptureOverlay
+            && event->type() == QEvent::KeyPress) {
             keyPressEvent(static_cast<QKeyEvent *>(event));
             return true;
         }
-        if (event->type() == QEvent::KeyRelease) {
+        if (destination == ManagedProxyKeyDestination::CaptureOverlay
+            && event->type() == QEvent::KeyRelease) {
             keyReleaseEvent(static_cast<QKeyEvent *>(event));
             return true;
         }
@@ -3223,7 +3305,7 @@ bool CaptureOverlay::eventFilter(QObject *obj, QEvent *event)
         // Let overlay child editors (spin boxes, combos incl. their popups,
         // line edits) keep their keystrokes instead of consuming them here.
         QWidget *focused = QApplication::focusWidget();
-        bool editorHasFocus = false;
+        bool editorHasFocus = obj == m_managedOverlayEditor;
         for (QWidget *w = focused; w; w = w->parentWidget()) {
             if (qobject_cast<QLineEdit *>(w) || qobject_cast<QAbstractSpinBox *>(w)
                 || qobject_cast<QComboBox *>(w)) {
@@ -3436,6 +3518,8 @@ void CaptureOverlay::hideToolbar()
     if (m_toolSettingsDrawer) m_toolSettingsDrawer->hide();
     if (m_recordingDrawer) m_recordingDrawer->hide();
     m_recordingDrawerMode = RecordingDrawerMode::None;
+    m_managedOverlayEditor = nullptr;
+    m_managedOverlayEditorSelectAll = false;
     if (m_textEditPanel) m_textEditPanel->hide();
     releaseTextKeyboardFocus();
     if (m_textFocusProxy) m_textFocusProxy->hide();

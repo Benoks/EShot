@@ -3,6 +3,7 @@
 #include <QRect>
 #include <QRegion>
 #include <QSize>
+#include <QList>
 
 enum class SelectionResizeHandle {
     None,
@@ -26,13 +27,23 @@ struct SelectionFrameSegments {
     qreal thickness = 1.0;
 };
 
+enum class ManagedProxyKeyDestination {
+    TextEditor,
+    OverlayInput,
+    CaptureOverlay
+};
+
 bool shouldReleaseToolForResize(bool handleHit, int currentTool, int noneTool);
 int initialAnnotationTool(bool rememberLastTool, int storedTool, int noneTool);
 bool shouldShowCaptureHints(bool enabled, bool selecting, bool selectionComplete,
                             bool eyedropperActive);
 QRect captureHintRect(const QRect &monitorRect, const QSize &preferredSize);
 int quickSettingsTabHeight(int textWidth, int availableHeight);
-bool shouldForwardCaptureKeyFromManagedProxy(bool textEditorVisible);
+ManagedProxyKeyDestination managedProxyKeyDestination(bool textEditorVisible,
+                                                      bool overlayInputActive);
+bool isManagedProxyInputSource(bool proxyWidget, bool proxyWindow);
+int overlayEditorIndexAt(const QList<QRect> &editorRects, const QPoint &globalPosition);
+bool shouldSelectOverlayEditorOnPointerPress(bool editorUnderPointer);
 bool shouldRestoreCaptureKeyboardFocus(bool overlayVisible, bool selectionComplete,
                                        bool textEditorVisible);
 bool shouldGrabCaptureKeyboardFromManagedProxy(bool managedProxyAvailable,

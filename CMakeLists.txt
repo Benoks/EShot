@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(EShot VERSION 4.2.8 LANGUAGES CXX)
+project(EShot VERSION 4.2.9 LANGUAGES CXX)
 
 include(CTest)
 
@@ -599,6 +599,13 @@ if(BUILD_TESTING)
             add_test(
                 NAME linux_runtime_common
                 COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/tests/linux/runtime-common-tests.sh
+            )
+        endif()
+
+        if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/tests/linux/local-runner-overlay-contract-tests.sh)
+            add_test(
+                NAME linux_local_runner_overlay_contract
+                COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/tests/linux/local-runner-overlay-contract-tests.sh
             )
         endif()
 

@@ -33,6 +33,7 @@ class AnnotationEngine;
 class PinnedWindow;
 class QComboBox;
 class QFontComboBox;
+class QLineEdit;
 class QSpinBox;
 class QSlider;
 class QPushButton;
@@ -145,6 +146,8 @@ private:
 
     // Text editing — multi-line support
     QTextEdit *m_textFocusProxy = nullptr;
+    QPointer<QWidget> m_managedOverlayEditor;
+    bool m_managedOverlayEditorSelectAll = false;
     QTextEdit *m_textEdit;
     QPoint m_textEditPosition;
     QWidget *m_textEditPanel = nullptr;
@@ -164,6 +167,7 @@ private:
     void acquireTextKeyboardFocus();
     void acquireCaptureKeyboardFocus();
     void releaseTextKeyboardFocus();
+    QWidget *managedOverlayInputAt(const QPoint &globalPosition) const;
     void updateUndoRedoState();
     bool matchesOverlayShortcut(QKeyEvent *event, const QString &key, const QString &fallback) const;
     // Overlay shortcut cache (cleared in startCaptureInternal)

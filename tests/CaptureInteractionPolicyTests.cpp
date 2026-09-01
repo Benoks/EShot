@@ -43,10 +43,36 @@ private slots:
         QCOMPARE(quickSettingsTabHeight(400, 300), 236);
     }
 
-    void managedProxyRoutesCaptureShortcutsOutsideTextEditing()
+    void overlayInputTakesPriorityOverInlineTextEditing()
     {
-        QVERIFY(shouldForwardCaptureKeyFromManagedProxy(false));
-        QVERIFY(!shouldForwardCaptureKeyFromManagedProxy(true));
+        QCOMPARE(managedProxyKeyDestination(false, false),
+                 ManagedProxyKeyDestination::CaptureOverlay);
+        QCOMPARE(managedProxyKeyDestination(true, false),
+                 ManagedProxyKeyDestination::TextEditor);
+        QCOMPARE(managedProxyKeyDestination(false, true),
+                 ManagedProxyKeyDestination::OverlayInput);
+        QCOMPARE(managedProxyKeyDestination(true, true),
+                 ManagedProxyKeyDestination::OverlayInput);
+    }
+
+    void managedProxyWindowIsAlsoACaptureKeySource()
+    {
+        QVERIFY(isManagedProxyInputSource(true, false));
+        QVERIFY(isManagedProxyInputSource(false, true));
+        QVERIFY(!isManagedProxyInputSource(false, false));
+    }
+
+    void overlayEditorIsResolvedFromItsScreenRect()
+    {
+        const QList<QRect> fields = {QRect(100, 100, 80, 32), QRect(100, 140, 80, 32)};
+        QCOMPARE(overlayEditorIndexAt(fields, QPoint(130, 155)), 1);
+        QCOMPARE(overlayEditorIndexAt(fields, QPoint(20, 20)), -1);
+    }
+
+    void singleClickSelectsTheOverlayEditorValue()
+    {
+        QVERIFY(shouldSelectOverlayEditorOnPointerPress(true));
+        QVERIFY(!shouldSelectOverlayEditorOnPointerPress(false));
     }
 
     void completedScreenSelectionRestoresCaptureKeyboardFocus()

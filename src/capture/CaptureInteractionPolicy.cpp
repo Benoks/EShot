@@ -43,9 +43,33 @@ int quickSettingsTabHeight(int textWidth, int availableHeight)
     return qMin(preferredHeight, maximumHeight);
 }
 
-bool shouldForwardCaptureKeyFromManagedProxy(bool textEditorVisible)
+ManagedProxyKeyDestination managedProxyKeyDestination(bool textEditorVisible,
+                                                      bool overlayInputActive)
 {
-    return !textEditorVisible;
+    if (overlayInputActive)
+        return ManagedProxyKeyDestination::OverlayInput;
+    if (textEditorVisible)
+        return ManagedProxyKeyDestination::TextEditor;
+    return ManagedProxyKeyDestination::CaptureOverlay;
+}
+
+bool isManagedProxyInputSource(bool proxyWidget, bool proxyWindow)
+{
+    return proxyWidget || proxyWindow;
+}
+
+int overlayEditorIndexAt(const QList<QRect> &editorRects, const QPoint &globalPosition)
+{
+    for (qsizetype index = 0; index < editorRects.size(); ++index) {
+        if (editorRects.at(index).contains(globalPosition))
+            return static_cast<int>(index);
+    }
+    return -1;
+}
+
+bool shouldSelectOverlayEditorOnPointerPress(bool editorUnderPointer)
+{
+    return editorUnderPointer;
 }
 
 bool shouldRestoreCaptureKeyboardFocus(bool overlayVisible, bool selectionComplete,

@@ -9,7 +9,7 @@ Native screenshot, annotation, OCR, visual-search, upload, GIF, and video captur
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 > [!IMPORTANT]
-> The Linux build is tested on KDE Plasma 6 with Wayland, primarily on CachyOS. GNOME Wayland support is experimental, still needs broader testing, and may be unstable or incomplete. Other desktop environments and compositors remain unsupported and are unlikely to work correctly.
+> EShot supports KDE Plasma 6 Wayland and GNOME Wayland. KDE Plasma is the primary tested Linux target, while GNOME support is stable for normal use but has received less broad real-world testing. Other desktop environments and compositors remain unsupported and are unlikely to work correctly.
 
 EShot keeps the complete screenshot workflow in one compact tray application: select a region, annotate it, copy or save it, extract text, search the image, upload it, pin it above other windows, or record it as GIF/MP4.
 
@@ -25,13 +25,13 @@ EShot keeps the complete screenshot workflow in one compact tray application: se
 | --- | --- | --- |
 | Windows 10/11 x64 | Stable | Installer and portable ZIP |
 | Windows 11 ARM64 | Stable | Native ARM64 installer and portable ZIP |
-| Linux x86_64 (KDE Plasma 6 Wayland) | **Experimental, tested** | AppImage, `.deb`, AUR, and portable archive |
-| Linux x86_64 (GNOME Wayland) | **Experimental, limited testing** | May be unstable; AppImage, `.deb`, AUR, and portable archive |
+| Linux x86_64 (KDE Plasma 6 Wayland) | Stable | AppImage, `.deb`, AUR, and portable archive |
+| Linux x86_64 (GNOME Wayland) | Stable, less broadly tested | AppImage, `.deb`, AUR, and portable archive |
 | Other Linux desktops | Unsupported | Unlikely to work correctly |
 
 ## Features
 
-- Region and monitor capture with multi-monitor and high-DPI handling
+- Region and monitor capture with multi-monitor and high-DPI handling, plus window selection capture on Windows
 - Compact selection overlay with configurable actions and shortcuts
 - Pen, arrow, line, rectangle, ellipse, text, highlighter, blur, counter, eraser, and eyedropper tools
 - Resize and rotate selected text and shapes directly on the canvas
@@ -69,7 +69,7 @@ Portable x64 and ARM64 ZIP archives are also attached to each release.
 
 ### Linux: KDE Plasma 6 and GNOME Wayland
 
-KDE Plasma 6 Wayland is the primary tested Linux target. GNOME Wayland support is under active development and currently requires more real-world testing; capture, shortcuts, tray integration, or recording may behave differently between GNOME and portal versions.
+KDE Plasma 6 Wayland and GNOME Wayland are supported Linux targets. KDE Plasma is the primary tested environment. GNOME is stable for normal use, although its wider real-world testing coverage is still smaller. As with any Wayland desktop, portal versions can affect capture, shortcuts, tray integration, and recording behavior.
 
 1. Download `EShot-v<version>-x86_64.AppImage`.
 2. Mark it executable:
