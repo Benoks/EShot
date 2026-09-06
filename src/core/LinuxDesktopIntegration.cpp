@@ -44,6 +44,11 @@ bool deferFirstRunHotkeyRegistration(LinuxDesktopEnvironment desktop)
     return desktop == LinuxDesktopEnvironment::Gnome;
 }
 
+bool deferOverlayPrewarmUntilFirstRunCompletes(bool firstRunInProgress)
+{
+    return firstRunInProgress;
+}
+
 bool useGnomeShortcutFallback(LinuxDesktopEnvironment desktop, bool portalAvailable)
 {
     return desktop == LinuxDesktopEnvironment::Gnome && !portalAvailable;

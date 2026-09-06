@@ -86,8 +86,14 @@ KDE Plasma 6 Wayland and GNOME Wayland are supported Linux targets. KDE Plasma i
 
    KDE Plasma commonly offers a graphical launch flow after the file is executable. Stock GNOME Files does not register AppImages as applications, so double-clicking can show an "open with" prompt instead of starting EShot. Running the two commands above is the reliable first-launch method on GNOME. AppImageLauncher, when installed by the user, can provide double-click integration.
 
-4. Complete the graphical first-run wizard. It can install FFmpeg/GStreamer, PipeWire portal components, Tesseract, selected OCR languages, and application-menu integration through the system package manager.
+4. Complete the graphical first-run wizard. It can install FFmpeg/GStreamer, PipeWire portal components, Tesseract, selected OCR languages, and optional application-menu integration through the system package manager.
 5. Use **Use Print Screen for EShot** to assign `Print Screen`. KDE keeps Spectacle's other shortcuts. GNOME uses the Global Shortcuts portal when available and an EShot-only custom shortcut on older GNOME releases.
+
+#### AppImage first launch and integration
+
+The AppImage is portable. Opening it does not install EShot system-wide. The Welcome screen appears only on the first launch; completing or skipping the optional setup marks it complete, so it does not return on later launches.
+
+When **Add EShot to the application menu and install shortcuts** is selected, the setup copies the AppImage to `~/.local/opt/EShot/EShot.AppImage`, creates an application-menu entry, and restarts from that managed copy after successful setup. Launch EShot from the application menu after that point. The original file in Downloads remains a separate portable copy and can be removed once the menu entry works. If the option is not selected, nothing is copied and you continue launching the same AppImage manually.
 
 The AppImage bundles EShot and Qt. Optional media, OCR, and desktop-integration packages remain system packages. Skipped dependencies can be installed later from **Settings → Open Linux dependency setup**. A native package such as the AUR package is the smoother option for users who want an ordinary application-menu entry and package-manager updates.
 

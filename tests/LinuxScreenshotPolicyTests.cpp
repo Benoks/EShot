@@ -48,6 +48,12 @@ private slots:
             LinuxDesktopEnvironment::Other));
     }
 
+    void defersOverlayPrewarmUntilTheFirstRunWizardCloses()
+    {
+        QVERIFY(LinuxDesktopIntegration::deferOverlayPrewarmUntilFirstRunCompletes(true));
+        QVERIFY(!LinuxDesktopIntegration::deferOverlayPrewarmUntilFirstRunCompletes(false));
+    }
+
     void usesGnomeSettingsWhenTheShortcutPortalCannotBeUsed()
     {
         QVERIFY(LinuxDesktopIntegration::useGnomeShortcutFallback(

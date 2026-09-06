@@ -144,7 +144,9 @@ class EShotApp : public QObject {
     Q_OBJECT
 
 public:
-    explicit EShotApp(bool initializeHotkeys = true, QObject *parent = nullptr)
+    explicit EShotApp(bool initializeHotkeys = true,
+                      bool prewarmOverlayAtStartup = true,
+                      QObject *parent = nullptr)
         : QObject(parent)
     {
         TranslationManager::init();
@@ -155,7 +157,8 @@ public:
         if (initializeHotkeys)
             initializeHotkeyConnections();
         checkForUpdates();
-        QTimer::singleShot(100, this, [this]() { ensureOverlay(); });
+        if (prewarmOverlayAtStartup)
+            QTimer::singleShot(100, this, [this]() { ensureOverlay(); });
     }
 
     ~EShotApp()
@@ -168,6 +171,11 @@ public:
     }
 
 public slots:
+    void prewarmOverlay()
+    {
+        ensureOverlay();
+    }
+
     void initializeHotkeyConnections()
     {
         if (m_hotkeysInitialized)
@@ -1385,7 +1393,9 @@ int main(int argc, char *argv[])
         || (!silent && !parser.isSet(captureOption) && !parser.isSet(settingsOption)
             && !parser.isSet(saveOption) && !parser.isSet(quitOption));
     const bool firstRunRequired = !silent && FirstRunWizard::shouldShow();
-    EShotApp eshotApp(!firstRunRequired);
+    const bool prewarmOverlayAtStartup = !LinuxDesktopIntegration::deferOverlayPrewarmUntilFirstRunCompletes(
+        firstRunRequired);
+    EShotApp eshotApp(!firstRunRequired, prewarmOverlayAtStartup);
 
     QObject::connect(&instanceServer, &QLocalServer::newConnection,
                      [&instanceServer, &eshotApp]() {
@@ -1447,6 +1457,7 @@ int main(int argc, char *argv[])
             }
             wizard->exec();
             eshotApp.initializeHotkeyConnections();
+            eshotApp.prewarmOverlay();
             if (controlRequested) {
                 QMetaObject::invokeMethod(&eshotApp, "onControlRequested",
                                           Qt::QueuedConnection);

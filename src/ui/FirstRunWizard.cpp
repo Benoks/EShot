@@ -299,7 +299,7 @@ void FirstRunWizard::setupUi()
     m_linuxFfmpegCheck->setToolTip(tr("Installs the media encoder used to save MP4 videos and GIF recordings. Screenshots work without it."));
     m_linuxOcrCheck->setToolTip(tr("Installs text recognition so EShot can read and copy text from screenshots. Select OCR languages below."));
     m_linuxDesktopCheck->setToolTip(tr("Installs PipeWire and desktop portal components used for secure screen sharing and recording on Wayland desktops such as KDE Plasma and GNOME."));
-    m_linuxAppImageIntegrationCheck->setToolTip(tr("Copies this AppImage to your user applications folder and adds EShot to the application menu. No system-wide installation is performed."));
+    m_linuxAppImageIntegrationCheck->setToolTip(tr("Copies this AppImage to your user applications folder and adds EShot to the application menu. No system-wide installation is performed. After setup, use the application-menu entry; the downloaded AppImage remains a separate portable copy."));
     m_linuxFfmpegCheck->setChecked(true); m_linuxOcrCheck->setChecked(true);
     m_linuxDesktopCheck->setChecked(defaultLinuxPortalSelection(qEnvironmentVariable("XDG_SESSION_TYPE")));
     const bool offerAppImageIntegration = shouldOfferAppImageIntegration(
