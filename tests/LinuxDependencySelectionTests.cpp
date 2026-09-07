@@ -48,6 +48,18 @@ private slots:
         QCOMPARE(kdeShortcutsWithoutPlainPrint({alternate, plainPrint}), QList<int>({alternate}));
         QCOMPARE(kdeShortcutsWithoutPlainPrint({plainPrint}), QList<int>());
     }
+
+    void restoresSpectacleShortcutWhenEshotPrintScreenRegistrationFails() {
+        const int plainPrint = QKeyCombination(Qt::NoModifier, Qt::Key_Print).toCombined();
+        const int alternate = QKeyCombination(Qt::MetaModifier | Qt::ShiftModifier,
+                                              Qt::Key_S).toCombined();
+        const QList<int> original {alternate, plainPrint};
+
+        QCOMPARE(kdeShortcutsAfterEshotPrintScreenRegistration(original, true),
+                 QList<int>({alternate}));
+        QCOMPARE(kdeShortcutsAfterEshotPrintScreenRegistration(original, false), original);
+    }
+
     void selectsPortalPackagesByDefaultOnWayland() {
         QVERIFY(defaultLinuxPortalSelection("wayland"));
         QVERIFY(defaultLinuxPortalSelection("WAYLAND"));

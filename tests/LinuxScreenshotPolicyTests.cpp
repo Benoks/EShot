@@ -38,6 +38,25 @@ private slots:
             LinuxDesktopEnvironment::Gnome, QStringLiteral("x11")));
     }
 
+    void classifiesFirstRunDesktopSupport()
+    {
+        QCOMPARE(LinuxDesktopIntegration::startupSupportLevel(
+                     LinuxDesktopEnvironment::Kde, QStringLiteral("wayland")),
+                 LinuxDesktopSupportLevel::Supported);
+        QCOMPARE(LinuxDesktopIntegration::startupSupportLevel(
+                     LinuxDesktopEnvironment::Gnome, QStringLiteral("Wayland")),
+                 LinuxDesktopSupportLevel::Supported);
+        QCOMPARE(LinuxDesktopIntegration::startupSupportLevel(
+                     LinuxDesktopEnvironment::Kde, QStringLiteral("x11")),
+                 LinuxDesktopSupportLevel::Limited);
+        QCOMPARE(LinuxDesktopIntegration::startupSupportLevel(
+                     LinuxDesktopEnvironment::Gnome, QStringLiteral("x11")),
+                 LinuxDesktopSupportLevel::Limited);
+        QCOMPARE(LinuxDesktopIntegration::startupSupportLevel(
+                     LinuxDesktopEnvironment::Other, QStringLiteral("wayland")),
+                 LinuxDesktopSupportLevel::Unsupported);
+    }
+
     void defersGnomeFirstRunHotkeysUntilTheWizardCloses()
     {
         QVERIFY(LinuxDesktopIntegration::deferFirstRunHotkeyRegistration(

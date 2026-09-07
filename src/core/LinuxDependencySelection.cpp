@@ -71,6 +71,13 @@ QList<int> kdeShortcutsWithoutPlainPrint(const QList<int> &shortcuts)
     return filtered;
 }
 
+QList<int> kdeShortcutsAfterEshotPrintScreenRegistration(const QList<int> &originalShortcuts,
+                                                         bool eshotRegistered)
+{
+    return eshotRegistered ? kdeShortcutsWithoutPlainPrint(originalShortcuts)
+                           : originalShortcuts;
+}
+
 bool defaultLinuxPortalSelection(const QString &sessionType)
 {
     return sessionType.compare(QStringLiteral("wayland"), Qt::CaseInsensitive) == 0;

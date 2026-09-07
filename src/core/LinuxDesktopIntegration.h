@@ -8,12 +8,20 @@ enum class LinuxDesktopEnvironment {
     Other
 };
 
+enum class LinuxDesktopSupportLevel {
+    Supported,
+    Limited,
+    Unsupported
+};
+
 namespace LinuxDesktopIntegration {
 
 LinuxDesktopEnvironment detect(const QString &currentDesktop,
                                const QString &sessionDesktop);
 bool isWayland(const QString &sessionType, const QString &platformName = QString());
 bool useXWaylandOverlay(LinuxDesktopEnvironment desktop, const QString &sessionType);
+LinuxDesktopSupportLevel startupSupportLevel(LinuxDesktopEnvironment desktop,
+                                             const QString &sessionType);
 bool deferFirstRunHotkeyRegistration(LinuxDesktopEnvironment desktop);
 bool deferOverlayPrewarmUntilFirstRunCompletes(bool firstRunInProgress);
 bool useGnomeShortcutFallback(LinuxDesktopEnvironment desktop, bool portalAvailable);

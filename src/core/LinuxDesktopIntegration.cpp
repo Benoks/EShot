@@ -39,6 +39,15 @@ bool useXWaylandOverlay(LinuxDesktopEnvironment desktop, const QString &sessionT
             || desktop == LinuxDesktopEnvironment::Gnome);
 }
 
+LinuxDesktopSupportLevel startupSupportLevel(LinuxDesktopEnvironment desktop,
+                                             const QString &sessionType)
+{
+    if (desktop == LinuxDesktopEnvironment::Other)
+        return LinuxDesktopSupportLevel::Unsupported;
+    return isWayland(sessionType) ? LinuxDesktopSupportLevel::Supported
+                                  : LinuxDesktopSupportLevel::Limited;
+}
+
 bool deferFirstRunHotkeyRegistration(LinuxDesktopEnvironment desktop)
 {
     return desktop == LinuxDesktopEnvironment::Gnome;

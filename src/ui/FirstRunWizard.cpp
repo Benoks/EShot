@@ -222,6 +222,43 @@ void FirstRunWizard::setupUi()
     descLabel->setStyleSheet("color: #aaa;");
     mainLayout->addWidget(descLabel);
 
+#ifdef Q_OS_LINUX
+    const QString currentDesktop = qEnvironmentVariable("XDG_CURRENT_DESKTOP");
+    const QString sessionDesktop = qEnvironmentVariable("XDG_SESSION_DESKTOP");
+    const LinuxDesktopEnvironment startupDesktop = LinuxDesktopIntegration::detect(
+        currentDesktop, sessionDesktop);
+    const LinuxDesktopSupportLevel supportLevel = LinuxDesktopIntegration::startupSupportLevel(
+        startupDesktop, qEnvironmentVariable("XDG_SESSION_TYPE"));
+    if (supportLevel != LinuxDesktopSupportLevel::Supported) {
+        auto *supportWarning = new QLabel();
+        supportWarning->setWordWrap(true);
+        supportWarning->setStyleSheet(
+            supportLevel == LinuxDesktopSupportLevel::Unsupported
+                ? "background: rgba(220, 53, 69, 0.16); color: #ffb3bc; "
+                  "border: 1px solid rgba(220, 53, 69, 0.60); border-radius: 6px; "
+                  "padding: 8px; font-size: 12px;"
+                : "background: rgba(255, 193, 7, 0.14); color: #ffd166; "
+                  "border: 1px solid rgba(255, 193, 7, 0.45); border-radius: 6px; "
+                  "padding: 8px; font-size: 12px;");
+        if (supportLevel == LinuxDesktopSupportLevel::Unsupported) {
+            QString detectedName = currentDesktop.trimmed();
+            if (detectedName.isEmpty())
+                detectedName = sessionDesktop.trimmed();
+            if (detectedName.isEmpty())
+                detectedName = tr("Unknown desktop");
+            supportWarning->setText(tr("<b>Unsupported desktop environment: %1</b><br>"
+                                       "EShot officially supports KDE Plasma 6 and GNOME on Wayland. "
+                                       "Capture, global shortcuts, recording, or tray integration may not work correctly.")
+                                        .arg(detectedName.toHtmlEscaped()));
+        } else {
+            supportWarning->setText(tr("<b>Limited desktop session support</b><br>"
+                                       "EShot is primarily tested on KDE Plasma 6 and GNOME Wayland. "
+                                       "Some capture, shortcut, recording, or tray behavior may differ in this session."));
+        }
+        mainLayout->addWidget(supportWarning);
+    }
+#endif
+
     QGroupBox *langGroup = new QGroupBox(TranslationManager::language());
     QVBoxLayout *langLayout = new QVBoxLayout(langGroup);
     m_langCombo = new QComboBox();
@@ -477,12 +514,6 @@ void FirstRunWizard::onActivateLinuxPrintScreen()
         return;
     }
 
-    if (!HotkeyManager::instance().reRegisterCaptureHotkey(0, VK_SNAPSHOT)) {
-        m_hotkeyStatusLabel->setText(tr("EShot could not register Print Screen with KDE. Spectacle was not changed."));
-        m_hotkeyStatusLabel->setStyleSheet("color: #ff9800; font-size: 12px;");
-        return;
-    }
-
     QDBusInterface globalAccel(
         QStringLiteral("org.kde.kglobalaccel"),
         QStringLiteral("/kglobalaccel"),
@@ -502,13 +533,30 @@ void FirstRunWizard::onActivateLinuxPrintScreen()
         return;
     }
 
-    const QList<int> remaining = kdeShortcutsWithoutPlainPrint(currentReply.value());
+    const QList<int> originalShortcuts = currentReply.value();
+    const QList<int> shortcutsForEshot = kdeShortcutsAfterEshotPrintScreenRegistration(
+        originalShortcuts, true);
     const QDBusReply<void> setReply = globalAccel.call(
         QStringLiteral("setForeignShortcut"),
         spectacleLaunchId,
-        QVariant::fromValue(remaining));
+        QVariant::fromValue(shortcutsForEshot));
     if (!setReply.isValid()) {
         m_hotkeyStatusLabel->setText(tr("KDE did not allow the shortcut change. Use System Settings > Shortcuts instead."));
+        m_hotkeyStatusLabel->setStyleSheet("color: #ff9800; font-size: 12px;");
+        return;
+    }
+
+    if (!HotkeyManager::instance().reRegisterCaptureHotkey(0, VK_SNAPSHOT)) {
+        const QDBusReply<void> restoreReply = globalAccel.call(
+            QStringLiteral("setForeignShortcut"),
+            spectacleLaunchId,
+            QVariant::fromValue(kdeShortcutsAfterEshotPrintScreenRegistration(
+                originalShortcuts, false)));
+        const QString recovery = restoreReply.isValid()
+            ? tr("Spectacle's Print Screen shortcut was restored.")
+            : tr("KDE could not restore Spectacle's Print Screen shortcut. Restore it from System Settings > Shortcuts.");
+        m_hotkeyStatusLabel->setText(
+            tr("EShot could not register Print Screen with KDE. %1").arg(recovery));
         m_hotkeyStatusLabel->setStyleSheet("color: #ff9800; font-size: 12px;");
         return;
     }
@@ -576,10 +624,17 @@ void FirstRunWizard::onFinish()
 
     if (!deferHotkeyRegistration
         && !HotkeyManager::instance().reRegisterCaptureHotkey(modifiers, vkey)) {
+        QString message = TranslationManager::hotkeyMayBeInUse();
+#ifdef Q_OS_LINUX
+        if (desktop == LinuxDesktopEnvironment::Kde
+            && HotkeyManager::isPlainPrintScreen(modifiers, vkey)) {
+            message = tr("Print Screen is currently assigned to Spectacle. Click \"Use Print Screen for EShot\" above, or choose another shortcut.");
+        }
+#endif
         QMessageBox::warning(
             this,
             TranslationManager::errInvalidHotkeyTitle(),
-            TranslationManager::hotkeyMayBeInUse());
+            message);
         return;
     }
 
