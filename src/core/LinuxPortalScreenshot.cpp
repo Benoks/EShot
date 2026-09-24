@@ -445,6 +445,10 @@ void LinuxPortalScreenshot::onPortalResponse(uint response, const QVariantMap &r
         qWarning() << "[LinuxScreenshot] portal output is not a readable image:" << path;
         return;
     }
+
+    if (!QFile::remove(path))
+        qWarning() << "[LinuxScreenshot] could not remove portal output:" << path;
+
     pixmap.setDevicePixelRatio(1.0);
     m_pixmap = pixmap;
     qInfo() << "[LinuxScreenshot] selected backend=portal size=" << pixmap.size();
