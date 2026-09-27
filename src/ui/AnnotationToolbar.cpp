@@ -693,6 +693,9 @@ void AnnotationToolbar::onColorButtonClicked()
     QColorDialog dlg(m_currentColor, this);
 #endif
     dlg.setWindowTitle(TranslationManager::toolColor());
+    // A capture keyboard grab would keep typing out of the hex colour field.
+    if (QWidget *grabber = QWidget::keyboardGrabber())
+        grabber->releaseKeyboard();
     if (dlg.exec() == QDialog::Accepted) {
         QColor c = dlg.selectedColor();
         if (c.isValid()) {

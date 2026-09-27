@@ -1368,6 +1368,10 @@ void CaptureOverlay::startRecordingFromDrawer()
     m_isSelecting = false;
     hideToolbar();
     releaseCaptureBuffers();
+    // The recorder reads FPS, volume and devices straight from QSettings;
+    // write out values the drawer changed within the debounce window.
+    if (m_settingsWriter)
+        m_settingsWriter->flush();
     if (mode == RecordingDrawerMode::Gif)
         emit gifCaptureRequested(captureRect, displayRect);
     else
@@ -1764,7 +1768,10 @@ void CaptureOverlay::startCaptureInternal(CaptureSelectionMode selectionMode, bo
     m_isSelecting = false;
     m_selectionComplete = false;
     m_ignoreNextMouseRelease = false;
-    m_resizeMode = ResNone;
+    resetGestureState();
+    // A visual search still running for an earlier capture must not reopen
+    // this overlay when it finishes.
+    m_visualSearchOperations.begin();
     m_selectionLocked = false;
     m_selectionStart = QPoint();
     m_selectionEnd = QPoint();
@@ -2688,29 +2695,52 @@ void CaptureOverlay::mousePressEvent(QMouseEvent *event)
             update();
             return;
         }
-        if (m_selectionComplete) {
-            m_selectionComplete = false;
-            m_isSelecting = false;
-            m_windowSnapClickPending = false;
-            m_pressedWindowRect = QRect();
-            m_selectionLocked = false;
-            m_selectionStart = m_selectionEnd = QPoint();
-            m_selectionAnchorScreenRect = QRect();
-            if (m_toolbar) m_toolbar->setSelectionLocked(false);
-            hideToolbar();
-            if (m_annotationEngine) m_annotationEngine->clear();
-            acquireCaptureKeyboardFocus();
-            update();
+        if (m_selectionComplete || m_resizeMode != ResNone) {
+            resetSelection();
         } else {
             onClose();
         }
     }
 }
 
+void CaptureOverlay::resetGestureState()
+{
+    // A capture can end or restart while a mouse gesture is still held. Stale
+    // flags would swallow the next capture's first mouse release.
+    m_resizeMode = ResNone;
+    m_isDraggingAnnotation = false;
+    m_isRotatingAnnotation = false;
+    m_isResizingTextAnnotation = false;
+    m_textPanelDragging = false;
+}
+
+void CaptureOverlay::resetSelection()
+{
+    m_selectionComplete = false;
+    m_isSelecting = false;
+    m_windowSnapClickPending = false;
+    m_pressedWindowRect = QRect();
+    m_selectionLocked = false;
+    m_selectionStart = m_selectionEnd = QPoint();
+    m_selectionAnchorScreenRect = QRect();
+    resetGestureState();
+    if (m_toolbar) m_toolbar->setSelectionLocked(false);
+    hideToolbar();
+    if (m_annotationEngine) m_annotationEngine->clear();
+    acquireCaptureKeyboardFocus();
+    update();
+}
+
 void CaptureOverlay::mouseDoubleClickEvent(QMouseEvent *event)
 {
     if (event->button() != Qt::LeftButton || m_eyedropperActive || m_selectionLocked)
         return;
+    // Inside a finished selection a quick second click belongs to the active
+    // tool; treating it as "select monitor" would wipe the annotations.
+    if (m_selectionComplete) {
+        mousePressEvent(event);
+        return;
+    }
     if (!allowsManualSelection(m_selectionMode))
         return;
     if (m_toolbar && m_toolbar->isVisible() && m_toolbar->geometry().contains(event->pos()))
@@ -3113,24 +3143,17 @@ void CaptureOverlay::keyPressEvent(QKeyEvent *event)
             setFocus();
             return;
         }
-        if (m_selectionComplete) {
-            m_selectionComplete = false;
-            m_isSelecting = false;
-            m_selectionLocked = false;
-            m_selectionStart = m_selectionEnd = QPoint();
-            m_selectionAnchorScreenRect = QRect();
-            if (m_toolbar) m_toolbar->setSelectionLocked(false);
-            hideToolbar();
-            if (m_annotationEngine) m_annotationEngine->clear();
-            acquireCaptureKeyboardFocus();
-            update();
+        if (m_selectionComplete || m_resizeMode != ResNone) {
+            resetSelection();
         } else {
             onClose();
         }
     } else if (matchesOverlayShortcut(event, QStringLiteral("actionCopy"), QStringLiteral("Ctrl+C"))) {
-        onCopyToClipboard();
+        if (m_selectionComplete)
+            onCopyToClipboard();
     } else if (matchesOverlayShortcut(event, QStringLiteral("actionSave"), QStringLiteral("Ctrl+S"))) {
-        onSave();
+        if (m_selectionComplete)
+            onSave();
     } else if (matchesOverlayShortcut(event, QStringLiteral("actionUndo"), QStringLiteral("Ctrl+Z"))) {
         if (m_annotationEngine) { m_annotationEngine->undo(); update(); updateUndoRedoState(); }
     } else if (matchesOverlayShortcut(event, QStringLiteral("actionRedo"), QStringLiteral("Ctrl+Shift+Z"))) {
@@ -3308,7 +3331,9 @@ bool CaptureOverlay::eventFilter(QObject *obj, QEvent *event)
     // Overlay controls such as toolbar buttons and sliders can keep widget
     // focus after a click. While an annotation is active, route shortcuts
     // back to the capture canvas unless the user is actively editing text.
+    // Modal dialogs (save errors, colour picker) keep their own keys.
     if (obj != this && isVisible() && m_selectionComplete
+        && !QApplication::activeModalWidget()
         && (!m_textEdit || !m_textEdit->isVisible())) {
         // Let overlay child editors (spin boxes, combos incl. their popups,
         // line edits) keep their keystrokes instead of consuming them here.
@@ -3337,6 +3362,10 @@ bool CaptureOverlay::eventFilter(QObject *obj, QEvent *event)
 
 QPixmap CaptureOverlay::getSelectedPixmap()
 {
+    // Copy, save, pin, OCR and upload all compose through here; include text
+    // the user typed but has not confirmed yet.
+    if (m_textEdit && m_textEdit->isVisible())
+        commitText();
     QRect selRect = normalizedSelectionRect();
     if (selRect.isEmpty()) return QPixmap();
     // Crop at full physical resolution (selRect is logical).
@@ -3596,6 +3625,12 @@ void CaptureOverlay::beginTextEditAt(const QPoint &pos)
     if (!m_textEdit || !m_annotationEngine)
         return;
 
+    // Clicking elsewhere while typing starts a new label; keep the old one.
+    if (m_textEdit->isVisible()) {
+        commitText();
+        m_textJustCommitted = false;
+    }
+
     {
         QSignalBlocker fontBlocker(m_textInlineFontCombo);
         QSignalBlocker sizeBlocker(m_textInlineSizeSpin);
@@ -3837,11 +3872,9 @@ void CaptureOverlay::onOcrRequested()
 {
     QPixmap pix = getSelectedPixmap();
     if (pix.isNull()) return;
-    QSettings s("EShot", "EShot");
-    QString lang = s.value("ocrLanguage", "en-US").toString();
-    hide();
+    // OcrDialog restores the saved OCR language itself.
+    hideForModalDialog();
     OcrDialog dlg(pix);
-    dlg.setLanguageTag(lang);
     dlg.exec();
     restoreAfterModalDialog();
 }
@@ -3850,11 +3883,21 @@ void CaptureOverlay::onUploadRequested()
 {
     QPixmap pix = getSelectedPixmap();
     if (pix.isNull()) return;
-    hide();
+    hideForModalDialog();
     UploadDialog dlg;
     dlg.setImage(pix);
     dlg.exec();
     restoreAfterModalDialog();
+}
+
+void CaptureOverlay::hideForModalDialog()
+{
+    // The managed input proxy is a separate top-level window. Its keyboard
+    // grab would otherwise keep all keys away from the dialog.
+    releaseTextKeyboardFocus();
+    if (m_textFocusProxy)
+        m_textFocusProxy->hide();
+    hide();
 }
 
 void CaptureOverlay::restoreAfterModalDialog()
@@ -4323,6 +4366,10 @@ void CaptureOverlay::onPinToDesktop()
     hide();
     m_selectionComplete = false;
     m_isSelecting = false;
+    m_selectionAnchorScreenRect = QRect();
+    hideToolbar();
+    cancelTextEdit();
+    releaseCaptureBuffers();
 
     qDebug() << "[CaptureOverlay] Pinned to desktop at" << screenPos;
 }

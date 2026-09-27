@@ -96,6 +96,9 @@ private:
     void completeSelection(const QRect &selectionRect);
     void setHoveredWindowRect(const QRect &targetRect);
     void updateOverlayRegion(const QRegion &region);
+    void resetGestureState();
+    void resetSelection();
+    void hideForModalDialog();
     QPixmap getSelectedPixmap();
 
     // Filename template parse
