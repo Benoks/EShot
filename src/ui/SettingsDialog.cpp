@@ -278,7 +278,7 @@ QString SettingsDialog::resolvePatternPreview(const QString &pattern) const
 }
 
 #ifdef Q_OS_WIN
-// Versions before 4.3.3 started EShot through an elevated scheduled task.
+// Versions before 4.4.0 started EShot through an elevated scheduled task.
 static bool legacyAutoStartTaskExists()
 {
     QProcess query;
