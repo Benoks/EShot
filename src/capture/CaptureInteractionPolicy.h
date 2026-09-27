@@ -3,6 +3,7 @@
 #include <QRect>
 #include <QRegion>
 #include <QSize>
+#include <QString>
 #include <QList>
 
 enum class SelectionResizeHandle {
@@ -51,6 +52,8 @@ bool shouldGrabCaptureKeyboardFromManagedProxy(bool managedProxyAvailable,
                                                bool textEditorVisible);
 bool shouldDetachModalFromOverlay(bool xwaylandOverlay);
 bool shouldComposeCaptureResult(bool recordingMode);
+bool shouldUsePartialOverlayUpdates(qreal devicePixelRatio);
+bool shouldRepaintCrosshairOnMove(const QString &crosshairStyle);
 QRegion crosshairUpdateRegion(const QPoint &previousPosition,
                               const QPoint &currentPosition,
                               const QRect &canvasRect);

@@ -95,6 +95,7 @@ private:
     void selectMonitorAt(const QPoint &pos);
     void completeSelection(const QRect &selectionRect);
     void setHoveredWindowRect(const QRect &targetRect);
+    void updateOverlayRegion(const QRegion &region);
     QPixmap getSelectedPixmap();
 
     // Filename template parse

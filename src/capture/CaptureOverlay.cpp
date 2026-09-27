@@ -2677,7 +2677,7 @@ void CaptureOverlay::mousePressEvent(QMouseEvent *event)
                 dirty += crosshairUpdateRegion(
                     m_crosshairPosition, m_crosshairPosition, rect());
             }
-            update(dirty);
+            updateOverlayRegion(dirty);
         }
     } else if (event->button() == Qt::RightButton) {
         if (m_eyedropperActive) {
@@ -2724,6 +2724,14 @@ void CaptureOverlay::mouseDoubleClickEvent(QMouseEvent *event)
     m_ignoreNextMouseRelease = true;
 }
 
+void CaptureOverlay::updateOverlayRegion(const QRegion &region)
+{
+    if (shouldUsePartialOverlayUpdates(devicePixelRatioF()))
+        update(region);
+    else
+        update();
+}
+
 void CaptureOverlay::mouseMoveEvent(QMouseEvent *event)
 {
     // In Eyedropper mode — only repaint the preview circle + color label
@@ -2740,7 +2748,7 @@ void CaptureOverlay::mouseMoveEvent(QMouseEvent *event)
                            QSize(EyedropperRepaintMargin * 2, EyedropperRepaintMargin * 2))
                          .intersected(rect());
         }
-        update(dirty);
+        updateOverlayRegion(dirty);
         return;
     }
 
@@ -2930,14 +2938,14 @@ void CaptureOverlay::mouseMoveEvent(QMouseEvent *event)
         QRegion dirty = selectionUpdateRegion(
             oldSel, normalizedSelectionRect(), rect());
         dirty += movingUiRegion.intersected(rect());
-        update(dirty);
+        updateOverlayRegion(dirty);
         return;
     }
 
     if (m_isSelecting) {
         const QRect previousSelection = normalizedSelectionRect();
         m_selectionEnd = event->pos();
-        update(selectionUpdateRegion(
+        updateOverlayRegion(selectionUpdateRegion(
             previousSelection, normalizedSelectionRect(), rect()));
     } else if (m_selectionComplete && m_annotationEngine &&
                m_annotationEngine->currentTool() != AnnotationEngine::None) {
@@ -2968,9 +2976,9 @@ void CaptureOverlay::mouseMoveEvent(QMouseEvent *event)
             m_hasCrosshairPosition = true;
             if (previousMonitor != currentMonitor)
                 update();
-            else
-                update(crosshairUpdateRegion(previousPosition,
-                                             m_crosshairPosition, rect()));
+            else if (shouldRepaintCrosshairOnMove(m_crosshairStyle))
+                updateOverlayRegion(crosshairUpdateRegion(previousPosition,
+                                                          m_crosshairPosition, rect()));
         }
     } else {
         updateCursor(event->pos());

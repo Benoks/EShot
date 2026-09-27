@@ -98,6 +98,23 @@ private slots:
         QVERIFY(!shouldDetachModalFromOverlay(false));
     }
 
+    void partialOverlayUpdatesOnlyUseWholePixelScales()
+    {
+        QVERIFY(shouldUsePartialOverlayUpdates(1.0));
+        QVERIFY(shouldUsePartialOverlayUpdates(2.0));
+        QVERIFY(!shouldUsePartialOverlayUpdates(1.25));
+        QVERIFY(!shouldUsePartialOverlayUpdates(1.5));
+        QVERIFY(!shouldUsePartialOverlayUpdates(1.75));
+        QVERIFY(!shouldUsePartialOverlayUpdates(0.0));
+    }
+
+    void disabledCrosshairDoesNotRepaintOnMove()
+    {
+        QVERIFY(shouldRepaintCrosshairOnMove(QStringLiteral("dash")));
+        QVERIFY(shouldRepaintCrosshairOnMove(QStringLiteral("solid")));
+        QVERIFY(!shouldRepaintCrosshairOnMove(QStringLiteral("none")));
+    }
+
     void crosshairMovementOnlyInvalidatesThinLineRegions()
     {
         const QRect canvas(0, 0, 3840, 1080);

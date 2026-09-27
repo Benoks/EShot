@@ -2,6 +2,8 @@
 
 #include <QLineF>
 
+#include <cmath>
+
 bool shouldReleaseToolForResize(bool handleHit, int currentTool, int noneTool)
 {
     return handleHit && currentTool != noneTool;
@@ -95,6 +97,20 @@ bool shouldDetachModalFromOverlay(bool xwaylandOverlay)
 bool shouldComposeCaptureResult(bool recordingMode)
 {
     return !recordingMode;
+}
+
+bool shouldUsePartialOverlayUpdates(qreal devicePixelRatio)
+{
+    // At fractional scales Qt rounds logical dirty rects to device pixels,
+    // and some Wayland stacks then leave stale crosshair/frame lines on
+    // screen. Partial updates are only safe on whole-pixel scales.
+    return devicePixelRatio > 0.0
+        && qFuzzyCompare(devicePixelRatio, std::round(devicePixelRatio));
+}
+
+bool shouldRepaintCrosshairOnMove(const QString &crosshairStyle)
+{
+    return crosshairStyle != QLatin1String("none");
 }
 
 QRegion crosshairUpdateRegion(const QPoint &previousPosition,
