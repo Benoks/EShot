@@ -16,6 +16,21 @@ class UpdatePolicyTests : public QObject
     Q_OBJECT
 
 private slots:
+    void onlyWritableAppImagesUpdateThemselves()
+    {
+        QCOMPARE(linuxUpdateChannel(QStringLiteral("/home/user/.local/opt/EShot/EShot.AppImage"),
+                                    true, true),
+                 LinuxUpdateChannel::SelfUpdate);
+        QCOMPARE(linuxUpdateChannel(QStringLiteral("/opt/eshot/EShot.AppImage"), true, false),
+                 LinuxUpdateChannel::Aur);
+        QCOMPARE(linuxUpdateChannel(QStringLiteral("/opt/eshot/EShot.AppImage"), true, true),
+                 LinuxUpdateChannel::Aur);
+        QCOMPARE(linuxUpdateChannel(QString(), false, false),
+                 LinuxUpdateChannel::PackageManager);
+        QCOMPARE(linuxUpdateChannel(QStringLiteral("/usr/local/bin/EShot.AppImage"), true, false),
+                 LinuxUpdateChannel::PackageManager);
+    }
+
     void countsOnlyNewerStableReleases()
     {
         const QJsonArray releases{

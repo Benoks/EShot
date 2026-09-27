@@ -171,7 +171,13 @@ void UpdateManager::parseRelease(const QByteArray &data, bool manual)
     const QString currentVersion = QCoreApplication::applicationVersion();
     m_updateAvailable = !latestTag.isEmpty() && isNewerVersion(latestTag, currentVersion);
 
-    if (m_updateAvailable) {
+    const QString externalStatus = m_updateAvailable ? externalUpdateStatus(latestTag) : QString();
+    if (!externalStatus.isEmpty()) {
+        // AUR, .deb and archive builds are updated by their package manager.
+        // Report the release but never offer to download or install it here.
+        m_updateAvailable = false;
+        setStatus(externalStatus);
+    } else if (m_updateAvailable) {
         setStatus(TranslationManager::updateStatusAvailable(latestTag));
     } else {
         if (manual)
@@ -244,6 +250,25 @@ bool UpdateManager::isSelfManagedInstall() const
 #endif
 }
 
+QString UpdateManager::externalUpdateStatus(const QString &version) const
+{
+#if defined(Q_OS_LINUX)
+    const QString appImagePath = qEnvironmentVariable("APPIMAGE");
+    const QFileInfo appImage(appImagePath);
+    switch (linuxUpdateChannel(appImagePath, appImage.isFile(), appImage.isWritable())) {
+    case LinuxUpdateChannel::Aur:
+        return TranslationManager::updateStatusAur(version);
+    case LinuxUpdateChannel::PackageManager:
+        return TranslationManager::updateStatusPackageManager(version);
+    case LinuxUpdateChannel::SelfUpdate:
+        break;
+    }
+#else
+    Q_UNUSED(version);
+#endif
+    return {};
+}
+
 QString UpdateManager::updateCacheDir() const
 {
     QString dir = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
@@ -258,6 +283,12 @@ void UpdateManager::installUpdate(bool silent)
 {
     if (isBusy())
         return;
+    // Package-managed builds only report releases; a fresh check shows either
+    // "up to date" or how to update through the package manager.
+    if (!externalUpdateStatus(m_latestVersion).isEmpty()) {
+        checkForUpdates(true);
+        return;
+    }
     m_silentUpdate = silent;
     if (!m_updateAvailable) {
         m_installAfterCheck = true;

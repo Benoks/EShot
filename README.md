@@ -101,7 +101,7 @@ The AppImage bundles EShot and Qt. Optional media, OCR, and desktop-integration 
 
 Each release also includes `EShot-v<version>-linux-x64.tar.gz` for users who prefer an unpacked build. Unlike the AppImage, this archive relies on compatible Qt and runtime libraries installed by the Linux distribution.
 
-Integrated AppImages are stored for the current user under `~/.local/opt/EShot`. EShot checks for updates and always keeps manual updating available. If a per-user Windows installation or integrated AppImage is at least two stable releases behind, EShot downloads the matching release asset, verifies its GitHub SHA-256 digest, updates silently, and restarts. All-users Windows installations require an administrator for updates. Native package builds should be updated through their package manager.
+Integrated AppImages are stored for the current user under `~/.local/opt/EShot`. EShot checks for updates and always keeps manual updating available. If a per-user Windows installation or integrated AppImage is at least two stable releases behind, EShot downloads the matching release asset, verifies its GitHub SHA-256 digest, updates silently, and restarts. All-users Windows installations require an administrator for updates. The AUR package (`eshot-bin`), `.deb` packages and the `.tar.gz` archive are updated through the package manager or a new download; EShot only reports new releases there and does not replace them itself.
 
 ### Arch Linux and CachyOS
 

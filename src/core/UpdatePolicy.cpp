@@ -1,5 +1,6 @@
 #include "UpdatePolicy.h"
 
+#include <QDir>
 #include <QJsonObject>
 #include <QSet>
 #include <QVersionNumber>
@@ -37,4 +38,15 @@ int countNewerStableReleases(const QJsonArray &releases, const QString &currentV
 bool shouldSilentlyInstallUpdate(int newerStableReleaseCount, bool selfManagedInstall)
 {
     return selfManagedInstall && newerStableReleaseCount >= 2;
+}
+
+LinuxUpdateChannel linuxUpdateChannel(const QString &appImagePath,
+                                      bool appImageIsFile, bool appImageIsWritable)
+{
+    const QString path = QDir::cleanPath(appImagePath.trimmed());
+    if (path == QLatin1String("/opt/eshot/EShot.AppImage"))
+        return LinuxUpdateChannel::Aur;
+    if (appImagePath.trimmed().isEmpty() || !appImageIsFile || !appImageIsWritable)
+        return LinuxUpdateChannel::PackageManager;
+    return LinuxUpdateChannel::SelfUpdate;
 }

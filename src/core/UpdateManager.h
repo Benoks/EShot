@@ -39,6 +39,7 @@ private:
     void launchInstaller(const QString &installerPath);
     void checkSilentUpdateEligibility();
     bool isSelfManagedInstall() const;
+    QString externalUpdateStatus(const QString &version) const;
     QString updateCacheDir() const;
 
     QNetworkAccessManager *m_network = nullptr;
