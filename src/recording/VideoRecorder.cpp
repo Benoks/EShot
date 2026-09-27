@@ -1,4 +1,5 @@
 #include "VideoRecorder.h"
+#include "core/ComponentPaths.h"
 #include "core/LinuxPortalScreenCast.h"
 #include "LinuxRecordingSupport.h"
 #include "RecordingSettingsPolicy.h"
@@ -33,14 +34,6 @@
 #endif
 
 namespace {
-QString defaultSaveDirectory()
-{
-    QString picturesPath = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
-    if (picturesPath.trimmed().isEmpty())
-        picturesPath = QDir::homePath();
-    return QDir(picturesPath).filePath(QStringLiteral("EShot"));
-}
-
 bool containsDevice(const QStringList &devices, const QString &name)
 {
     for (const QString &device : devices) {
@@ -944,28 +937,7 @@ bool VideoRecorder::startWaylandPortalRecording(const QRect &captureRect)
 
 QString VideoRecorder::ffmpegPath() const
 {
-    const QString appDir = QCoreApplication::applicationDirPath();
-    QStringList candidates = {
-        QDir(appDir).filePath(QStringLiteral("ffmpeg/ffmpeg.exe")),
-        QDir(appDir).filePath(QStringLiteral("ffmpeg.exe")),
-#ifndef Q_OS_WIN
-        QDir(appDir).filePath(QStringLiteral("ffmpeg/ffmpeg")),
-        QDir(appDir).filePath(QStringLiteral("ffmpeg")),
-#endif
-        QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("../third_party/ffmpeg/bin/ffmpeg.exe")),
-#ifndef Q_OS_WIN
-        QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("../third_party/ffmpeg/bin/ffmpeg")),
-#endif
-        QDir::current().filePath(QStringLiteral("third_party/ffmpeg/bin/ffmpeg.exe"))
-    };
-#ifndef Q_OS_WIN
-    candidates << QDir::current().filePath(QStringLiteral("third_party/ffmpeg/bin/ffmpeg"));
-#endif
-    for (const QString &path : candidates) {
-        if (QFileInfo::exists(path))
-            return QFileInfo(path).absoluteFilePath();
-    }
-    return QStandardPaths::findExecutable(QStringLiteral("ffmpeg"));
+    return ComponentPaths::ffmpegPath();
 }
 
 QString VideoRecorder::gstLaunchPath() const
@@ -988,10 +960,10 @@ QString VideoRecorder::makeDefaultOutputPath() const
     QStringList candidates;
     QString configuredDir = s.contains("videoSavePath")
         ? s.value("videoSavePath").toString().trimmed()
-        : QDir(defaultSaveDirectory()).filePath(QStringLiteral("Videos"));
+        : QDir(ComponentPaths::defaultSaveDirectory()).filePath(QStringLiteral("Videos"));
     if (configuredDir.isEmpty())
         configuredDir = s.value("savePath").toString().trimmed();
-    candidates << (configuredDir.isEmpty() ? defaultSaveDirectory() : configuredDir)
+    candidates << (configuredDir.isEmpty() ? ComponentPaths::defaultSaveDirectory() : configuredDir)
                << QStandardPaths::writableLocation(QStandardPaths::MoviesLocation)
                << QStandardPaths::writableLocation(QStandardPaths::PicturesLocation)
                << QStandardPaths::writableLocation(QStandardPaths::TempLocation)

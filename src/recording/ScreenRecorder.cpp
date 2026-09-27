@@ -1,5 +1,6 @@
 #include "ScreenRecorder.h"
 #include "GifEncoder.h"
+#include "core/ComponentPaths.h"
 #include "core/LinuxPortalScreenCast.h"
 #include "LinuxRecordingSupport.h"
 #include "RecordingSettingsPolicy.h"
@@ -30,14 +31,6 @@
 #endif
 
 namespace {
-QString defaultSaveDirectory()
-{
-    QString picturesPath = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
-    if (picturesPath.trimmed().isEmpty())
-        picturesPath = QDir::homePath();
-    return QDir(picturesPath).filePath(QStringLiteral("EShot"));
-}
-
 #if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
 bool configurePipeWireRemote(QProcess *process, int fd)
 {
@@ -161,13 +154,13 @@ QString ScreenRecorder::makeDefaultOutputPath() const
     QStringList candidates;
     QString configuredDir = s.contains("gifSavePath")
         ? s.value("gifSavePath").toString().trimmed()
-        : QDir(defaultSaveDirectory()).filePath(QStringLiteral("GIFs"));
+        : QDir(ComponentPaths::defaultSaveDirectory()).filePath(QStringLiteral("GIFs"));
     if (configuredDir.isEmpty())
         configuredDir = s.value("savePath").toString().trimmed();
     if (!configuredDir.isEmpty()) {
         candidates << configuredDir;
     } else {
-        candidates << defaultSaveDirectory();
+        candidates << ComponentPaths::defaultSaveDirectory();
     }
     candidates << QStandardPaths::writableLocation(QStandardPaths::PicturesLocation)
                << QStandardPaths::writableLocation(QStandardPaths::MoviesLocation)

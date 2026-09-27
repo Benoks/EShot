@@ -1,4 +1,5 @@
 #include "SettingsDialog.h"
+#include "../core/ComponentPaths.h"
 #include "SettingsHotkeyPolicy.h"
 #include "SettingsLayoutPolicy.h"
 #include "ApplicationTheme.h"
@@ -128,14 +129,6 @@ QVector<OverlayShortcutDef> overlayShortcutDefaults()
         {"actionGif", TranslationManager::recordingStartTitle(), "Ctrl+G"},
         {"actionVideo", TranslationManager::videoRecordingTitle(), "Ctrl+Shift+V"}
     };
-}
-
-QString defaultSaveDirectory()
-{
-    QString picturesPath = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
-    if (picturesPath.trimmed().isEmpty())
-        picturesPath = QDir::homePath();
-    return QDir(picturesPath).filePath(QStringLiteral("EShot"));
 }
 
 QString cleanToolLabel(const QString &label)
@@ -307,32 +300,27 @@ QString packageSourceUrl(const QString &code)
     return QStringLiteral("https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/main/%1.traineddata").arg(code);
 }
 
+// Bundled or downloaded component folder that contains the executable.
+QString bundledComponentDir(const QString &component)
+{
+    const QString dir = ComponentPaths::installedComponentDirectory(component);
+    if (dir.isEmpty())
+        return {};
+    for (const QString &name : {component + QStringLiteral(".exe"), component}) {
+        if (QFileInfo(QDir(dir).filePath(name)).isFile())
+            return dir;
+    }
+    return {};
+}
+
 QString bundledTesseractDir()
 {
-    const QString appTesseractDir = QCoreApplication::applicationDirPath() + QStringLiteral("/tesseract");
-    const QStringList names = {
-        QStringLiteral("tesseract.exe"),
-        QStringLiteral("tesseract")
-    };
-    for (const QString &name : names) {
-        if (QFileInfo::exists(QDir(appTesseractDir).filePath(name)))
-            return appTesseractDir;
-    }
-    return QString();
+    return bundledComponentDir(QStringLiteral("tesseract"));
 }
 
 QString bundledFfmpegDir()
 {
-    const QString appFfmpegDir = QCoreApplication::applicationDirPath() + QStringLiteral("/ffmpeg");
-    const QStringList names = {
-        QStringLiteral("ffmpeg.exe"),
-        QStringLiteral("ffmpeg")
-    };
-    for (const QString &name : names) {
-        if (QFileInfo::exists(QDir(appFfmpegDir).filePath(name)))
-            return appFfmpegDir;
-    }
-    return QString();
+    return bundledComponentDir(QStringLiteral("ffmpeg"));
 }
 
 QString componentExeName(const QString &base)
@@ -1527,7 +1515,7 @@ QString SettingsDialog::tessdataTargetDir() const
 {
     QString dir = OcrEngine::tessdataDir();
     if (dir.trimmed().isEmpty())
-        dir = QCoreApplication::applicationDirPath() + QStringLiteral("/tesseract/tessdata");
+        dir = QDir(ComponentPaths::componentInstallDirectory()).filePath(QStringLiteral("tesseract/tessdata"));
     return dir;
 }
 
@@ -1904,7 +1892,10 @@ void SettingsDialog::extractComponentArchive(const QString &archivePath, const Q
     m_packageOperationStatus = QStringLiteral("%1: %2").arg(statusPrefix, uiLabel("kuruluyor...", "installing..."));
     refreshPackageStatus();
 
-    const QString appDir = QCoreApplication::applicationDirPath();
+    // An all-users install lives in Program Files, which a standard user
+    // cannot write; fall back to the per-user components folder then.
+    const QString appDir = ComponentPaths::componentInstallDirectory();
+    QDir().mkpath(appDir);
     const QString extractDir = QFileInfo(archivePath).absoluteDir().filePath(QStringLiteral("extract_tesseract"));
     QString script = QStringLiteral(
         "$ErrorActionPreference='Stop';"
@@ -1963,8 +1954,8 @@ void SettingsDialog::onFfmpegComponentAction()
 {
     if (m_packageReply || m_packageExtractProcess)
         return;
-    const QString dirPath = QCoreApplication::applicationDirPath() + QStringLiteral("/ffmpeg");
-    if (bundledFfmpegDir().isEmpty()) {
+    const QString dirPath = bundledFfmpegDir();
+    if (dirPath.isEmpty()) {
         downloadFfmpegComponent();
         return;
     }
@@ -2018,7 +2009,7 @@ void SettingsDialog::onDeleteSelectedOcr()
 
 void SettingsDialog::loadSettings()
 {
-    QString defPath = defaultSaveDirectory();
+    QString defPath = ComponentPaths::defaultSaveDirectory();
 
     m_savePathEdit->setText(m_settings->value("savePath", defPath).toString());
     if (m_screenshotPathEdit)
@@ -2365,7 +2356,7 @@ void SettingsDialog::onSave()
 {
     QString savePath = m_savePathEdit->text().trimmed();
     if (savePath.isEmpty())
-        savePath = defaultSaveDirectory();
+        savePath = ComponentPaths::defaultSaveDirectory();
     if (!savePath.isEmpty()) {
         QDir dir(savePath);
         if (!dir.exists() && !dir.mkpath(".")) {

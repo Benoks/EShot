@@ -8,6 +8,7 @@
 #include "ui/AnnotationToolbar.h"
 #include "ui/OverlayPanelStyle.h"
 #include "ui/OcrDialog.h"
+#include "core/ComponentPaths.h"
 #include "ui/UploadDialog.h"
 #include "core/ImageUploader.h"
 #include "core/DebouncedSettingsWriter.h"
@@ -324,14 +325,6 @@ private:
     }
 };
 
-QString defaultSaveDirectory()
-{
-    QString picturesPath = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
-    if (picturesPath.trimmed().isEmpty())
-        picturesPath = QDir::homePath();
-    return QDir(picturesPath).filePath(QStringLiteral("EShot"));
-}
-
 QStringList dshowAudioDevices();
 
 #ifdef Q_OS_WIN
@@ -347,32 +340,6 @@ void appendDeviceProperty(IPropertyStore *store, const PROPERTYKEY &key, QString
     PropVariantClear(&value);
 }
 #endif
-
-QString localFfmpegPath()
-{
-    const QString appDir = QCoreApplication::applicationDirPath();
-    QStringList candidates = {
-        QDir(appDir).filePath(QStringLiteral("ffmpeg/ffmpeg.exe")),
-        QDir(appDir).filePath(QStringLiteral("ffmpeg.exe")),
-#ifndef Q_OS_WIN
-        QDir(appDir).filePath(QStringLiteral("ffmpeg/ffmpeg")),
-        QDir(appDir).filePath(QStringLiteral("ffmpeg")),
-#endif
-        QDir(appDir).filePath(QStringLiteral("../third_party/ffmpeg/bin/ffmpeg.exe")),
-#ifndef Q_OS_WIN
-        QDir(appDir).filePath(QStringLiteral("../third_party/ffmpeg/bin/ffmpeg")),
-#endif
-        QDir::current().filePath(QStringLiteral("third_party/ffmpeg/bin/ffmpeg.exe"))
-    };
-#ifndef Q_OS_WIN
-    candidates << QDir::current().filePath(QStringLiteral("third_party/ffmpeg/bin/ffmpeg"));
-#endif
-    for (const QString &path : candidates) {
-        if (QFileInfo::exists(path))
-            return QFileInfo(path).absoluteFilePath();
-    }
-    return QStandardPaths::findExecutable(QStringLiteral("ffmpeg"));
-}
 
 QStringList windowsAudioInputDevices()
 {
@@ -447,7 +414,7 @@ QList<QPair<QString, QString>> microphoneAudioDevices()
 
 QStringList dshowAudioDevices()
 {
-    const QString ffmpeg = localFfmpegPath();
+    const QString ffmpeg = ComponentPaths::ffmpegPath();
     QStringList devices;
     if (ffmpeg.isEmpty())
         return windowsAudioInputDevices();
@@ -476,22 +443,6 @@ QStringList dshowAudioDevices()
     return devices;
 }
 
-bool localFfmpegSupportsFormat(const QString &format)
-{
-    const QString ffmpeg = localFfmpegPath();
-    if (ffmpeg.isEmpty())
-        return false;
-
-    QProcess process;
-    process.setProgram(ffmpeg);
-    process.setArguments({QStringLiteral("-hide_banner"), QStringLiteral("-formats")});
-    process.setProcessChannelMode(QProcess::MergedChannels);
-    process.start();
-    if (!process.waitForFinished(1800))
-        process.kill();
-    const QString output = QString::fromLocal8Bit(process.readAll());
-    return output.contains(QRegularExpression(QStringLiteral("\\b%1\\b").arg(QRegularExpression::escape(format))));
-}
 }
 
 CaptureOverlay::CaptureOverlay(QWidget *parent)
@@ -4289,11 +4240,11 @@ void CaptureOverlay::onSave()
     s.remove("cliSaveFullPath");
     QString path = s.contains("screenshotSavePath")
         ? s.value("screenshotSavePath").toString().trimmed()
-        : QDir(defaultSaveDirectory()).filePath(QStringLiteral("Screenshots"));
+        : QDir(ComponentPaths::defaultSaveDirectory()).filePath(QStringLiteral("Screenshots"));
     if (path.isEmpty())
-        path = s.value("savePath", defaultSaveDirectory()).toString();
+        path = s.value("savePath", ComponentPaths::defaultSaveDirectory()).toString();
     if (path.trimmed().isEmpty())
-        path = defaultSaveDirectory();
+        path = ComponentPaths::defaultSaveDirectory();
     QString format = s.value("imageFormat", "PNG").toString();
     int quality = s.value("imageQuality", 95).toInt();
     QString pattern = s.value("filenamePattern", "Screenshot_%Y-%M-%D_%h-%m-%s").toString();

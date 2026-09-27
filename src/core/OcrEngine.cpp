@@ -1,5 +1,6 @@
 #include "OcrEngine.h"
 #include "OcrLanguageSelector.h"
+#include "ComponentPaths.h"
 #include <QProcess>
 #include <QProcessEnvironment>
 #include <QFile>
@@ -15,18 +16,19 @@
 #include <atomic>
 
 QString OcrEngine::tesseractPath() {
-    QStringList candidates = {
-        QCoreApplication::applicationDirPath() + QStringLiteral("/tesseract/tesseract.exe"),
-        QCoreApplication::applicationDirPath() + QStringLiteral("/tesseract.exe"),
-        QCoreApplication::applicationDirPath() + QStringLiteral("/tesseract/tesseract"),
-        QCoreApplication::applicationDirPath() + QStringLiteral("/tesseract"),
+    QStringList candidates;
+    for (const QString &base : ComponentPaths::componentBaseDirectories()) {
+        candidates << base + QStringLiteral("/tesseract/tesseract.exe")
+                   << base + QStringLiteral("/tesseract.exe")
+                   << base + QStringLiteral("/tesseract/tesseract")
+                   << base + QStringLiteral("/tesseract");
+    }
 #ifdef Q_OS_WIN
-        QStringLiteral("C:/Program Files/Tesseract-OCR/tesseract.exe"),
-        QStringLiteral("C:/Program Files (x86)/Tesseract-OCR/tesseract.exe"),
+    candidates << QStringLiteral("C:/Program Files/Tesseract-OCR/tesseract.exe")
+               << QStringLiteral("C:/Program Files (x86)/Tesseract-OCR/tesseract.exe");
 #endif
-    };
     for (const QString &p : candidates) {
-        if (QFileInfo::exists(p)) return p;
+        if (QFileInfo(p).isFile()) return p;
     }
     QString envPath = QProcessEnvironment::systemEnvironment().value(QStringLiteral("TESSERACT_PATH"));
     if (!envPath.isEmpty() && QFileInfo::exists(envPath)) return envPath;
@@ -53,10 +55,11 @@ QString OcrEngine::tessdataDir() {
     QFileInfo fi(exe);
     QString dir = fi.absoluteDir().absoluteFilePath(QStringLiteral("tessdata"));
     if (QFileInfo::exists(dir)) return dir;
-    QStringList fallbacks = {
-        QCoreApplication::applicationDirPath() + QStringLiteral("/tessdata"),
-        QCoreApplication::applicationDirPath() + QStringLiteral("/tesseract/tessdata"),
-    };
+    QStringList fallbacks;
+    for (const QString &base : ComponentPaths::componentBaseDirectories()) {
+        fallbacks << base + QStringLiteral("/tessdata")
+                  << base + QStringLiteral("/tesseract/tessdata");
+    }
     for (const QString &p : fallbacks) {
         if (QFileInfo::exists(p)) return p;
     }

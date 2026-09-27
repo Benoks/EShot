@@ -49,6 +49,7 @@ set(SOURCES
     src/core/UpdateAssetSelector.cpp
     src/core/UpdatePolicy.cpp
     src/core/WindowsInstallPolicy.cpp
+    src/core/ComponentPaths.cpp
     src/core/LinuxUpdateScript.cpp
     src/core/LinuxDependencySelection.cpp
     src/core/CatboxUploader.cpp
@@ -111,6 +112,7 @@ set(HEADERS
     src/core/UpdateAssetSelector.h
     src/core/UpdatePolicy.h
     src/core/WindowsInstallPolicy.h
+    src/core/ComponentPaths.h
     src/core/LinuxUpdateScript.h
     src/core/LinuxDependencySelection.h
     src/core/CatboxUploader.h
