@@ -137,8 +137,6 @@ public:
     static QString rememberLastAnnotationToolHint() { return tr("rememberLastAnnotationToolHint"); }
     static QString drawingTools() { return tr("drawingTools"); }
     static QString bottomToolbarControls() { return tr("bottomToolbarControls"); }
-    static QString scrollingCapture() { return tr("scrollingCapture"); }
-    static QString scrollingCaptureDesc() { return tr("scrollingCaptureDesc"); }
 
     // ─── Görünüm tab ───
     static QString theme()            { return tr("theme"); }
@@ -165,16 +163,11 @@ public:
     static QString hotkeyInvalid()    { return tr("hotkeyInvalid"); }
 
     // ─── Kayıt tab ───
-    static QString recordingSettings() { return tr("recordingSettings"); }
-    static QString recordingFps()    { return tr("recordingFps"); }
     static QString gifFpsLabel()     { return tr("gifFpsLabel"); }
     static QString videoFpsLabel()   { return tr("videoFpsLabel"); }
-    static QString recordingTimeLimit() { return tr("recordingTimeLimit"); }
-    static QString recordingSeconds() { return tr("recordingSeconds"); }
     static QString recordingUnlimited() { return tr("recordingUnlimited"); }
     static QString recordingLoop()    { return tr("recordingLoop"); }
     static QString recordingLoopInfinite() { return tr("recordingLoopInfinite"); }
-    static QString recordingQuality() { return tr("recordingQuality"); }
 
     // ─── Dil isimleri (her zaman kendi dilinde) ───
     static QString langTurkish()  { return "Türkçe"; }
@@ -189,9 +182,6 @@ public:
     // ─── Tray ───
     static QString trayCapture()      { return tr("trayCapture"); }
     static QString trayWindowCapture() { return tr("trayWindowCapture"); }
-    static QString trayScrollingCapture() { return tr("trayScrollingCapture"); }
-    static QString trayRecordGif()    { return tr("trayRecordGif"); }
-    static QString trayStopRecording() { return tr("trayStopRecording"); }
     static QString trayCancelRecording() { return tr("trayCancelRecording"); }
     static QString traySettings()     { return tr("traySettings"); }
     static QString trayAbout()        { return tr("trayAbout"); }
@@ -202,7 +192,6 @@ public:
     static QString highContrast()     { return tr("highContrast"); }
     static QString trayIcon()         { return tr("trayIcon"); }
     static QString trayIconDark()     { return tr("trayIconDark"); }
-    static QString trayIconLight()    { return tr("trayIconLight"); }
 
     // ─── Toolbar ───
     static QString toolPen()          { return tr("toolPen"); }
@@ -216,7 +205,6 @@ public:
     static QString toolEraser()       { return tr("toolEraser"); }
     static QString toolLine()         { return tr("toolLine"); }
     static QString toolColor()        { return tr("toolColor"); }
-    static QString toolWidth()        { return tr("toolWidth"); }
     static QString toolFont()         { return tr("toolFont"); }
     static QString toolFontSize()     { return tr("toolFontSize"); }
     static QString toolMove()         { return tr("toolMove"); }
@@ -260,11 +248,9 @@ public:
     static QString toolListSemiRect() { return tr("toolListSemiRect"); }
 
     // ─── Pinned ───
-    static QString pinnedLabel()      { return tr("pinnedLabel"); }
     static QString pinnedCopy()       { return tr("pinnedCopy"); }
     static QString pinnedSave()       { return tr("pinnedSave"); }
     static QString pinnedClose()      { return tr("pinnedClose"); }
-    static QString pinnedCloseAll()   { return tr("pinnedCloseAll"); }
 
     // ─── Hatalar ───
     static QString errSaveDir()       { return tr("errSaveDir"); }
@@ -280,7 +266,6 @@ public:
     static QString aboutTitle()       { return tr("aboutTitle"); }
     static QString aboutDesc()        { return tr("aboutDesc"); }
     static QString checkForUpdates()  { return tr("checkForUpdates"); }
-    static QString upToDate()         { return tr("upToDate"); }
     static QString version()          { return tr("version"); }
 
     // ─── Bildirim ───
@@ -290,7 +275,6 @@ public:
 
     // ─── Güncelleme ───
     static QString updateTitle()      { return tr("updateTitle"); }
-    static QString updateMessage(const QString &v) { return tr("updateMessage").arg(v); }
     static QString updateNow()        { return tr("updateNow"); }
     static QString updateStatusIdle() { return tr("updateStatusIdle"); }
     static QString updateStatusChecking() { return tr("updateStatusChecking"); }
@@ -308,8 +292,6 @@ public:
     // ─── Sihirbaz ───
     static QString wizardTitle()      { return tr("wizardTitle"); }
     static QString wizardDesc()       { return tr("wizardDesc"); }
-    static QString wizardNext()       { return tr("wizardNext"); }
-    static QString wizardBack()       { return tr("wizardBack"); }
     static QString wizardFinish()     { return tr("wizardFinish"); }
     static QString wizardHotkeyDesc() { return tr("wizardHotkeyDesc"); }
     static QString printScreenConflictTitle() { return tr("printScreenConflictTitle"); }
@@ -348,7 +330,6 @@ public:
     static QString ocrClose()         { return tr("ocrClose"); }
     static QString ocrRetry()         { return tr("ocrRetry"); }
     static QString ocrProcessing()    { return tr("ocrProcessing"); }
-    static QString ocrNoText()        { return tr("ocrNoText"); }
     static QString ocrAutomatic()     { return tr("ocrAutomatic"); }
     static QString ocrLanguagePackMissing() { return tr("ocrLanguagePackMissing"); }
 
@@ -360,22 +341,14 @@ public:
     static QString recordingDetails() { return tr("recordingDetails"); }
     static QString recordingDrag() { return tr("recordingDrag"); }
     static QString recordingStartTitle() { return tr("recordingStartTitle"); }
-    static QString recordingStartDesc() { return tr("recordingStartDesc"); }
-    static QString recordingInProgress() { return tr("recordingInProgress"); }
-    static QString recordingComplete() { return tr("recordingComplete"); }
     static QString recordingSaved()   { return tr("recordingSaved"); }
     static QString recordingFailed()  { return tr("recordingFailed"); }
-    static QString recordingSelectArea() { return tr("recordingSelectArea"); }
-    static QString recordingPressHotkey() { return tr("recordingPressHotkey"); }
-    static QString recordingTimeLimitReached() { return tr("recordingTimeLimitReached"); }
     static QString recordingMaxTime() { return tr("recordingMaxTime"); }
-    static QString recordingFpsLabel() { return tr("recordingFpsLabel"); }
     static QString quickSettings() { return tr("quickSettings"); }
     static QString quickPenWidth() { return tr("quickPenWidth"); }
     static QString quickBlurIntensity() { return tr("quickBlurIntensity"); }
     static QString quickGifRecording() { return tr("quickGifRecording"); }
     static QString quickMaxSeconds() { return tr("quickMaxSeconds"); }
-    static QString quickVideoComingSoon() { return tr("quickVideoComingSoon"); }
     static QString videoRecordingTitle() { return tr("videoRecordingTitle"); }
     static QString videoSaved() { return tr("videoSaved"); }
     static QString videoFailed() { return tr("videoFailed"); }
@@ -386,12 +359,10 @@ public:
     static QString videoWaylandWrongSource() { return tr("videoWaylandWrongSource"); }
     static QString videoGstreamerStartFailed() { return tr("videoGstreamerStartFailed"); }
     static QString videoPipeWireRemoteFailed() { return tr("videoPipeWireRemoteFailed"); }
-    static QString videoQuality() { return tr("videoQuality"); }
     static QString gifSettings() { return tr("gifSettings"); }
     static QString recordingCancel() { return tr("recordingCancel"); }
     static QString videoQualityCrf() { return tr("videoQualityCrf"); }
     static QString videoCrfHint() { return tr("videoCrfHint"); }
-    static QString videoBitrate() { return tr("videoBitrate"); }
     static QString audioMode() { return tr("audioMode"); }
     static QString audioNone() { return tr("audioNone"); }
     static QString audioDesktop() { return tr("audioDesktop"); }
@@ -399,17 +370,7 @@ public:
     static QString audioDesktopMic() { return tr("audioDesktopMic"); }
     static QString audioSource() { return tr("audioSource"); }
     static QString audioMicrophoneDevice() { return tr("audioMicrophoneDevice"); }
-    static QString audioNoDevice() { return tr("audioNoDevice"); }
     static QString audioSystemLoopback() { return tr("audioSystemLoopback"); }
-
-    // ─── Kaydırmalı Yakalama ───
-    static QString scrollSelectArea() { return tr("scrollSelectArea"); }
-    static QString scrollScrolling()  { return tr("scrollScrolling"); }
-    static QString scrollStitching()  { return tr("scrollStitching"); }
-    static QString scrollComplete()   { return tr("scrollComplete"); }
-    static QString scrollFailed()     { return tr("scrollFailed"); }
-    static QString scrollCountdown()  { return tr("scrollCountdown"); }
-    static QString scrollPressEsc()   { return tr("scrollPressEsc"); }
 
     // ─── Yükleme (Upload) ───
     static QString uploadToService()  { return tr("uploadToService"); }
@@ -454,8 +415,6 @@ public:
     static QString uploadApiKeyPlaceholder(const QString &service) { return tr("uploadApiKeyPlaceholder").arg(service); }
     static QString uploadErrorApiKeyMissing(const QString &service) { return tr("uploadErrorApiKeyMissing").arg(service); }
     static QString copy()             { return tr("copy"); }
-    static QString catboxUserHash()   { return tr("catboxUserHash"); }
-    static QString catboxUserHashDesc() { return tr("catboxUserHashDesc"); }
 
 private:
     static inline Language m_lang = Turkish;
@@ -522,8 +481,6 @@ private:
         {"rememberSettingsWindowSize", {"Ayarlar penceresi boyutunu hatırla", "Remember settings window size", "Größe des Einstellungsfensters merken", "Mémoriser la taille de la fenêtre des paramètres", "Recordar el tamaño de la ventana de configuración", "設定ウィンドウのサイズを記憶", "记住设置窗口大小", "Запоминать размер окна настроек"}},
         {"drawingTools", {"Çizim araçları", "Drawing tools", "Zeichenwerkzeuge", "Outils de dessin", "Herramientas de dibujo", "描画ツール", "绘图工具", "Инструменты рисования"}},
         {"bottomToolbarControls", {"Alt araç çubuğu kontrolleri", "Bottom toolbar controls", "Steuerelemente der unteren Werkzeugleiste", "Commandes de la barre d’outils inférieure", "Controles de la barra inferior", "下部ツールバーのコントロール", "底部工具栏控件", "Элементы нижней панели инструментов"}},
-        {"scrollingCapture",{"Kaydırmalı Yakalama", "Scrolling Capture", "Scrollaufnahme", "Capture défilante", "Captura con desplazamiento", "スクロールキャプチャ", "滚动截图", "Захват с прокруткой"}},
-        {"scrollingCaptureDesc",{"Sayfayı otomatik kaydırarak uzun ekran görüntüsü al", "Auto-scroll and capture long screenshot", "Automatisch scrollen und langes Bildschirmfoto aufnehmen", "Défiler et capturer une longue capture", "Desplazamiento automático para captura larga", "自動スクロールで長いスクリーンショット", "自动滚动以截取长截图", "Автопрокрутка для длинного скриншота"}},
 
         // ─── Görünüm ───
         {"theme",          {"Tema", "Theme", "Thema", "Thème", "Tema", "テーマ", "主题", "Тема"}},
@@ -550,33 +507,15 @@ private:
         {"hotkeyInvalid",  {"⚠️ Geçersiz kısayol", "⚠️ Invalid hotkey", "⚠️ Ungültiges Kürzel", "⚠️ Raccourci invalide", "⚠️ Atajo no válido", "⚠️ 無効なホットキー", "⚠️ 无效快捷键", "⚠️ Неверная клавиша"}},
 
         // ─── Kayıt tab ───
-        {"recordingSettings",{"Kayıt Ayarları", "Recording Settings", "Aufnahmeeinstellungen", "Paramètres d'enregistrement", "Configuración de grabación", "録画設定", "录制设置", "Параметры записи"}},
-        {"recordingFps",   {"Kare Hızı (FPS):", "Frame Rate (FPS):", "Bildrate (FPS):", "Images par seconde (FPS) :", "Fotogramas por segundo (FPS):", "フレームレート (FPS):", "帧率 (FPS):", "Частота кадров (FPS):"}},
         {"gifFpsLabel",    {"GIF FPS:", "GIF FPS:", "GIF-FPS:", "FPS GIF :", "FPS de GIF:", "GIF フレームレート:", "GIF 帧率:", "FPS GIF:"}},
         {"videoFpsLabel",  {"Video FPS:", "Video FPS:", "Video-FPS:", "FPS vidéo :", "FPS de video:", "動画フレームレート:", "视频帧率:", "FPS видео:"}},
-        {"recordingTimeLimit",{"Süre Limiti:", "Time Limit:", "Zeitlimit:", "Limite de temps :", "Límite de tiempo:", "時間制限:", "时长限制:", "Лимит времени:"}},
-        {"recordingSeconds",{"saniye (0 = sınırsız)", "seconds (0 = unlimited)", "Sekunden (0 = unbegrenzt)", "secondes (0 = illimité)", "segundos (0 = ilimitado)", "秒 (0 = 無制限)", "秒 (0 = 无限制)", "секунд (0 = без лимита)"}},
         {"recordingUnlimited",{"Sınırsız", "Unlimited", "Unbegrenzt", "Illimité", "Ilimitado", "無制限", "无限制", "Без лимита"}},
         {"recordingLoop",  {"Döngü:", "Loop:", "Schleife:", "Boucle :", "Bucle:", "ループ:", "循环:", "Повтор:"}},
         {"recordingLoopInfinite",{"Sonsuz", "Infinite", "Endlos", "Infini", "Infinito", "無限", "无限", "Бесконечно"}},
-        {"recordingQuality",{"GIF Kalitesi:", "GIF Quality:", "GIF-Qualität:", "Qualité GIF :", "Calidad GIF:", "GIF品質:", "GIF 质量:", "Качество GIF:"}},
-
-        // ─── Dil isimleri (her zaman kendi dilinde) ───
-        {"langTurkish",    {"Türkçe", "Türkçe", "Türkçe", "Türkçe", "Türkçe", "トルコ語", "土耳其语", "Турецкий"}},
-        {"langEnglish",    {"English", "English", "English", "English", "English", "英語", "英语", "Английский"}},
-        {"langGerman",     {"Deutsch", "Deutsch", "Deutsch", "Deutsch", "Deutsch", "ドイツ語", "德语", "Немецкий"}},
-        {"langFrench",     {"Français", "Français", "Français", "Français", "Français", "フランス語", "法语", "Французский"}},
-        {"langSpanish",    {"Español", "Español", "Español", "Español", "Español", "スペイン語", "西班牙语", "Испанский"}},
-        {"langJapanese",   {"日本語", "日本語", "日本語", "日本語", "日本語", "日本語", "日语", "Японский"}},
-        {"langChinese",    {"中文", "中文", "中文", "中文", "中文", "中文", "中文", "Китайский"}},
-        {"langRussian",    {"Русский", "Русский", "Русский", "Русский", "Русский", "Русский", "Русский", "Русский"}},
 
         // ─── Tray ───
         {"trayCapture",    {"Yakala", "Capture", "Erfassen", "Capture", "Capturar", "キャプチャ", "捕获", "Захват"}},
         {"trayWindowCapture",{"Pencere Yakala", "Capture Window", "Fenster erfassen", "Capturer une fenêtre", "Capturar ventana", "ウィンドウをキャプチャ", "捕获窗口", "Захват окна"}},
-        {"trayScrollingCapture",{"Kaydırmalı Yakala", "Scrolling Capture", "Scrollaufnahme", "Capture défilante", "Captura con desplazamiento", "スクロールキャプチャ", "滚动截图", "Захват с прокруткой"}},
-        {"trayRecordGif",  {"GIF Kaydı Başlat", "Start GIF Recording", "GIF-Aufnahme starten", "Démarrer enregistrement GIF", "Iniciar grabación GIF", "GIF録画開始", "开始 GIF 录制", "Начать запись GIF"}},
-        {"trayStopRecording",{"Kaydı Durdur", "Stop Recording", "Aufnahme stoppen", "Arrêter l'enregistrement", "Detener grabación", "録画停止", "停止录制", "Остановить запись"}},
         {"trayCancelRecording",{"Kaydı İptal Et", "Cancel Recording", "Aufnahme abbrechen", "Annuler l'enregistrement", "Cancelar grabación", "録画をキャンセル", "取消录制", "Отменить запись"}},
         {"traySettings",   {"Ayarlar", "Settings", "Einstellungen", "Paramètres", "Configuración", "設定", "设置", "Настройки"}},
         {"trayAbout",      {"Hakkında", "About", "Über", "À propos", "Acerca de", "概要", "关于", "О программе"}},
@@ -587,7 +526,6 @@ private:
         {"highContrast",   {"Yüksek kontrast", "High contrast", "Hoher Kontrast", "Contraste élevé", "Alto contraste", "ハイコントラスト", "高对比度", "Высокий контраст"}},
         {"trayIcon",       {"Tepsi Simgesi", "Tray Icon", "Taskbar-Symbol", "Icône de zone", "Icono de bandeja", "トレイアイコン", "托盘图标", "Значок в трее"}},
         {"trayIconDark",   {"Siyah tepsi simgesi", "Black tray icon", "Schwarzes Taskbar-Symbol", "Icône de zone noire", "Icono de bandeja negro", "黒いトレイアイコン", "黑色托盘图标", "Чёрный значок в трее"}},
-        {"trayIconLight",  {"Açık", "Light", "Hell", "Clair", "Claro", "ライト", "浅色", "Светлый"}},
 
         // ─── Toolbar ───
         {"toolPen",        {"Kalem (P)", "Pen (P)", "Stift (P)", "Stylo (P)", "Lápiz (P)", "ペン (P)", "画笔 (P)", "Карандаш (P)"}},
@@ -603,9 +541,7 @@ private:
         {"toolEraser",     {"Silgi (X)", "Eraser (X)", "Radierer (X)", "Gomme (X)", "Borrador (X)", "消しゴム (X)", "橡皮 (X)", "Ластик (X)"}},
         {"toolLine",       {"Çizgi (L)", "Line (L)", "Linie (L)", "Ligne (L)", "Línea (L)", "線 (L)", "线条 (L)", "Линия (L)"}},
         {"toolColor",      {"Renk Seç", "Pick Color", "Farbe wählen", "Couleur", "Elegir color", "色を選択", "选择颜色", "Выбрать цвет"}},
-        {"toolWidth",      {"Kalınlık", "Width", "Breite", "Épaisseur", "Grosor", "太さ", "粗细", "Толщина"}},
         {"toolFont",       {"Yazi Tipi", "Font", "Schriftart", "Police", "Fuente", "フォント", "字体", "Шрифт"}},
-        {"toolFontSize",   {"Yazi Boyutu", "Font Size", "Schriftgroesse", "Taille de police", "Tamano de fuente", "Font Size", "Font Size", "Font Size"}},
         {"toolMove",       {"Tasi", "Move", "Verschieben", "Deplacer", "Mover", "移動", "移动", "Переместить"}},
         {"toolUndo",       {"Geri Al (Ctrl+Z)", "Undo (Ctrl+Z)", "Rückgängig (Strg+Z)", "Annuler (Ctrl+Z)", "Deshacer (Ctrl+Z)", "元に戻す (Ctrl+Z)", "撤销 (Ctrl+Z)", "Отменить (Ctrl+Z)"}},
         {"toolRedo",       {"İleri Al (Ctrl+Y)", "Redo (Ctrl+Y)", "Wiederholen (Strg+Y)", "Rétablir (Ctrl+Y)", "Rehacer (Ctrl+Y)", "やり直し (Ctrl+Y)", "重做 (Ctrl+Y)", "Повторить (Ctrl+Y)"}},
@@ -640,11 +576,9 @@ private:
         {"toolListSemiRect",{"🔳 Saydam Kare", "🔳 Semi-Rect", "🔳 Halbtransparent", "🔳 Semi-rect", "🔳 Semi-rect", "🔳 半透明", "🔳 半透明矩形", "🔳 Полупрозрачный"}},
 
         // ─── Pinned ───
-        {"pinnedLabel",    {"Sabitlendi", "Pinned", "Gepinnt", "Épinglé", "Fijado", "ピン留め", "已固定", "Закреплено"}},
         {"pinnedCopy",     {"Kopyala", "Copy", "Kopieren", "Copier", "Copiar", "コピー", "复制", "Копировать"}},
         {"pinnedSave",     {"Farklı Kaydet...", "Save As...", "Speichern unter...", "Enregistrer sous...", "Guardar como...", "名前を付けて保存...", "另存为...", "Сохранить как..."}},
         {"pinnedClose",    {"Kapat", "Close", "Schließen", "Fermer", "Cerrar", "閉じる", "关闭", "Закрыть"}},
-        {"pinnedCloseAll", {"Tümünü Kapat", "Close All", "Alle schließen", "Tout fermer", "Cerrar todo", "すべて閉じる", "全部关闭", "Закрыть все"}},
 
         // ─── Hatalar ───
         {"errSaveDir",     {"Kayıt dizini oluşturulamadı: ", "Failed to create directory: ", "Ordner erstellen fehlgeschlagen: ", "Échec création dossier : ", "Error al crear directorio: ", "ディレクトリ作成失敗: ", "创建目录失败: ", "Не удалось создать папку: "}},
@@ -660,7 +594,6 @@ private:
         {"aboutTitle",     {"EShot Hakkında", "About EShot", "Über EShot", "À propos", "Acerca de", "概要", "关于EShot", "О EShot"}},
         {"aboutDesc",      {"Gelişmiş Ekran Alıntısı Aracı", "Advanced Screenshot Tool", "Fortgeschrittenes Screenshot-Tool", "Outil de Capture Avancé", "Herramienta de Captura Avanzada", "高度なスクリーンショットツール", "高级截图工具", "Продвинутый инструмент скриншотов"}},
         {"checkForUpdates",{"Güncellemeleri Kontrol Et", "Check for Updates", "Nach Updates suchen", "Vérifier les mises à jour", "Buscar actualizaciones", "アップデートを確認", "检查更新", "Проверить обновления"}},
-        {"upToDate",       {"Güncel", "Up to date", "Aktuell", "À jour", "Actualizado", "最新", "已是最新", "Актуальная версия"}},
         {"version",        {"Sürüm", "Version", "Version", "Version", "Versión", "バージョン", "版本", "Версия"}},
 
         // ─── Bildirim ───
@@ -670,7 +603,6 @@ private:
 
         // ─── Güncelleme ───
         {"updateTitle",    {"Güncelleme Mevcut", "Update Available", "Update verfügbar", "Mise à jour", "Actualización", "アップデート可能", "有可用更新", "Доступно обновление"}},
-        {"updateMessage",  {"Yeni sürüm: %1", "New version: %1", "Neue Version: %1", "Nouvelle version : %1", "Nueva versión: %1", "新しいバージョン: %1", "新版本: %1", "Новая версия: %1"}},
         {"updateNow",      {"Şimdi Güncelle", "Update Now", "Jetzt aktualisieren", "Mettre à jour", "Actualizar ahora", "今すぐ更新", "立即更新", "Обновить сейчас"}},
         {"updateStatusIdle",{"Güncelleme otomatik kontrol edilir.", "Updates are checked automatically.", "Updates werden automatisch geprüft.", "Les mises à jour sont vérifiées automatiquement.", "Las actualizaciones se comprueban automáticamente.", "アップデートは自動的に確認されます。", "会自动检查更新。", "Обновления проверяются автоматически."}},
         {"updateStatusChecking",{"Güncellemeler kontrol ediliyor...", "Checking for updates...", "Updates werden gesucht...", "Recherche de mises à jour...", "Buscando actualizaciones...", "アップデートを確認中...", "正在检查更新...", "Проверка обновлений..."}},
@@ -688,8 +620,6 @@ private:
         // ─── Sihirbaz ───
         {"wizardTitle",    {"EShot'a Hoş Geldiniz!", "Welcome to EShot!", "Willkommen bei EShot!", "Bienvenue !", "¡Bienvenido!", "ようこそ！", "欢迎使用EShot！", "Добро пожаловать в EShot!"}},
         {"wizardDesc",     {"Ayarları yapılandırın.", "Configure your settings.", "Einstellungen konfigurieren.", "Configurez vos paramètres.", "Configure sus ajustes.", "設定を構成。", "配置设置。", "Настройте параметры."}},
-        {"wizardNext",     {"İleri", "Next", "Weiter", "Suivant", "Siguiente", "次へ", "下一步", "Далее"}},
-        {"wizardBack",     {"Geri", "Back", "Zurück", "Retour", "Atrás", "戻る", "返回", "Назад"}},
         {"wizardFinish",   {"Tamamla", "Finish", "Fertig", "Terminer", "Finalizar", "完了", "完成", "Готово"}},
         {"wizardHotkeyDesc",{"Kısayol tuşunu ayarlayın.\nVarsayılan: Print Screen", "Set the hotkey.\nDefault: Print Screen", "Tastenkürzel festlegen.\nStandard: Druck", "Définir le raccourci.\nDéfaut: Impr. écran", "Configure el atajo.\nPredeterminado: Imp Pant", "ホットキーを設定。\nデフォルト: Print Screen", "设置快捷键。\n默认: Print Screen", "Установите клавишу.\nПо умолчанию: Print Screen"}},
         {"printScreenConflictTitle",{"Print Screen çakışması", "Print Screen conflict", "Print Screen Konflikt", "Conflit Print Screen", "Conflicto de Print Screen", "Print Screen の競合", "Print Screen 冲突", "Конфликт Print Screen"}},
@@ -730,9 +660,7 @@ private:
         {"ocrTranslate",   {"Çevir", "Translate", "Übersetzen", "Traduire", "Traducir", "翻訳", "翻译", "Перевести"}},
         {"ocrTranslateBrowserError", {"Google Translate varsayılan tarayıcınızda açılamadı.", "Google Translate could not be opened in your default browser.", "Google Translate konnte nicht im Standardbrowser geöffnet werden.", "Google Translate n’a pas pu être ouvert dans votre navigateur par défaut.", "No se pudo abrir Google Translate en el navegador predeterminado.", "Google Translate を既定のブラウザーで開けませんでした。", "无法在默认浏览器中打开 Google 翻译。", "Не удалось открыть Google Translate в браузере по умолчанию."}},
         {"ocrProcessing",  {"Tanınıyor...", "Recognizing...", "Erkennung...", "Reconnaissance...", "Reconociendo...", "認識中...", "识别中...", "Распознавание..."}},
-        {"ocrNoText",      {"Metin algılanmadı", "No text detected", "Kein Text erkannt", "Aucun texte détecté", "No se detectó texto", "テキストが検出されませんでした", "未检测到文字", "Текст не обнаружен"}},
         {"ocrAutomatic",   {"Otomatik", "Automatic", "Automatisch", "Automatique", "Automático", "自動", "自动", "Автоматически"}},
-        {"ocrLanguagePackMissing",{"Dil paketi yuklu degil", "Language pack is not installed", "Sprachpaket ist nicht installiert", "Le module de langue n'est pas installe", "El paquete de idioma no esta instalado", "Language pack is not installed", "Language pack is not installed", "Language pack is not installed"}},
 
         // ─── Kayıt (Recording) ───
         {"recordingStart", {"Kaydı Başlat", "Start Recording", "Aufnahme starten", "Démarrer l'enregistrement", "Iniciar grabación", "録画開始", "开始录制", "Начать запись"}},
@@ -742,22 +670,14 @@ private:
         {"recordingDetails", {"Ayrıntılar", "Details", "Einzelheiten", "Détails", "Detalles", "詳細", "详细", "Подробности"}},
         {"recordingDrag", {"Taşımak için sürükleyin", "Drag to move", "Zum Verschieben ziehen", "Faites glisser pour déplacer", "Arrastra para mover", "ドラッグして移動", "拖动以移动", "Перетащите для перемещения"}},
         {"recordingStartTitle",{"GIF Kaydı", "GIF Recording", "GIF-Aufnahme", "Enregistrement GIF", "Grabación GIF", "GIF録画", "GIF 录制", "Запись GIF"}},
-        {"recordingStartDesc",{"Kaydedilecek alanı seçin ve başlatın", "Select area to record and start", "Bereich wählen und starten", "Sélectionnez la zone et démarrez", "Seleccione el área e inicie", "録画する範囲を選択", "选择录制区域并开始", "Выберите область и начните"}},
-        {"recordingInProgress",{"Kayıt devam ediyor...", "Recording in progress...", "Aufnahme läuft...", "Enregistrement en cours...", "Grabación en curso...", "録画中...", "录制中...", "Идёт запись..."}},
-        {"recordingComplete",{"Kayıt tamamlandı", "Recording complete", "Aufnahme abgeschlossen", "Enregistrement terminé", "Grabación completa", "録画完了", "录制完成", "Запись завершена"}},
         {"recordingSaved", {"GIF kaydedildi:", "GIF saved:", "GIF gespeichert:", "GIF enregistré :", "GIF guardado:", "GIF保存:", "GIF 已保存:", "GIF сохранён:"}},
         {"recordingFailed",{"Kayıt başarısız oldu", "Recording failed", "Aufnahme fehlgeschlagen", "Échec de l'enregistrement", "Grabación falló", "録画に失敗しました", "录制失败", "Ошибка записи"}},
-        {"recordingSelectArea",{"Kayıt için alan seçin", "Select area to record", "Bereich für Aufnahme wählen", "Sélectionnez la zone à enregistrer", "Seleccione el área a grabar", "録画範囲を選択", "选择录制区域", "Выберите область записи"}},
-        {"recordingPressHotkey",{"Kayıt için alan seçin veya iptal için Esc", "Select area or press Esc to cancel", "Bereich wählen oder Esc zum Abbrechen", "Sélectionnez la zone ou Esc pour annuler", "Seleccione el área o Esc para cancelar", "範囲を選択または Esc でキャンセル", "选择区域或按 Esc 取消", "Выберите область или Esc для отмены"}},
-        {"recordingTimeLimitReached",{"Süre limiti doldu", "Time limit reached", "Zeitlimit erreicht", "Limite de temps atteinte", "Límite de tiempo alcanzado", "時間制限に達しました", "已达时长限制", "Достигнут лимит времени"}},
         {"recordingMaxTime",{"Maks. süre (sn):", "Max time (sec):", "Max. Zeit (Sek.):", "Temps max (sec) :", "Tiempo máx. (seg):", "最大時間 (秒):", "最大时长 (秒):", "Макс. время (сек):"}},
-        {"recordingFpsLabel",{"FPS:", "FPS:", "FPS:", "FPS :", "FPS:", "FPS:", "FPS:", "FPS:"}},
         {"quickSettings",{"Hızlı Ayarlar", "Quick Settings", "Schnelleinstellungen", "Réglages rapides", "Ajustes rápidos", "クイック設定", "快速设置", "Быстрые настройки"}},
         {"quickPenWidth",{"Kalem / şekil kalınlığı", "Pen / shape width", "Stift-/Formbreite", "Épaisseur stylo/forme", "Grosor de lápiz/forma", "ペン/図形の太さ", "画笔/形状粗细", "Толщина пера/фигуры"}},
         {"quickBlurIntensity",{"Bulanıklık şiddeti", "Blur intensity", "Unschärfeintensität", "Intensité du flou", "Intensidad de desenfoque", "ぼかし強度", "模糊强度", "Сила размытия"}},
         {"quickGifRecording",{"GIF kaydı", "GIF recording", "GIF-Aufnahme", "Enregistrement GIF", "Grabación GIF", "GIF録画", "GIF 录制", "Запись GIF"}},
         {"quickMaxSeconds",{"Maks. saniye", "Max seconds", "Max. Sekunden", "Secondes max", "Segundos máx.", "最大秒数", "最大秒数", "Макс. секунд"}},
-        {"quickVideoComingSoon",{"Video ayarları: yakında", "Video settings: coming soon", "Videoeinstellungen: demnächst", "Réglages vidéo : bientôt", "Ajustes de video: pronto", "動画設定: 近日対応", "视频设置：即将支持", "Настройки видео: скоро"}},
         {"videoRecordingTitle",{"Video kaydı", "Video recording", "Videoaufnahme", "Enregistrement vidéo", "Grabación de video", "動画録画", "视频录制", "Запись видео"}},
         {"videoSaved",{"Video kaydedildi:", "Video saved:", "Video gespeichert:", "Vidéo enregistrée :", "Video guardado:", "動画保存:", "视频已保存:", "Видео сохранено:"}},
         {"videoFailed",{"Video kaydı başarısız oldu", "Video recording failed", "Videoaufnahme fehlgeschlagen", "Échec de l'enregistrement vidéo", "La grabación de video falló", "動画録画に失敗しました", "视频录制失败", "Ошибка записи видео"}},
@@ -768,12 +688,10 @@ private:
         {"videoWaylandWrongSource",{"Seçilen alan, izin verilen Wayland kayıt ekranında değil. Doğru monitörü seçip tekrar deneyin.", "The selected area is not on the permitted Wayland recording screen. Choose the correct monitor and try again.", "Der ausgewählte Bereich liegt nicht auf dem freigegebenen Wayland-Aufnahmebildschirm. Wählen Sie den richtigen Monitor und versuchen Sie es erneut.", "La zone sélectionnée ne se trouve pas sur l'écran Wayland autorisé. Choisissez le bon moniteur et réessayez.", "El área seleccionada no está en la pantalla de grabación Wayland permitida. Elija el monitor correcto e inténtelo de nuevo.", "選択範囲が許可された Wayland 録画画面にありません。正しいモニターを選んでもう一度お試しください。", "所选区域不在已授权的 Wayland 录制屏幕上。请选择正确的显示器后重试。", "Выбранная область находится не на разрешённом экране записи Wayland. Выберите правильный монитор и повторите попытку."}},
         {"videoGstreamerStartFailed",{"GStreamer kaydı başlatılamadı.", "Could not start GStreamer recording.", "GStreamer-Aufnahme konnte nicht gestartet werden.", "Impossible de démarrer l'enregistrement GStreamer.", "No se pudo iniciar la grabación con GStreamer.", "GStreamer 録画を開始できませんでした。", "无法启动 GStreamer 录制。", "Не удалось запустить запись через GStreamer."}},
         {"videoPipeWireRemoteFailed",{"Wayland PipeWire bağlantısı açılamadı. Portal iznini tekrar verin ve PipeWire/xdg-desktop-portal servislerini kontrol edin.", "Could not open the Wayland PipeWire connection. Grant the portal permission again and check PipeWire/xdg-desktop-portal services.", "Die Wayland-PipeWire-Verbindung konnte nicht geöffnet werden. Erteilen Sie die Portalberechtigung erneut und prüfen Sie PipeWire/xdg-desktop-portal.", "Impossible d'ouvrir la connexion PipeWire Wayland. Accordez de nouveau l'autorisation du portail et vérifiez PipeWire/xdg-desktop-portal.", "No se pudo abrir la conexión PipeWire de Wayland. Vuelva a conceder el permiso del portal y revise PipeWire/xdg-desktop-portal.", "Wayland PipeWire 接続を開けませんでした。ポータル権限を再度許可し、PipeWire/xdg-desktop-portal を確認してください。", "无法打开 Wayland PipeWire 连接。请重新授予门户权限，并检查 PipeWire/xdg-desktop-portal 服务。", "Не удалось открыть соединение Wayland PipeWire. Повторно разрешите доступ через портал и проверьте PipeWire/xdg-desktop-portal."}},
-        {"videoQuality",{"Video kalitesi", "Video quality", "Videoqualität", "Qualité vidéo", "Calidad de video", "動画品質", "视频质量", "Качество видео"}},
         {"gifSettings",{"GIF Ayarları", "GIF Settings", "GIF-Einstellungen", "Réglages GIF", "Ajustes GIF", "GIF設定", "GIF 设置", "Настройки GIF"}},
         {"recordingCancel",{"İptal", "Cancel", "Abbrechen", "Annuler", "Cancelar", "キャンセル", "取消", "Отмена"}},
         {"videoQualityCrf",{"Video kalitesi (CRF)", "Video quality (CRF)", "Videoqualität (CRF)", "Qualité vidéo (CRF)", "Calidad de video (CRF)", "動画品質 (CRF)", "视频质量 (CRF)", "Качество видео (CRF)"}},
         {"videoCrfHint",{"Düşük değer daha yüksek kalite ve daha büyük dosya demektir. 24 dengeli varsayılandır.", "Lower values mean higher quality and larger files. 24 is the balanced default.", "Niedrigere Werte bedeuten höhere Qualität und größere Dateien. 24 ist der ausgewogene Standard.", "Une valeur plus basse donne une meilleure qualité et des fichiers plus volumineux. 24 est le réglage équilibré par défaut.", "Los valores más bajos dan más calidad y archivos más grandes. 24 es el valor equilibrado predeterminado.", "値が低いほど高品質でファイルサイズが大きくなります。24 がバランスの取れた既定値です。", "数值越低质量越高，文件越大。24 是均衡默认值。", "Чем ниже значение, тем выше качество и больше файл. 24 — сбалансированное значение по умолчанию."}},
-        {"videoBitrate",{"Bitrate", "Bitrate", "Bitrate", "Débit", "Bitrate", "ビットレート", "比特率", "Битрейт"}},
         {"audioMode",{"Ses", "Audio", "Audio", "Audio", "Audio", "音声", "音频", "Аудио"}},
         {"audioNone",{"Ses yok", "No audio", "Kein Audio", "Sans audio", "Sin audio", "音声なし", "无音频", "Без аудио"}},
         {"audioDesktop",{"Masaüstü sesi", "Desktop audio", "Desktop-Audio", "Audio du bureau", "Audio del escritorio", "デスクトップ音声", "桌面音频", "Звук рабочего стола"}},
@@ -781,17 +699,7 @@ private:
         {"audioDesktopMic",{"Masaüstü + mikrofon", "Desktop + microphone", "Desktop + Mikrofon", "Bureau + microphone", "Escritorio + micrófono", "デスクトップ + マイク", "桌面 + 麦克风", "Рабочий стол + микрофон"}},
         {"audioSource",{"Kaynak", "Source", "Quelle", "Source", "Fuente", "ソース", "来源", "Источник"}},
         {"audioMicrophoneDevice",{"Mikrofon", "Microphone", "Mikrofon", "Microphone", "Micrófono", "マイク", "麦克风", "Микрофон"}},
-        {"audioNoDevice",{"Uygun cihaz yok", "No compatible device", "Kein kompatibles Gerät", "Aucun appareil compatible", "No hay dispositivo compatible", "対応デバイスなし", "没有兼容设备", "Нет совместимого устройства"}},
         {"audioSystemLoopback",{"Sistem sesi", "System audio", "Systemaudio", "Audio système", "Audio del sistema", "システム音声", "系统音频", "Системный звук"}},
-
-        // ─── Kaydırmalı Yakalama ───
-        {"scrollSelectArea",{"Kaydırmalı alan seçin", "Select scrolling area", "Scrollbereich wählen", "Sélectionnez la zone défilante", "Seleccione el área de desplazamiento", "スクロール範囲を選択", "选择滚动区域", "Выберите область прокрутки"}},
-        {"scrollScrolling",{"Kaydırılıyor...", "Scrolling...", "Scrollen...", "Défilement...", "Desplazando...", "スクロール中...", "滚动中...", "Прокрутка..."}},
-        {"scrollStitching",{"Birleştiriliyor...", "Stitching...", "Zusammenfügen...", "Assemblage...", "Uniendo...", "結合中...", "拼接中...", "Склейка..."}},
-        {"scrollComplete",{"Kaydırmalı yakalama tamamlandı", "Scrolling capture complete", "Scrollaufnahme abgeschlossen", "Capture défilante terminée", "Captura con desplazamiento completa", "スクロールキャプチャ完了", "滚动截图完成", "Захват с прокруткой завершён"}},
-        {"scrollFailed",  {"Kaydırmalı yakalama başarısız", "Scrolling capture failed", "Scrollaufnahme fehlgeschlagen", "Échec de la capture défilante", "Captura con desplazamiento falló", "スクロールキャプチャ失敗", "滚动截图失败", "Ошибка захвата с прокруткой"}},
-        {"scrollCountdown",{"Başlıyor: %1", "Starting: %1", "Startet: %1", "Démarrage : %1", "Iniciando: %1", "開始: %1", "开始: %1", "Запуск: %1"}},
-        {"scrollPressEsc",{"İptal için Esc", "Press Esc to cancel", "Esc zum Abbrechen", "Appuyez sur Esc pour annuler", "Pulse Esc para cancelar", "Esc でキャンセル", "按 Esc 取消", "Esc для отмены"}},
 
         // ─── Yükleme (Upload) ───
         {"uploadToService",{"Servise Yükle", "Upload to Service", "Zu Dienst hochladen", "Téléverser vers un service", "Subir al servicio", "サービスにアップロード", "上传到服务", "Загрузить в сервис"}},
@@ -810,12 +718,9 @@ private:
         {"yandexAuthPlaceholder",{"Yandex OAuth tokeni veya yönlendirme URL'si", "Yandex OAuth token or redirect URL", "Yandex-OAuth-Token oder Weiterleitungs-URL", "Jeton OAuth Yandex ou URL de redirection", "Token OAuth de Yandex o URL de redirección", "Yandex OAuth トークンまたはリダイレクト URL", "Yandex OAuth 令牌或重定向 URL", "OAuth-токен Yandex или URL перенаправления"}},
         {"googleDriveAuthPlaceholder",{"Google Drive OAuth tokeni veya yönlendirme URL'si", "Google Drive OAuth token or redirect URL", "Google-Drive-OAuth-Token oder Weiterleitungs-URL", "Jeton OAuth Google Drive ou URL de redirection", "Token OAuth de Google Drive o URL de redirección", "Google Drive OAuth トークンまたはリダイレクト URL", "Google Drive OAuth 令牌或重定向 URL", "OAuth-токен Google Drive или URL перенаправления"}},
         {"catboxUserHashPlaceholder",{"İsteğe bağlı Catbox user hash", "Optional Catbox user hash", "Optionaler Catbox-User-Hash", "Hash utilisateur Catbox facultatif", "Hash de usuario de Catbox opcional", "任意の Catbox ユーザーハッシュ", "可选 Catbox 用户哈希", "Необязательный user hash Catbox"}},
-        {"uploadAuthHelpYandex",{"Yandex Disk icin Data access altında cloud_api:disk.write ve cloud_api:disk.read izinleri olan OAuth access_token gerekir. Client ID, Client secret veya code degil; tokeni ya da access_token iceren tam yonlendirme URL'sini yapistirin. <a href=\"https://yandex.com/dev/disk-api/doc/en/concepts/quickstart\">Disk API</a> | <a href=\"https://yandex.com/dev/id/doc/en/tokens/debug-token\">Token alma</a>", "Yandex Disk needs an OAuth access_token with cloud_api:disk.write and cloud_api:disk.read enabled under Data access. Do not paste the Client ID, Client secret, or code; paste the token or the full redirect URL that contains access_token. <a href=\"https://yandex.com/dev/disk-api/doc/en/concepts/quickstart\">Disk API</a> | <a href=\"https://yandex.com/dev/id/doc/en/tokens/debug-token\">Get token</a>", "Yandex Disk needs an OAuth access_token with cloud_api:disk.write and cloud_api:disk.read enabled under Data access. Do not paste the Client ID, Client secret, or code; paste the token or the full redirect URL that contains access_token. <a href=\"https://yandex.com/dev/disk-api/doc/en/concepts/quickstart\">Disk API</a> | <a href=\"https://yandex.com/dev/id/doc/en/tokens/debug-token\">Get token</a>", "Yandex Disk needs an OAuth access_token with cloud_api:disk.write and cloud_api:disk.read enabled under Data access. Do not paste the Client ID, Client secret, or code; paste the token or the full redirect URL that contains access_token. <a href=\"https://yandex.com/dev/disk-api/doc/en/concepts/quickstart\">Disk API</a> | <a href=\"https://yandex.com/dev/id/doc/en/tokens/debug-token\">Get token</a>", "Yandex Disk needs an OAuth access_token with cloud_api:disk.write and cloud_api:disk.read enabled under Data access. Do not paste the Client ID, Client secret, or code; paste the token or the full redirect URL that contains access_token. <a href=\"https://yandex.com/dev/disk-api/doc/en/concepts/quickstart\">Disk API</a> | <a href=\"https://yandex.com/dev/id/doc/en/tokens/debug-token\">Get token</a>", "Yandex Disk needs an OAuth access_token with cloud_api:disk.write and cloud_api:disk.read enabled under Data access. Do not paste the Client ID, Client secret, or code; paste the token or the full redirect URL that contains access_token. <a href=\"https://yandex.com/dev/disk-api/doc/en/concepts/quickstart\">Disk API</a> | <a href=\"https://yandex.com/dev/id/doc/en/tokens/debug-token\">Get token</a>", "Yandex Disk needs an OAuth access_token with cloud_api:disk.write and cloud_api:disk.read enabled under Data access. Do not paste the Client ID, Client secret, or code; paste the token or the full redirect URL that contains access_token. <a href=\"https://yandex.com/dev/disk-api/doc/en/concepts/quickstart\">Disk API</a> | <a href=\"https://yandex.com/dev/id/doc/en/tokens/debug-token\">Get token</a>", "Yandex Disk needs an OAuth access_token with cloud_api:disk.write and cloud_api:disk.read enabled under Data access. Do not paste the Client ID, Client secret, or code; paste the token or the full redirect URL that contains access_token. <a href=\"https://yandex.com/dev/disk-api/doc/en/concepts/quickstart\">Disk API</a> | <a href=\"https://yandex.com/dev/id/doc/en/tokens/debug-token\">Get token</a>"}},
-        {"uploadAuthHelpGoogleDrive",{"Google Drive icin OAuth Playground access_token gerekir. Tokeni ya da Playground JSON yanitini yapistirin. <a href=\"https://github.com/Benoks/EShot#google-drive-token-setup\">README adimlari</a>", "Google Drive needs an OAuth Playground access_token. Paste the token or the full Playground JSON response. <a href=\"https://github.com/Benoks/EShot#google-drive-token-setup\">README steps</a>", "Google Drive needs an OAuth Playground access_token. Paste the token or the full Playground JSON response. <a href=\"https://github.com/Benoks/EShot#google-drive-token-setup\">README steps</a>", "Google Drive needs an OAuth Playground access_token. Paste the token or the full Playground JSON response. <a href=\"https://github.com/Benoks/EShot#google-drive-token-setup\">README steps</a>", "Google Drive needs an OAuth Playground access_token. Paste the token or the full Playground JSON response. <a href=\"https://github.com/Benoks/EShot#google-drive-token-setup\">README steps</a>", "Google Drive needs an OAuth Playground access_token. Paste the token or the full Playground JSON response. <a href=\"https://github.com/Benoks/EShot#google-drive-token-setup\">README steps</a>", "Google Drive needs an OAuth Playground access_token. Paste the token or the full Playground JSON response. <a href=\"https://github.com/Benoks/EShot#google-drive-token-setup\">README steps</a>", "Google Drive needs an OAuth Playground access_token. Paste the token or the full Playground JSON response. <a href=\"https://github.com/Benoks/EShot#google-drive-token-setup\">README steps</a>"}},
         {"uploadAuthHelpCatbox",{"Catbox user hash isteğe bağlıdır. Boş bırakırsanız anonim yüklenir; user hash girerseniz dosya hesabınızda görünür.", "Catbox user hash is optional. Leave it empty for anonymous upload, or paste your user hash to attach uploads to your account.", "Der Catbox-User-Hash ist optional. Leer lassen für anonymes Hochladen oder einfügen, damit Uploads Ihrem Konto zugeordnet werden.", "Le hash utilisateur Catbox est facultatif. Laissez vide pour un envoi anonyme ou collez votre hash pour lier les envois à votre compte.", "El hash de usuario de Catbox es opcional. Déjalo vacío para subir de forma anónima o pégalo para vincular las subidas a tu cuenta.", "Catbox ユーザーハッシュは任意です。匿名アップロードなら空のまま、アカウントに紐付ける場合は貼り付けてください。", "Catbox 用户哈希是可选的。留空即匿名上传；粘贴用户哈希可将上传关联到你的账户。", "User hash Catbox необязателен. Оставьте пустым для анонимной загрузки или вставьте hash, чтобы привязать файлы к аккаунту."}},
         {"uploadAuthSaveFailed", {"Kimlik bilgisi güvenli depoya kaydedilemedi; yalnızca bu oturumda kullanılacak.", "Could not store the credentials securely; they will only be used for this session.", "Anmeldedaten konnten nicht sicher gespeichert werden; sie gelten nur für diese Sitzung.", "Impossible d'enregistrer les identifiants de façon sécurisée ; ils ne serviront que pour cette session.", "No se pudieron guardar las credenciales de forma segura; solo se usarán en esta sesión.", "認証情報を安全に保存できませんでした。このセッションでのみ使用されます。", "无法安全保存凭据；仅在本次会话中使用。", "Не удалось надёжно сохранить учётные данные; они будут использоваться только в этом сеансе."}},
         {"uploadAuthSaved", {"Kimlik bilgisi kaydedildi.", "Credentials saved.", "Anmeldedaten gespeichert.", "Identifiants enregistrés.", "Credenciales guardadas.", "認証情報を保存しました。", "凭据已保存。", "Учётные данные сохранены."}},
-        {"uploadAuthHelpApiKey",{"%1 API key gerekir. API key'i servisin API/account sayfasından alın ve buraya yapıştırın.", "%1 needs an API key. Get it from the service API/account page and paste it here.", "%1 needs an API key. Get it from the service API/account page and paste it here.", "%1 needs an API key. Get it from the service API/account page and paste it here.", "%1 needs an API key. Get it from the service API/account page and paste it here.", "%1 needs an API key. Get it from the service API/account page and paste it here.", "%1 needs an API key. Get it from the service API/account page and paste it here.", "%1 needs an API key. Get it from the service API/account page and paste it here."}},
         {"uploadErrorInProgress",{"Yükleme zaten devam ediyor", "Upload already in progress", "Upload läuft bereits", "Téléversement déjà en cours", "La subida ya está en curso", "アップロードは既に進行中です", "上传已在进行中", "Загрузка уже выполняется"}},
         {"uploadErrorImageMissing",{"Yüklenecek görsel yok", "Image missing", "Bild fehlt", "Image manquante", "Falta la imagen", "画像がありません", "缺少图片", "Нет изображения"}},
         {"uploadErrorCannotReadImage",{"Görsel dosyası okunamadı", "Cannot read image", "Bild kann nicht gelesen werden", "Impossible de lire l'image", "No se puede leer la imagen", "画像を読み取れません", "无法读取图片", "Не удалось прочитать изображение"}},
@@ -826,15 +731,12 @@ private:
         {"uploadErrorYandexTokenMissing",{"Yandex Disk tokeni eksik", "Yandex Disk token missing", "Yandex-Disk-Token fehlt", "Jeton Yandex Disk manquant", "Falta el token de Yandex Disk", "Yandex Disk トークンがありません", "缺少 Yandex Disk 令牌", "Отсутствует токен Yandex Disk"}},
         {"uploadErrorYandexUnsupportedToken",{"Bu Yandex değeri access_token değil. Client ID, Client secret, authorization code veya verification_code URL'si yerine access_token içeren yönlendirme URL'sini yapıştırın.", "This Yandex value is not an access_token. Instead of a Client ID, Client secret, authorization code, or verification_code URL, paste the redirect URL that contains access_token.", "Dieser Yandex-Wert ist kein access_token. Fügen Sie statt Client-ID, Client Secret, Autorisierungscode oder verification_code-URL die Weiterleitungs-URL mit access_token ein.", "Cette valeur Yandex n'est pas un access_token. Au lieu du Client ID, Client secret, code d'autorisation ou URL verification_code, collez l'URL de redirection contenant access_token.", "Este valor de Yandex no es un access_token. En lugar de Client ID, Client secret, código de autorización o URL verification_code, pega la URL de redirección que contiene access_token.", "この Yandex の値は access_token ではありません。Client ID、Client secret、認可コード、verification_code URL ではなく、access_token を含むリダイレクト URL を貼り付けてください。", "此 Yandex 值不是 access_token。不要使用 Client ID、Client secret、授权 code 或 verification_code URL；请粘贴包含 access_token 的重定向 URL。", "Это значение Yandex не является access_token. Вместо Client ID, Client secret, authorization code или URL verification_code вставьте URL перенаправления, содержащий access_token."}},
         {"uploadErrorYandexAuthFailed",{"Yandex yetkilendirmesi başarısız (HTTP 401). Token süresi dolmuş veya yanlış değer kaydedilmiş olabilir. Client ID/secret/code değil, access_token veya içinde access_token geçen tam yönlendirme URL'sini kaydedin.", "Yandex authorization failed (HTTP 401). The token may be expired or the wrong value may be saved. Save an access_token or the full redirect URL containing access_token, not the Client ID/secret/code.", "Yandex-Autorisierung fehlgeschlagen (HTTP 401). Das Token ist möglicherweise abgelaufen oder ein falscher Wert wurde gespeichert. Speichern Sie ein access_token oder die vollständige Weiterleitungs-URL mit access_token, nicht Client-ID/Secret/code.", "Échec de l'autorisation Yandex (HTTP 401). Le jeton a peut-être expiré ou une mauvaise valeur est enregistrée. Enregistrez un access_token ou l'URL de redirection complète contenant access_token, pas le Client ID/secret/code.", "Falló la autorización de Yandex (HTTP 401). El token puede haber caducado o puede haberse guardado un valor incorrecto. Guarda un access_token o la URL de redirección completa que contenga access_token, no Client ID/secret/code.", "Yandex 認証に失敗しました (HTTP 401)。トークンの期限切れ、または誤った値が保存されている可能性があります。Client ID/secret/code ではなく、access_token または access_token を含む完全なリダイレクト URL を保存してください。", "Yandex 授权失败 (HTTP 401)。令牌可能已过期，或保存了错误的值。请保存 access_token 或包含 access_token 的完整重定向 URL，不要保存 Client ID/secret/code。", "Авторизация Yandex не удалась (HTTP 401). Возможно, токен истек или сохранено неверное значение. Сохраните access_token или полный URL перенаправления с access_token, а не Client ID/secret/code."}},
-        {"uploadErrorYandexScopeMissing",{"Yandex Disk izni eksik (HTTP 403). Yandex OAuth uygulamasında Data access altında cloud_api:disk.write ve cloud_api:disk.read izinlerini açın, sonra yeni access_token alın.", "Yandex Disk permission is missing (HTTP 403). In the Yandex OAuth app, enable cloud_api:disk.write and cloud_api:disk.read under Data access, then issue a new access_token.", "Yandex Disk permission is missing (HTTP 403). In the Yandex OAuth app, enable cloud_api:disk.write and cloud_api:disk.read under Data access, then issue a new access_token.", "Yandex Disk permission is missing (HTTP 403). In the Yandex OAuth app, enable cloud_api:disk.write and cloud_api:disk.read under Data access, then issue a new access_token.", "Yandex Disk permission is missing (HTTP 403). In the Yandex OAuth app, enable cloud_api:disk.write and cloud_api:disk.read under Data access, then issue a new access_token.", "Yandex Disk permission is missing (HTTP 403). In the Yandex OAuth app, enable cloud_api:disk.write and cloud_api:disk.read under Data access, then issue a new access_token.", "Yandex Disk permission is missing (HTTP 403). In the Yandex OAuth app, enable cloud_api:disk.write and cloud_api:disk.read under Data access, then issue a new access_token.", "Yandex Disk permission is missing (HTTP 403). In the Yandex OAuth app, enable cloud_api:disk.write and cloud_api:disk.read under Data access, then issue a new access_token."}},
         {"uploadErrorYandexStep",{"Yandex %1 hatası (HTTP %2)", "Yandex %1 error (HTTP %2)", "Yandex-%1-Fehler (HTTP %2)", "Erreur Yandex %1 (HTTP %2)", "Error de Yandex %1 (HTTP %2)", "Yandex %1 エラー (HTTP %2)", "Yandex %1 错误 (HTTP %2)", "Ошибка Yandex %1 (HTTP %2)"}},
         {"uploadErrorYandexUploadUrlMissing",{"Yandex yükleme URL'si bulunamadı", "Yandex upload URL missing", "Yandex-Upload-URL fehlt", "URL de téléversement Yandex manquante", "Falta la URL de subida de Yandex", "Yandex アップロード URL がありません", "缺少 Yandex 上传 URL", "Отсутствует URL загрузки Yandex"}},
         {"uploadErrorYandexPublicLinkMissing",{"Yandex herkese açık bağlantı döndürmedi", "Yandex public link missing", "Öffentlicher Yandex-Link fehlt", "Lien public Yandex manquant", "Falta el enlace público de Yandex", "Yandex 公開リンクがありません", "缺少 Yandex 公开链接", "Отсутствует публичная ссылка Yandex"}},
         {"uploadErrorGoogleTokenMissing",{"Google Drive tokeni eksik", "Google Drive token missing", "Google-Drive-Token fehlt", "Jeton Google Drive manquant", "Falta el token de Google Drive", "Google Drive トークンがありません", "缺少 Google Drive 令牌", "Отсутствует токен Google Drive"}},
-        {"uploadErrorGoogleAuthFailed",{"Google Drive yetkilendirmesi başarısız (HTTP 401). Sadece access_token değerini yapıştırın veya OAuth Playground'dan yeni token alın; token süresi dolmuş olabilir.", "Google Drive authorization failed (HTTP 401). Paste only the access_token value or issue a new token in OAuth Playground; the token may have expired.", "Google Drive authorization failed (HTTP 401). Paste only the access_token value or issue a new token in OAuth Playground; the token may have expired.", "Google Drive authorization failed (HTTP 401). Paste only the access_token value or issue a new token in OAuth Playground; the token may have expired.", "Google Drive authorization failed (HTTP 401). Paste only the access_token value or issue a new token in OAuth Playground; the token may have expired.", "Google Drive authorization failed (HTTP 401). Paste only the access_token value or issue a new token in OAuth Playground; the token may have expired.", "Google Drive authorization failed (HTTP 401). Paste only the access_token value or issue a new token in OAuth Playground; the token may have expired.", "Google Drive authorization failed (HTTP 401). Paste only the access_token value or issue a new token in OAuth Playground; the token may have expired."}},
         {"uploadErrorGoogleFileIdMissing",{"Google Drive dosya kimliği döndürmedi", "Google Drive file ID missing", "Google-Drive-Datei-ID fehlt", "ID de fichier Google Drive manquant", "Falta el ID del archivo de Google Drive", "Google Drive ファイル ID がありません", "缺少 Google Drive 文件 ID", "Отсутствует ID файла Google Drive"}},
         {"uploadApiKeyPlaceholder",{"%1 API key", "%1 API key", "%1 API key", "%1 API key", "%1 API key", "%1 API key", "%1 API key", "%1 API key"}},
-        {"uploadErrorApiKeyMissing",{"%1 API key eksik", "%1 API key missing", "%1 API key missing", "%1 API key missing", "%1 API key missing", "%1 API key missing", "%1 API key missing", "%1 API key missing"}},
         // Audited overrides for entries that previously fell back to English.
         {"tabPackages", {"Paketler", "Packages", "Pakete", "Paquets", "Paquetes", "パッケージ", "软件包", "Пакеты"}},
         {"mediaFolders", {"Medya klasörleri", "Media folders", "Medienordner", "Dossiers multimédias", "Carpetas multimedia", "メディアフォルダー", "媒体文件夹", "Папки мультимедиа"}},
@@ -879,8 +781,6 @@ private:
         {"uploadErrorGoogleAuthFailed", {"Google Drive yetkilendirmesi başarısız (HTTP 401). Yeni bir access_token alın.", "Google Drive authorization failed (HTTP 401). Issue a new access_token.", "Google-Drive-Autorisierung fehlgeschlagen (HTTP 401). Erstellen Sie ein neues access_token.", "Échec de l’autorisation Google Drive (HTTP 401). Créez un nouvel access_token.", "Falló la autorización de Google Drive (HTTP 401). Genera un access_token nuevo.", "Google Drive の認証に失敗しました (HTTP 401)。新しい access_token を発行してください。", "Google Drive 授权失败 (HTTP 401)。请生成新的 access_token。", "Ошибка авторизации Google Drive (HTTP 401). Выпустите новый access_token."}},
         {"uploadErrorApiKeyMissing", {"%1 API anahtarı eksik", "%1 API key missing", "API-Schlüssel für %1 fehlt", "Clé API %1 manquante", "Falta la clave API de %1", "%1 の API キーがありません", "缺少 %1 API 密钥", "Отсутствует ключ API для %1"}},
         {"copy",           {"Kopyala", "Copy", "Kopieren", "Copier", "Copiar", "コピー", "复制", "Копировать"}},
-        {"catboxUserHash", {"Catbox Kullanıcı Hash:", "Catbox User Hash:", "Catbox Benutzer-Hash:", "Hash utilisateur Catbox :", "Hash de usuario Catbox:", "Catbox ユーザーハッシュ:", "Catbox 用户哈希:", "Хэш пользователя Catbox:"}},
-        {"catboxUserHashDesc",{"İsteğe bağlı. Hesabınızla yükleme/düzenleme/silme için catbox.moe → Hesap.", "Optional. For upload/edit/delete with your account: catbox.moe → Account.", "Optional. Für Hochladen/Bearbeiten/Löschen mit Konto: catbox.moe → Konto.", "Optionnel. Pour téléverser/modifier/supprimer avec votre compte : catbox.moe → Compte.", "Opcional. Para subir/editar/borrar con su cuenta: catbox.moe → Cuenta.", "任意。アカウントでアップロード/編集/削除する場合: catbox.moe → アカウント", "可选。使用您的账户上传/编辑/删除：catbox.moe → 账户", "Необязательно. Для загрузки/правки/удаления в своём аккаунте: catbox.moe → Аккаунт."}},
     };
 
     static constexpr int s_transCount = sizeof(s_trans) / sizeof(s_trans[0]);

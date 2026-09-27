@@ -553,11 +553,6 @@ qreal AnnotationEngine::rotationDegreesOf(int index) const
         : 0.0;
 }
 
-int AnnotationEngine::textFontSizeOf(int index) const
-{
-    return isTextAnnotation(index) ? m_annotations[index].fontSize : 0;
-}
-
 void AnnotationEngine::beginRotate(int index)
 {
     if (!isRotatable(index))
@@ -957,11 +952,6 @@ void AnnotationEngine::setScreenSnapshot(const QPixmap &snapshot)
 void AnnotationEngine::releaseScreenSnapshot()
 {
     m_screenSnapshot = QPixmap();
-}
-
-void AnnotationEngine::setSelectionRect(const QRect &rect)
-{
-    m_selectionRect = rect;
 }
 
 void AnnotationEngine::drawBlurEffect(QPainter *painter, const QRect &rect, const QPoint &offset,

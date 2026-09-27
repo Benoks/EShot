@@ -83,8 +83,6 @@ private:
                                  const QString &exeName, const QString &statusPrefix);
     QString tessdataTargetDir() const;
 
-    // Resolve shortcut to Win32 VK + modifier
-    static bool keySequenceToWin32(const QKeySequence &seq, UINT &modifiers, UINT &vkey);
     static bool isAutoStartEnabled();
 
     QSettings *m_settings = nullptr;

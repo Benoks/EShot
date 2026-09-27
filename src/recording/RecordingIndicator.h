@@ -37,7 +37,6 @@ public:
                           const QString &cancel);
     void stop();
 
-    bool controlsInside() const;
     bool requiresCaptureSafePresentation() const;
     void startCaptureSafePresentation();
 
@@ -77,7 +76,6 @@ private:
     QToolButton *m_detailsButton = nullptr;
     QMenu *m_detailsMenu = nullptr;
     int m_frameCount = 0;
-    int m_remainingSeconds = -1;
     int m_elapsedSeconds = 0;
     bool m_running = true;
     bool m_supportsPause = true;
@@ -86,7 +84,6 @@ private:
     bool m_captureSafePresentationStarted = false;
     bool m_platformCanExcludeOverlay = false;
     bool m_hideFullscreenBorderForCapture = false;
-    bool m_borderLocked = true;
     bool m_dragging = false;
     QPoint m_dragOffset;
     bool m_compact = false;

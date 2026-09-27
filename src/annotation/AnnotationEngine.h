@@ -78,7 +78,6 @@ public:
     bool isRotatable(int index) const;
     bool isTextAnnotation(int index) const;
     qreal rotationDegreesOf(int index) const;
-    int textFontSizeOf(int index) const;
     void rotateAnnotation(int index, qreal degrees);
     void beginRotate(int index);
     void endRotate();
@@ -95,7 +94,6 @@ public:
     // Ratio of physical snapshot pixels to logical annotation coordinates, so
     // the blur tool samples the correct snapshot region on high-DPI displays.
     void setSnapshotScale(qreal scale) { m_snapshotScale = scale; }
-    void setSelectionRect(const QRect &rect);
     QPixmap screenSnapshot() const { return m_screenSnapshot; }
 
 signals:
@@ -169,7 +167,6 @@ private:
     bool m_moveGestureHistoryStarted = false;
     qsizetype m_moveHistorySize = -1;
     QPixmap m_screenSnapshot;
-    QRect m_selectionRect;
     qreal m_snapshotScale = 1.0;
 };
 

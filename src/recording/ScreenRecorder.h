@@ -48,7 +48,6 @@ signals:
     void remainingTimeChanged(int seconds);
     void elapsedTimeChanged(int seconds);
     void pausedChanged(bool paused);
-    void timeLimitReached();
 
 private slots:
     void captureFrame();

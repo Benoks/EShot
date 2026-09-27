@@ -30,6 +30,7 @@ endif()
 set(SOURCES
     src/main.cpp
     src/core/HotkeyManager.cpp
+    src/core/HotkeySequence.cpp
     src/core/ApplicationInstanceCommand.cpp
     src/core/OcrEngine.cpp
     src/core/OcrLanguageSelector.cpp
@@ -63,7 +64,6 @@ set(SOURCES
     src/capture/WindowsWindowProvider.cpp
     src/capture/CaptureOverlay.cpp
     src/capture/PinnedWindow.cpp
-    src/capture/PinManager.cpp
     src/annotation/AnnotationEngine.cpp
     src/annotation/AnnotationRotationGeometry.cpp
     src/ui/AnnotationToolbar.cpp
@@ -86,12 +86,14 @@ set(SOURCES
     src/recording/RecordingTimeline.cpp
     src/recording/RecordingFinalizationPolicy.cpp
     src/recording/ScreenRecorder.cpp
+    src/recording/AudioDevices.cpp
     src/recording/VideoRecorder.cpp
     src/recording/RecordingIndicator.cpp
 )
 
 set(HEADERS
     src/core/HotkeyManager.h
+    src/core/HotkeySequence.h
     src/core/ApplicationInstanceCommand.h
     src/core/PlatformHotkey.h
     src/core/OcrEngine.h
@@ -126,7 +128,6 @@ set(HEADERS
     src/capture/WindowsWindowProvider.h
     src/capture/CaptureOverlay.h
     src/capture/PinnedWindow.h
-    src/capture/PinManager.h
     src/annotation/AnnotationEngine.h
     src/annotation/AnnotationRotationGeometry.h
     src/ui/AnnotationToolbar.h
@@ -149,6 +150,7 @@ set(HEADERS
     src/recording/RecordingTimeline.h
     src/recording/RecordingFinalizationPolicy.h
     src/recording/ScreenRecorder.h
+    src/recording/AudioDevices.h
     src/recording/VideoRecorder.h
     src/recording/RecordingIndicator.h
 )
@@ -266,323 +268,302 @@ install(TARGETS ${PROJECT_NAME}
 if(BUILD_TESTING)
     find_package(Qt6 REQUIRED COMPONENTS Test)
 
-    qt_add_executable(eshot_annotation_engine_tests
-        tests/AnnotationEngineTests.cpp
-        src/annotation/AnnotationEngine.cpp
-        src/annotation/AnnotationEngine.h
-    )
-    target_include_directories(eshot_annotation_engine_tests PRIVATE src)
-    target_link_libraries(eshot_annotation_engine_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Test)
-    add_test(NAME annotation_engine COMMAND eshot_annotation_engine_tests)
+    # eshot_add_test(<target> <test name> SOURCES <files...> LIBS <libs...>)
+    # Builds a Qt Test executable with src/ on the include path, links LIBS
+    # plus Qt6::Test and registers it with CTest under <test name>.
+    function(eshot_add_test target test_name)
+        cmake_parse_arguments(ARG "" "" "SOURCES;LIBS" ${ARGN})
+        qt_add_executable(${target} ${ARG_SOURCES})
+        target_include_directories(${target} PRIVATE src)
+        target_link_libraries(${target} PRIVATE ${ARG_LIBS} Qt6::Test)
+        add_test(NAME ${test_name} COMMAND ${target})
+    endfunction()
 
-    qt_add_executable(eshot_annotation_rotation_geometry_tests
-        tests/AnnotationRotationGeometryTests.cpp
-        src/annotation/AnnotationRotationGeometry.cpp
-        src/annotation/AnnotationRotationGeometry.h
+    eshot_add_test(eshot_annotation_engine_tests annotation_engine
+        SOURCES
+            tests/AnnotationEngineTests.cpp
+            src/annotation/AnnotationEngine.cpp
+            src/annotation/AnnotationEngine.h
+        LIBS Qt6::Core Qt6::Gui
     )
-    target_include_directories(eshot_annotation_rotation_geometry_tests PRIVATE src)
-    target_link_libraries(eshot_annotation_rotation_geometry_tests PRIVATE Qt6::Core Qt6::Test)
-    add_test(NAME annotation_rotation_geometry COMMAND eshot_annotation_rotation_geometry_tests)
 
-    qt_add_executable(eshot_recording_drawer_policy_tests
-        tests/RecordingDrawerPolicyTests.cpp
-        src/recording/RecordingDrawerPolicy.cpp
-        src/recording/RecordingDrawerPolicy.h
+    eshot_add_test(eshot_annotation_rotation_geometry_tests annotation_rotation_geometry
+        SOURCES
+            tests/AnnotationRotationGeometryTests.cpp
+            src/annotation/AnnotationRotationGeometry.cpp
+            src/annotation/AnnotationRotationGeometry.h
+        LIBS Qt6::Core
     )
-    target_include_directories(eshot_recording_drawer_policy_tests PRIVATE src)
-    target_link_libraries(eshot_recording_drawer_policy_tests PRIVATE Qt6::Core Qt6::Test)
-    add_test(NAME recording_drawer_policy COMMAND eshot_recording_drawer_policy_tests)
 
-    qt_add_executable(eshot_overlay_panel_style_tests
-        tests/OverlayPanelStyleTests.cpp
-        src/ui/OverlayPanelStyle.cpp
-        src/ui/OverlayPanelStyle.h
+    eshot_add_test(eshot_recording_drawer_policy_tests recording_drawer_policy
+        SOURCES
+            tests/RecordingDrawerPolicyTests.cpp
+            src/recording/RecordingDrawerPolicy.cpp
+            src/recording/RecordingDrawerPolicy.h
+        LIBS Qt6::Core
     )
-    target_include_directories(eshot_overlay_panel_style_tests PRIVATE src)
-    target_link_libraries(eshot_overlay_panel_style_tests PRIVATE Qt6::Core Qt6::Widgets Qt6::Test)
-    add_test(NAME overlay_panel_style COMMAND eshot_overlay_panel_style_tests)
 
-    qt_add_executable(eshot_video_recording_completion_policy_tests
-        tests/VideoRecordingCompletionPolicyTests.cpp
-        src/recording/VideoRecordingCompletionPolicy.cpp
-        src/recording/VideoRecordingCompletionPolicy.h
+    eshot_add_test(eshot_overlay_panel_style_tests overlay_panel_style
+        SOURCES
+            tests/OverlayPanelStyleTests.cpp
+            src/ui/OverlayPanelStyle.cpp
+            src/ui/OverlayPanelStyle.h
+        LIBS Qt6::Core Qt6::Widgets
     )
-    target_include_directories(eshot_video_recording_completion_policy_tests PRIVATE src)
-    target_link_libraries(eshot_video_recording_completion_policy_tests PRIVATE Qt6::Core Qt6::Test)
-    add_test(NAME video_recording_completion_policy COMMAND eshot_video_recording_completion_policy_tests)
 
-    qt_add_executable(eshot_application_instance_command_tests
-        tests/ApplicationInstanceCommandTests.cpp
-        src/core/ApplicationInstanceCommand.cpp
-        src/core/ApplicationInstanceCommand.h
+    eshot_add_test(eshot_video_recording_completion_policy_tests video_recording_completion_policy
+        SOURCES
+            tests/VideoRecordingCompletionPolicyTests.cpp
+            src/recording/VideoRecordingCompletionPolicy.cpp
+            src/recording/VideoRecordingCompletionPolicy.h
+        LIBS Qt6::Core
     )
-    target_include_directories(eshot_application_instance_command_tests PRIVATE src)
-    target_link_libraries(eshot_application_instance_command_tests PRIVATE Qt6::Core Qt6::Test)
-    add_test(NAME application_instance_command COMMAND eshot_application_instance_command_tests)
 
-    qt_add_executable(eshot_visual_search_tests
-        tests/VisualSearchTests.cpp
-        src/core/VisualSearch.cpp
-        src/core/VisualSearch.h
+    eshot_add_test(eshot_application_instance_command_tests application_instance_command
+        SOURCES
+            tests/ApplicationInstanceCommandTests.cpp
+            src/core/ApplicationInstanceCommand.cpp
+            src/core/ApplicationInstanceCommand.h
+        LIBS Qt6::Core
     )
-    target_include_directories(eshot_visual_search_tests PRIVATE src)
-    target_link_libraries(eshot_visual_search_tests PRIVATE Qt6::Core Qt6::Test)
-    add_test(NAME visual_search COMMAND eshot_visual_search_tests)
 
-    qt_add_executable(eshot_upload_response_parser_tests
-        tests/UploadResponseParserTests.cpp
-        src/core/UploadResponseParser.cpp
-        src/core/UploadResponseParser.h
+    eshot_add_test(eshot_visual_search_tests visual_search
+        SOURCES
+            tests/VisualSearchTests.cpp
+            src/core/VisualSearch.cpp
+            src/core/VisualSearch.h
+        LIBS Qt6::Core
     )
-    target_include_directories(eshot_upload_response_parser_tests PRIVATE src)
-    target_link_libraries(eshot_upload_response_parser_tests PRIVATE Qt6::Core Qt6::Test)
-    add_test(NAME upload_response_parser COMMAND eshot_upload_response_parser_tests)
 
-    qt_add_executable(eshot_secure_credential_store_tests
-        tests/SecureCredentialStoreTests.cpp
-        src/core/SecureCredentialStore.cpp
-        src/core/SecureCredentialStore.h
+    eshot_add_test(eshot_upload_response_parser_tests upload_response_parser
+        SOURCES
+            tests/UploadResponseParserTests.cpp
+            src/core/UploadResponseParser.cpp
+            src/core/UploadResponseParser.h
+        LIBS Qt6::Core
     )
-    target_include_directories(eshot_secure_credential_store_tests PRIVATE src)
-    target_link_libraries(eshot_secure_credential_store_tests PRIVATE Qt6::Core Qt6::Test)
+
+    eshot_add_test(eshot_secure_credential_store_tests secure_credential_store
+        SOURCES
+            tests/SecureCredentialStoreTests.cpp
+            src/core/SecureCredentialStore.cpp
+            src/core/SecureCredentialStore.h
+        LIBS Qt6::Core
+    )
     if(UNIX AND NOT APPLE)
         target_link_libraries(eshot_secure_credential_store_tests PRIVATE PkgConfig::LIBSECRET)
     endif()
     if(WIN32)
         target_link_libraries(eshot_secure_credential_store_tests PRIVATE Advapi32)
     endif()
-    add_test(NAME secure_credential_store COMMAND eshot_secure_credential_store_tests)
 
-    qt_add_executable(eshot_settings_translation_tests
-        tests/SettingsTranslationTests.cpp
+    eshot_add_test(eshot_settings_translation_tests settings_translation
+        SOURCES
+            tests/SettingsTranslationTests.cpp
+        LIBS Qt6::Core
     )
-    target_include_directories(eshot_settings_translation_tests PRIVATE src)
-    target_link_libraries(eshot_settings_translation_tests PRIVATE Qt6::Core Qt6::Test)
-    add_test(NAME settings_translation COMMAND eshot_settings_translation_tests)
 
-    qt_add_executable(eshot_capture_geometry_tests
-        tests/CaptureGeometryTests.cpp
-        src/capture/CaptureGeometry.cpp
-        src/capture/CaptureGeometry.h
+    eshot_add_test(eshot_capture_geometry_tests capture_geometry
+        SOURCES
+            tests/CaptureGeometryTests.cpp
+            src/capture/CaptureGeometry.cpp
+            src/capture/CaptureGeometry.h
+        LIBS Qt6::Core
     )
-    target_include_directories(eshot_capture_geometry_tests PRIVATE src)
-    target_link_libraries(eshot_capture_geometry_tests PRIVATE Qt6::Core Qt6::Test)
-    add_test(NAME capture_geometry COMMAND eshot_capture_geometry_tests)
 
-    qt_add_executable(eshot_capture_interaction_policy_tests
-        tests/CaptureInteractionPolicyTests.cpp
-        src/capture/CaptureInteractionPolicy.cpp
-        src/capture/CaptureInteractionPolicy.h
+    eshot_add_test(eshot_capture_interaction_policy_tests capture_interaction_policy
+        SOURCES
+            tests/CaptureInteractionPolicyTests.cpp
+            src/capture/CaptureInteractionPolicy.cpp
+            src/capture/CaptureInteractionPolicy.h
+        LIBS Qt6::Core Qt6::Gui
     )
-    target_include_directories(eshot_capture_interaction_policy_tests PRIVATE src)
-    target_link_libraries(eshot_capture_interaction_policy_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Test)
-    add_test(NAME capture_interaction_policy COMMAND eshot_capture_interaction_policy_tests)
 
-    qt_add_executable(eshot_debounced_settings_writer_tests
-        tests/DebouncedSettingsWriterTests.cpp
-        src/core/DebouncedSettingsWriter.cpp
-        src/core/DebouncedSettingsWriter.h
+    eshot_add_test(eshot_debounced_settings_writer_tests debounced_settings_writer
+        SOURCES
+            tests/DebouncedSettingsWriterTests.cpp
+            src/core/DebouncedSettingsWriter.cpp
+            src/core/DebouncedSettingsWriter.h
+        LIBS Qt6::Core
     )
-    target_include_directories(eshot_debounced_settings_writer_tests PRIVATE src)
-    target_link_libraries(eshot_debounced_settings_writer_tests PRIVATE Qt6::Core Qt6::Test)
-    add_test(NAME debounced_settings_writer COMMAND eshot_debounced_settings_writer_tests)
 
-    qt_add_executable(eshot_window_snap_policy_tests
-        tests/WindowSnapPolicyTests.cpp
-        src/capture/WindowSnapPolicy.cpp
-        src/capture/WindowSnapPolicy.h
-        src/capture/WindowsWindowProvider.cpp
-        src/capture/WindowsWindowProvider.h
-        src/capture/CaptureGeometry.cpp
-        src/capture/CaptureGeometry.h
+    eshot_add_test(eshot_window_snap_policy_tests window_snap_policy
+        SOURCES
+            tests/WindowSnapPolicyTests.cpp
+            src/capture/WindowSnapPolicy.cpp
+            src/capture/WindowSnapPolicy.h
+            src/capture/WindowsWindowProvider.cpp
+            src/capture/WindowsWindowProvider.h
+            src/capture/CaptureGeometry.cpp
+            src/capture/CaptureGeometry.h
+        LIBS Qt6::Core
     )
-    target_include_directories(eshot_window_snap_policy_tests PRIVATE src)
-    target_link_libraries(eshot_window_snap_policy_tests PRIVATE Qt6::Core Qt6::Test)
     if(WIN32)
         target_link_libraries(eshot_window_snap_policy_tests PRIVATE User32 Dwmapi)
     endif()
-    add_test(NAME window_snap_policy COMMAND eshot_window_snap_policy_tests)
 
-    qt_add_executable(eshot_recording_settings_policy_tests
-        tests/RecordingSettingsPolicyTests.cpp
-        src/recording/RecordingSettingsPolicy.cpp
-        src/recording/RecordingSettingsPolicy.h
+    eshot_add_test(eshot_recording_settings_policy_tests recording_settings_policy
+        SOURCES
+            tests/RecordingSettingsPolicyTests.cpp
+            src/recording/RecordingSettingsPolicy.cpp
+            src/recording/RecordingSettingsPolicy.h
+        LIBS Qt6::Core
     )
-    target_include_directories(eshot_recording_settings_policy_tests PRIVATE src)
-    target_link_libraries(eshot_recording_settings_policy_tests PRIVATE Qt6::Core Qt6::Test)
-    add_test(NAME recording_settings_policy COMMAND eshot_recording_settings_policy_tests)
 
-    qt_add_executable(eshot_recording_finalization_policy_tests
-        tests/RecordingFinalizationPolicyTests.cpp
-        src/recording/RecordingFinalizationPolicy.cpp
-        src/recording/RecordingFinalizationPolicy.h
+    eshot_add_test(eshot_recording_finalization_policy_tests recording_finalization_policy
+        SOURCES
+            tests/RecordingFinalizationPolicyTests.cpp
+            src/recording/RecordingFinalizationPolicy.cpp
+            src/recording/RecordingFinalizationPolicy.h
+        LIBS Qt6::Core
     )
-    target_include_directories(eshot_recording_finalization_policy_tests PRIVATE src)
-    target_link_libraries(eshot_recording_finalization_policy_tests PRIVATE Qt6::Core Qt6::Test)
-    add_test(NAME recording_finalization_policy COMMAND eshot_recording_finalization_policy_tests)
 
-    qt_add_executable(eshot_settings_layout_policy_tests
-        ${CMAKE_CURRENT_SOURCE_DIR}/tests/SettingsLayoutPolicyTests.cpp
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/SettingsLayoutPolicy.cpp
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/SettingsLayoutPolicy.h
+    eshot_add_test(eshot_settings_layout_policy_tests settings_layout_policy
+        SOURCES
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/SettingsLayoutPolicyTests.cpp
+            ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/SettingsLayoutPolicy.cpp
+            ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/SettingsLayoutPolicy.h
+        LIBS Qt6::Core
     )
-    target_include_directories(eshot_settings_layout_policy_tests PRIVATE src)
-    target_link_libraries(eshot_settings_layout_policy_tests PRIVATE Qt6::Core Qt6::Test)
-    add_test(NAME settings_layout_policy COMMAND eshot_settings_layout_policy_tests)
 
-    qt_add_executable(eshot_settings_hotkey_policy_tests
-        ${CMAKE_CURRENT_SOURCE_DIR}/tests/SettingsHotkeyPolicyTests.cpp
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/SettingsHotkeyPolicy.cpp
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/SettingsHotkeyPolicy.h
+    eshot_add_test(eshot_settings_hotkey_policy_tests settings_hotkey_policy
+        SOURCES
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/SettingsHotkeyPolicyTests.cpp
+            ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/SettingsHotkeyPolicy.cpp
+            ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/SettingsHotkeyPolicy.h
+        LIBS Qt6::Core
     )
-    target_include_directories(eshot_settings_hotkey_policy_tests PRIVATE src)
-    target_link_libraries(eshot_settings_hotkey_policy_tests PRIVATE Qt6::Core Qt6::Test)
-    add_test(NAME settings_hotkey_policy COMMAND eshot_settings_hotkey_policy_tests)
 
-    qt_add_executable(eshot_application_theme_tests
-        tests/ApplicationThemeTests.cpp
-        src/ui/ApplicationTheme.cpp
-        src/ui/ApplicationTheme.h
+    eshot_add_test(eshot_application_theme_tests application_theme
+        SOURCES
+            tests/ApplicationThemeTests.cpp
+            src/ui/ApplicationTheme.cpp
+            src/ui/ApplicationTheme.h
+        LIBS Qt6::Core Qt6::Gui Qt6::Widgets
     )
-    target_include_directories(eshot_application_theme_tests PRIVATE src)
-    target_link_libraries(eshot_application_theme_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test)
-    add_test(NAME application_theme COMMAND eshot_application_theme_tests)
 
-    qt_add_executable(eshot_about_dialog_tests
-        ${CMAKE_CURRENT_SOURCE_DIR}/tests/AboutDialogTests.cpp
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/AboutDialog.cpp
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/AboutDialog.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/resources/icons.qrc
+    eshot_add_test(eshot_about_dialog_tests about_dialog
+        SOURCES
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/AboutDialogTests.cpp
+            ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/AboutDialog.cpp
+            ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/AboutDialog.h
+            ${CMAKE_CURRENT_SOURCE_DIR}/resources/icons.qrc
+        LIBS Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network
     )
-    target_include_directories(eshot_about_dialog_tests PRIVATE src)
-    target_link_libraries(eshot_about_dialog_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network Qt6::Test)
-    add_test(NAME about_dialog COMMAND eshot_about_dialog_tests)
 
-    qt_add_executable(eshot_control_center_dialog_tests
-        tests/ControlCenterDialogTests.cpp
-        src/ui/ControlCenterDialog.cpp
-        src/ui/ControlCenterDialog.h
-        resources/icons.qrc
+    eshot_add_test(eshot_control_center_dialog_tests control_center_dialog
+        SOURCES
+            tests/ControlCenterDialogTests.cpp
+            src/ui/ControlCenterDialog.cpp
+            src/ui/ControlCenterDialog.h
+            resources/icons.qrc
+        LIBS Qt6::Core Qt6::Gui Qt6::Widgets
     )
-    target_include_directories(eshot_control_center_dialog_tests PRIVATE src)
-    target_link_libraries(eshot_control_center_dialog_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test)
-    add_test(NAME control_center_dialog COMMAND eshot_control_center_dialog_tests)
     set_tests_properties(control_center_dialog PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
-    qt_add_executable(eshot_update_asset_tests
-        tests/UpdateAssetSelectorTests.cpp
-        src/core/UpdateAssetSelector.cpp
-        src/core/UpdateAssetSelector.h
+    eshot_add_test(eshot_update_asset_tests update_asset
+        SOURCES
+            tests/UpdateAssetSelectorTests.cpp
+            src/core/UpdateAssetSelector.cpp
+            src/core/UpdateAssetSelector.h
+        LIBS Qt6::Core
     )
-    target_include_directories(eshot_update_asset_tests PRIVATE src)
-    target_link_libraries(eshot_update_asset_tests PRIVATE Qt6::Core Qt6::Test)
-    add_test(NAME update_asset COMMAND eshot_update_asset_tests)
 
-    qt_add_executable(eshot_update_policy_tests
-        tests/UpdatePolicyTests.cpp
-        src/core/UpdatePolicy.cpp
-        src/core/UpdatePolicy.h
+    eshot_add_test(eshot_update_policy_tests update_policy
+        SOURCES
+            tests/UpdatePolicyTests.cpp
+            src/core/UpdatePolicy.cpp
+            src/core/UpdatePolicy.h
+        LIBS Qt6::Core
     )
-    target_include_directories(eshot_update_policy_tests PRIVATE src)
-    target_link_libraries(eshot_update_policy_tests PRIVATE Qt6::Core Qt6::Test)
-    add_test(NAME update_policy COMMAND eshot_update_policy_tests)
 
-    qt_add_executable(eshot_windows_install_policy_tests
-        tests/WindowsInstallPolicyTests.cpp
-        src/core/WindowsInstallPolicy.cpp
-        src/core/WindowsInstallPolicy.h
+    eshot_add_test(eshot_windows_install_policy_tests windows_install_policy
+        SOURCES
+            tests/WindowsInstallPolicyTests.cpp
+            src/core/WindowsInstallPolicy.cpp
+            src/core/WindowsInstallPolicy.h
+        LIBS Qt6::Core
     )
-    target_include_directories(eshot_windows_install_policy_tests PRIVATE src)
-    target_link_libraries(eshot_windows_install_policy_tests PRIVATE Qt6::Core Qt6::Test)
-    add_test(NAME windows_install_policy COMMAND eshot_windows_install_policy_tests)
 
-    qt_add_executable(eshot_linux_update_script_tests
-        tests/LinuxUpdateScriptTests.cpp
-        src/core/LinuxUpdateScript.cpp
-        src/core/LinuxUpdateScript.h
+    eshot_add_test(eshot_linux_update_script_tests linux_update_script
+        SOURCES
+            tests/LinuxUpdateScriptTests.cpp
+            src/core/LinuxUpdateScript.cpp
+            src/core/LinuxUpdateScript.h
+        LIBS Qt6::Core
     )
-    target_include_directories(eshot_linux_update_script_tests PRIVATE src)
-    target_link_libraries(eshot_linux_update_script_tests PRIVATE Qt6::Core Qt6::Test)
-    add_test(NAME linux_update_script COMMAND eshot_linux_update_script_tests)
 
-    qt_add_executable(eshot_linux_dependency_selection_tests
-        ${CMAKE_CURRENT_SOURCE_DIR}/tests/LinuxDependencySelectionTests.cpp
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/core/LinuxDependencySelection.cpp
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/core/LinuxDependencySelection.h
+    eshot_add_test(eshot_linux_dependency_selection_tests linux_dependency_selection
+        SOURCES
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/LinuxDependencySelectionTests.cpp
+            ${CMAKE_CURRENT_SOURCE_DIR}/src/core/LinuxDependencySelection.cpp
+            ${CMAKE_CURRENT_SOURCE_DIR}/src/core/LinuxDependencySelection.h
+        LIBS Qt6::Core
     )
-    target_include_directories(eshot_linux_dependency_selection_tests PRIVATE src)
-    target_link_libraries(eshot_linux_dependency_selection_tests PRIVATE Qt6::Core Qt6::Test)
-    add_test(NAME linux_dependency_selection COMMAND eshot_linux_dependency_selection_tests)
 
-    qt_add_executable(eshot_ocr_language_selector_tests
-        tests/OcrLanguageSelectorTests.cpp
-        src/core/OcrLanguageSelector.cpp
-        src/core/OcrLanguageSelector.h
+    eshot_add_test(eshot_ocr_language_selector_tests ocr_language_selector
+        SOURCES
+            tests/OcrLanguageSelectorTests.cpp
+            src/core/OcrLanguageSelector.cpp
+            src/core/OcrLanguageSelector.h
+        LIBS Qt6::Core
     )
-    target_include_directories(eshot_ocr_language_selector_tests PRIVATE src)
-    target_link_libraries(eshot_ocr_language_selector_tests PRIVATE Qt6::Core Qt6::Test)
-    add_test(NAME ocr_language_selector COMMAND eshot_ocr_language_selector_tests)
 
     if(UNIX AND NOT APPLE)
-        qt_add_executable(eshot_linux_gnome_shortcut_installer_tests
-            tests/LinuxGnomeShortcutInstallerTests.cpp
-            src/core/LinuxGnomeShortcutInstaller.cpp
-            src/core/LinuxGnomeShortcutInstaller.h
+        eshot_add_test(eshot_linux_gnome_shortcut_installer_tests linux_gnome_shortcut_installer
+            SOURCES
+                tests/LinuxGnomeShortcutInstallerTests.cpp
+                src/core/LinuxGnomeShortcutInstaller.cpp
+                src/core/LinuxGnomeShortcutInstaller.h
+            LIBS Qt6::Core
         )
-        target_include_directories(eshot_linux_gnome_shortcut_installer_tests PRIVATE src)
-        target_link_libraries(eshot_linux_gnome_shortcut_installer_tests PRIVATE Qt6::Core Qt6::Test)
-        add_test(NAME linux_gnome_shortcut_installer COMMAND eshot_linux_gnome_shortcut_installer_tests)
 
-        qt_add_executable(eshot_linux_autostart_policy_tests
-            tests/LinuxAutoStartPolicyTests.cpp
-            src/core/LinuxAutoStartPolicy.cpp
-            src/core/LinuxAutoStartPolicy.h
-            ${CMAKE_CURRENT_SOURCE_DIR}/src/core/LinuxDesktopIntegration.cpp
-            ${CMAKE_CURRENT_SOURCE_DIR}/src/core/LinuxDesktopIntegration.h
+        eshot_add_test(eshot_linux_autostart_policy_tests linux_autostart_policy
+            SOURCES
+                tests/LinuxAutoStartPolicyTests.cpp
+                src/core/LinuxAutoStartPolicy.cpp
+                src/core/LinuxAutoStartPolicy.h
+                ${CMAKE_CURRENT_SOURCE_DIR}/src/core/LinuxDesktopIntegration.cpp
+                ${CMAKE_CURRENT_SOURCE_DIR}/src/core/LinuxDesktopIntegration.h
+            LIBS Qt6::Core
         )
-        target_include_directories(eshot_linux_autostart_policy_tests PRIVATE src)
-        target_link_libraries(eshot_linux_autostart_policy_tests PRIVATE Qt6::Core Qt6::Test)
-        add_test(NAME linux_autostart_policy COMMAND eshot_linux_autostart_policy_tests)
 
-        qt_add_executable(eshot_linux_screenshot_policy_tests
-            tests/LinuxScreenshotPolicyTests.cpp
-            src/core/LinuxPortalScreenshot.cpp
-            src/core/LinuxPortalScreenshot.h
-            ${CMAKE_CURRENT_SOURCE_DIR}/src/core/LinuxDesktopIntegration.cpp
-            ${CMAKE_CURRENT_SOURCE_DIR}/src/core/LinuxDesktopIntegration.h
-            ${CMAKE_CURRENT_SOURCE_DIR}/src/core/LinuxPortalRequest.cpp
-            ${CMAKE_CURRENT_SOURCE_DIR}/src/core/LinuxPortalRequest.h
-            src/core/LinuxScreenshotPolicy.cpp
-            src/core/LinuxScreenshotPolicy.h
+        eshot_add_test(eshot_linux_screenshot_policy_tests linux_screenshot_policy
+            SOURCES
+                tests/LinuxScreenshotPolicyTests.cpp
+                src/core/LinuxPortalScreenshot.cpp
+                src/core/LinuxPortalScreenshot.h
+                ${CMAKE_CURRENT_SOURCE_DIR}/src/core/LinuxDesktopIntegration.cpp
+                ${CMAKE_CURRENT_SOURCE_DIR}/src/core/LinuxDesktopIntegration.h
+                ${CMAKE_CURRENT_SOURCE_DIR}/src/core/LinuxPortalRequest.cpp
+                ${CMAKE_CURRENT_SOURCE_DIR}/src/core/LinuxPortalRequest.h
+                src/core/LinuxScreenshotPolicy.cpp
+                src/core/LinuxScreenshotPolicy.h
+            LIBS Qt6::Core Qt6::Gui Qt6::Widgets Qt6::DBus
         )
-        target_include_directories(eshot_linux_screenshot_policy_tests PRIVATE src)
-        target_link_libraries(eshot_linux_screenshot_policy_tests PRIVATE
-            Qt6::Core Qt6::Gui Qt6::Widgets Qt6::DBus Qt6::Test)
-        add_test(NAME linux_screenshot_policy COMMAND eshot_linux_screenshot_policy_tests)
         set_tests_properties(linux_screenshot_policy PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
-        qt_add_executable(eshot_linux_portal_shortcut_tests
-            tests/LinuxPortalShortcutTests.cpp
-            src/core/LinuxPortalGlobalShortcuts.cpp
-            src/core/LinuxPortalGlobalShortcuts.h
-            src/core/LinuxGnomeShortcutInstaller.cpp
-            src/core/LinuxGnomeShortcutInstaller.h
-            src/core/LinuxKGlobalAccelShortcuts.cpp
-            src/core/LinuxKGlobalAccelShortcuts.h
-            src/core/LinuxPortalScreenCast.cpp
-            src/core/LinuxPortalScreenCast.h
-            ${CMAKE_CURRENT_SOURCE_DIR}/src/core/LinuxDesktopIntegration.cpp
-            ${CMAKE_CURRENT_SOURCE_DIR}/src/core/LinuxDesktopIntegration.h
-            ${CMAKE_CURRENT_SOURCE_DIR}/src/core/LinuxPortalRequest.cpp
-            ${CMAKE_CURRENT_SOURCE_DIR}/src/core/LinuxPortalRequest.h
-            ${CMAKE_CURRENT_SOURCE_DIR}/src/core/LinuxPortalHostRegistry.cpp
-            ${CMAKE_CURRENT_SOURCE_DIR}/src/core/LinuxPortalHostRegistry.h
-            src/core/PlatformHotkey.h
+        eshot_add_test(eshot_linux_portal_shortcut_tests linux_portal_shortcut
+            SOURCES
+                tests/LinuxPortalShortcutTests.cpp
+                src/core/LinuxPortalGlobalShortcuts.cpp
+                src/core/LinuxPortalGlobalShortcuts.h
+                src/core/LinuxGnomeShortcutInstaller.cpp
+                src/core/LinuxGnomeShortcutInstaller.h
+                src/core/LinuxKGlobalAccelShortcuts.cpp
+                src/core/LinuxKGlobalAccelShortcuts.h
+                src/core/LinuxPortalScreenCast.cpp
+                src/core/LinuxPortalScreenCast.h
+                ${CMAKE_CURRENT_SOURCE_DIR}/src/core/LinuxDesktopIntegration.cpp
+                ${CMAKE_CURRENT_SOURCE_DIR}/src/core/LinuxDesktopIntegration.h
+                ${CMAKE_CURRENT_SOURCE_DIR}/src/core/LinuxPortalRequest.cpp
+                ${CMAKE_CURRENT_SOURCE_DIR}/src/core/LinuxPortalRequest.h
+                ${CMAKE_CURRENT_SOURCE_DIR}/src/core/LinuxPortalHostRegistry.cpp
+                ${CMAKE_CURRENT_SOURCE_DIR}/src/core/LinuxPortalHostRegistry.h
+                src/core/PlatformHotkey.h
+            LIBS Qt6::Core Qt6::Gui Qt6::Widgets
         )
-        target_include_directories(eshot_linux_portal_shortcut_tests PRIVATE src)
-        target_link_libraries(eshot_linux_portal_shortcut_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test)
         target_link_libraries(eshot_linux_portal_shortcut_tests PRIVATE Qt6::DBus)
-        add_test(NAME linux_portal_shortcut COMMAND eshot_linux_portal_shortcut_tests)
 
         add_test(
             NAME linux_packagekit_installer
@@ -646,83 +627,72 @@ if(BUILD_TESTING)
         endif()
     endif()
 
-    qt_add_executable(eshot_linux_recording_support_tests
-        ${CMAKE_CURRENT_SOURCE_DIR}/tests/LinuxRecordingSupportTests.cpp
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/recording/LinuxRecordingSupport.cpp
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/recording/LinuxRecordingSupport.h
+    eshot_add_test(eshot_linux_recording_support_tests linux_recording_support
+        SOURCES
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/LinuxRecordingSupportTests.cpp
+            ${CMAKE_CURRENT_SOURCE_DIR}/src/recording/LinuxRecordingSupport.cpp
+            ${CMAKE_CURRENT_SOURCE_DIR}/src/recording/LinuxRecordingSupport.h
+        LIBS Qt6::Core
     )
-    target_include_directories(eshot_linux_recording_support_tests PRIVATE src)
-    target_link_libraries(eshot_linux_recording_support_tests PRIVATE Qt6::Core Qt6::Test)
-    add_test(NAME linux_recording_support COMMAND eshot_linux_recording_support_tests)
 
-    qt_add_executable(eshot_recording_control_layout_tests
-        tests/RecordingControlLayoutTests.cpp
-        src/recording/RecordingControlLayout.cpp
-        src/recording/RecordingControlLayout.h
+    eshot_add_test(eshot_recording_control_layout_tests recording_control_layout
+        SOURCES
+            tests/RecordingControlLayoutTests.cpp
+            src/recording/RecordingControlLayout.cpp
+            src/recording/RecordingControlLayout.h
+        LIBS Qt6::Core
     )
-    target_include_directories(eshot_recording_control_layout_tests PRIVATE src)
-    target_link_libraries(eshot_recording_control_layout_tests PRIVATE Qt6::Core Qt6::Test)
-    add_test(NAME recording_control_layout COMMAND eshot_recording_control_layout_tests)
 
-    qt_add_executable(eshot_recording_indicator_tests
-        tests/RecordingIndicatorTests.cpp
-        src/recording/RecordingIndicator.cpp
-        src/recording/RecordingIndicator.h
-        src/recording/RecordingControlLayout.cpp
-        src/recording/RecordingControlLayout.h
-        resources/icons.qrc
+    eshot_add_test(eshot_recording_indicator_tests recording_indicator
+        SOURCES
+            tests/RecordingIndicatorTests.cpp
+            src/recording/RecordingIndicator.cpp
+            src/recording/RecordingIndicator.h
+            src/recording/RecordingControlLayout.cpp
+            src/recording/RecordingControlLayout.h
+            resources/icons.qrc
+        LIBS Qt6::Core Qt6::Gui Qt6::Widgets
     )
-    target_include_directories(eshot_recording_indicator_tests PRIVATE src)
-    target_link_libraries(eshot_recording_indicator_tests PRIVATE
-        Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test)
-    add_test(NAME recording_indicator COMMAND eshot_recording_indicator_tests)
     set_tests_properties(recording_indicator PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
-    qt_add_executable(eshot_recording_timeline_tests
-        tests/RecordingTimelineTests.cpp
-        src/recording/RecordingTimeline.cpp
-        src/recording/RecordingTimeline.h
+    eshot_add_test(eshot_recording_timeline_tests recording_timeline
+        SOURCES
+            tests/RecordingTimelineTests.cpp
+            src/recording/RecordingTimeline.cpp
+            src/recording/RecordingTimeline.h
+        LIBS Qt6::Core
     )
-    target_include_directories(eshot_recording_timeline_tests PRIVATE src)
-    target_link_libraries(eshot_recording_timeline_tests PRIVATE Qt6::Core Qt6::Test)
-    add_test(NAME recording_timeline COMMAND eshot_recording_timeline_tests)
 
-    qt_add_executable(eshot_gif_encoder_tests
-        tests/GifEncoderTests.cpp
-        src/recording/GifEncoder.cpp
-        src/recording/GifEncoder.h
+    eshot_add_test(eshot_gif_encoder_tests gif_encoder
+        SOURCES
+            tests/GifEncoderTests.cpp
+            src/recording/GifEncoder.cpp
+            src/recording/GifEncoder.h
+        LIBS Qt6::Core Qt6::Gui
     )
-    target_include_directories(eshot_gif_encoder_tests PRIVATE src)
-    target_link_libraries(eshot_gif_encoder_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Test)
-    add_test(NAME gif_encoder COMMAND eshot_gif_encoder_tests)
 
-    qt_add_executable(eshot_screen_recorder_pause_api_tests
-        tests/ScreenRecorderPauseApiTests.cpp
+    eshot_add_test(eshot_screen_recorder_pause_api_tests screen_recorder_pause_api
+        SOURCES
+            tests/ScreenRecorderPauseApiTests.cpp
+        LIBS Qt6::Core Qt6::Gui
     )
-    target_include_directories(eshot_screen_recorder_pause_api_tests PRIVATE src)
-    target_link_libraries(eshot_screen_recorder_pause_api_tests PRIVATE
-        Qt6::Core Qt6::Gui Qt6::Test)
-    add_test(NAME screen_recorder_pause_api COMMAND eshot_screen_recorder_pause_api_tests)
 
-    qt_add_executable(eshot_notification_folder_opener_tests
-        tests/NotificationFolderOpenerTests.cpp
-        src/core/NotificationFolderOpener.cpp
-        src/core/NotificationFolderOpener.h
+    eshot_add_test(eshot_notification_folder_opener_tests notification_folder_opener
+        SOURCES
+            tests/NotificationFolderOpenerTests.cpp
+            src/core/NotificationFolderOpener.cpp
+            src/core/NotificationFolderOpener.h
+        LIBS Qt6::Core
     )
-    target_include_directories(eshot_notification_folder_opener_tests PRIVATE src)
-    target_link_libraries(eshot_notification_folder_opener_tests PRIVATE Qt6::Core Qt6::Test)
-    add_test(NAME notification_folder_opener COMMAND eshot_notification_folder_opener_tests)
 
     if(UNIX AND NOT APPLE)
-        qt_add_executable(eshot_linux_desktop_notification_tests
-            tests/LinuxDesktopNotificationTests.cpp
-            src/core/LinuxDesktopNotification.cpp
-            src/core/LinuxDesktopNotification.h
+        eshot_add_test(eshot_linux_desktop_notification_tests linux_desktop_notification
+            SOURCES
+                tests/LinuxDesktopNotificationTests.cpp
+                src/core/LinuxDesktopNotification.cpp
+                src/core/LinuxDesktopNotification.h
+            LIBS Qt6::Core Qt6::DBus
         )
-        target_include_directories(eshot_linux_desktop_notification_tests PRIVATE src)
-        target_link_libraries(eshot_linux_desktop_notification_tests PRIVATE
-            Qt6::Core Qt6::DBus Qt6::Test)
-        add_test(NAME linux_desktop_notification COMMAND eshot_linux_desktop_notification_tests)
     endif()
 endif()
 

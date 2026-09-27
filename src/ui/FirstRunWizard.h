@@ -41,7 +41,6 @@ private:
 #ifdef Q_OS_LINUX
     void startLinuxDependencyInstaller();
 #endif
-    static bool keySequenceToWin32(const QKeySequence &seq, UINT &modifiers, UINT &vkey);
 
     QComboBox *m_langCombo = nullptr;
     QKeySequenceEdit *m_hotkeyEdit = nullptr;

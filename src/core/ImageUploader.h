@@ -58,8 +58,6 @@ signals:
 protected:
     QNetworkAccessManager *nam() const { return m_nam; }
     QString imagePath() const { return m_imagePath; }
-    bool ownsTempFile() const { return m_ownsTempFile; }
-    void setOwnsTempFile(bool owns) { m_ownsTempFile = owns; }
 
     void finishWithError(const QString &reason);
     void finishWithSuccess(const QString &url, const QString &deleteUrl = QString());

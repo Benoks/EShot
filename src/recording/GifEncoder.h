@@ -17,7 +17,6 @@ public:
     bool addFrame(const QImage &image, int delayCs = 10);
     bool close();
 
-    bool isOpen() const { return m_fileOpen; }
     QString errorString() const { return m_lastError; }
 
 private:

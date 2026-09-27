@@ -31,8 +31,6 @@ public:
     bool linuxPortalShortcutsAvailable() const;
     UINT captureModifiers() const { return m_captureModifiers; }
     UINT captureVirtualKey() const { return m_captureVirtualKey; }
-    QString captureShortcutText() const;
-    QString windowCaptureShortcutText() const;
     QString recordingPauseShortcutText() const;
     QString recordingStopShortcutText() const;
     QString recordingCancelShortcutText() const;
@@ -43,7 +41,6 @@ public:
     bool nativeEventFilter(const QByteArray &eventType, void *message, qintptr *result) override;
 
 signals:
-    void hotkeyTriggered(int id);
     void captureRequested();
     void recordingPauseRequested();
     void recordingStopRequested();

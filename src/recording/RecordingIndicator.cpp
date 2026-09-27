@@ -226,7 +226,6 @@ public:
     void setLocked(bool locked)
     {
         const bool wasVisible = isVisible();
-        m_locked = locked;
         Qt::WindowFlags flags = Qt::Tool | Qt::FramelessWindowHint
             | Qt::WindowDoesNotAcceptFocus;
         if (recordingBorderStaysOnTop(locked))
@@ -259,7 +258,6 @@ protected:
 private:
     QRect m_borderRect;
     int m_borderWidth = 2;
-    bool m_locked = false;
 };
 }
 
@@ -458,7 +456,7 @@ void RecordingIndicator::setFrameCount(int count)
 
 void RecordingIndicator::setRemainingSeconds(int seconds)
 {
-    m_remainingSeconds = seconds;
+    Q_UNUSED(seconds)
     updateStatusLabel();
 }
 
@@ -513,11 +511,6 @@ void RecordingIndicator::stop()
     if (m_borderOverlay)
         m_borderOverlay->hide();
     close();
-}
-
-bool RecordingIndicator::controlsInside() const
-{
-    return m_layout.placement == RecordingControlPlacement::Inside;
 }
 
 bool RecordingIndicator::requiresCaptureSafePresentation() const
@@ -601,7 +594,6 @@ void RecordingIndicator::setOverlayVisible(bool visible)
 
 void RecordingIndicator::setBorderLocked(bool locked)
 {
-    m_borderLocked = locked;
     if (m_borderOverlay)
         static_cast<RecordingBorderOverlay *>(m_borderOverlay)->setLocked(locked);
     if (m_borderLockButton) {

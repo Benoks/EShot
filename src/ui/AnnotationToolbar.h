@@ -51,7 +51,6 @@ private slots:
     void onToolButtonClicked();
     void onActionButtonClicked();
     void onColorButtonClicked();
-    void onWidthSliderChanged(int value);
     void onBlurIntensityChanged(int value);
     void onEyedropperClicked();
     void onLockClicked();

@@ -711,8 +711,6 @@ void AnnotationToolbar::onColorButtonClicked()
     emit modalDialogClosed();
 }
 
-void AnnotationToolbar::onWidthSliderChanged(int value) { emit penWidthChanged(value); }
-
 void AnnotationToolbar::onBlurIntensityChanged(int value)
 {
     if (m_blurIntensityLabel)

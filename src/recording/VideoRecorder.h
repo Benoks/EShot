@@ -51,6 +51,7 @@ private:
     QString ffmpegPath() const;
     QString makeDefaultOutputPath() const;
     qint64 activeElapsedMs() const;
+    void startCountdown();
     bool setProcessSuspended(bool suspended);
     void cleanupProcess();
     void stopSystemAudioCapture();

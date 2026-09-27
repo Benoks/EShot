@@ -30,7 +30,6 @@ using EShotNativeWindowHandle = void *;
 
 class AnnotationToolbar;
 class AnnotationEngine;
-class PinnedWindow;
 class QComboBox;
 class QFontComboBox;
 class QLineEdit;
@@ -64,9 +63,7 @@ signals:
     void captureCompleted(const QPixmap &pixmap);
     void captureSaved(const QString &path);
     void captureCancelled();
-    void pinnedWindowCreated(PinnedWindow *window);
     void regionSelected(QRect captureRect, QRect displayRect);
-    void regionCancelled();
     void gifCaptureRequested(QRect captureRect, QRect displayRect);
     void videoCaptureRequested(QRect captureRect, QRect displayRect);
 
@@ -263,7 +260,6 @@ private:
 
     // Text confirm flag
     bool m_textJustCommitted;
-    bool m_textEditing;
 
     // Active window title (for %T)
     EShotNativeWindowHandle m_foregroundHwnd = nullptr;
@@ -290,9 +286,6 @@ private:
     bool m_audioDevicesLoaded = false;
     QStringList m_cachedDesktopAudioDevices;
     QList<QPair<QString, QString>> m_cachedMicrophoneAudioDevices;
-
-    // Pinned windows list (for lifetime management)
-    QList<QPointer<QWidget>> m_pinnedWindows;
 
     // New: Eyedropper mode
     bool m_eyedropperActive;

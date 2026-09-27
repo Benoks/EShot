@@ -119,16 +119,6 @@ QString HotkeyManager::recordingPauseShortcutText() const
     return shortcutText(m_recordingPauseModifiers, m_recordingPauseVirtualKey);
 }
 
-QString HotkeyManager::captureShortcutText() const
-{
-    return shortcutText(m_captureModifiers, m_captureVirtualKey);
-}
-
-QString HotkeyManager::windowCaptureShortcutText() const
-{
-    return shortcutText(m_windowCaptureModifiers, m_windowCaptureVirtualKey);
-}
-
 QString HotkeyManager::recordingStopShortcutText() const
 {
     return shortcutText(m_recordingStopModifiers, m_recordingStopVirtualKey);
@@ -671,7 +661,6 @@ bool HotkeyManager::nativeEventFilter(const QByteArray &eventType, void *message
 
 void HotkeyManager::emitHotkey(int id)
 {
-    emit hotkeyTriggered(id);
     if (id == HOTKEY_CAPTURE) emit captureRequested();
     else if (id == HOTKEY_RECORDING_PAUSE) emit recordingPauseRequested();
     else if (id == HOTKEY_RECORDING_STOP) emit recordingStopRequested();

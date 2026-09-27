@@ -138,10 +138,8 @@ void ScreenRecorder::start(const QRect &captureRect, int fps, int maxSeconds, in
         if (m_maxSeconds <= 0) return;
         int remaining = qMax(0, m_maxSeconds - elapsedSeconds);
         emit remainingTimeChanged(remaining);
-        if (remaining == 0) {
-            emit timeLimitReached();
+        if (remaining == 0)
             finishRecording();
-        }
     });
     m_countdownTimer->start();
 

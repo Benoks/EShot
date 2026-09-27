@@ -1,4 +1,5 @@
 #include "VideoRecorder.h"
+#include "AudioDevices.h"
 #include "core/ComponentPaths.h"
 #include "core/LinuxPortalScreenCast.h"
 #include "LinuxRecordingSupport.h"
@@ -41,29 +42,6 @@ bool containsDevice(const QStringList &devices, const QString &name)
             return true;
     }
     return false;
-}
-
-QStringList dshowAudioDevices(const QString &ffmpegPath)
-{
-    QProcess process;
-    process.setProgram(ffmpegPath);
-    process.setArguments({QStringLiteral("-hide_banner"), QStringLiteral("-list_devices"), QStringLiteral("true"),
-                          QStringLiteral("-f"), QStringLiteral("dshow"), QStringLiteral("-i"), QStringLiteral("dummy")});
-    process.setProcessChannelMode(QProcess::MergedChannels);
-    process.start();
-    if (!process.waitForFinished(1800))
-        process.kill();
-
-    const QString output = QString::fromLocal8Bit(process.readAll());
-    QStringList devices;
-    QRegularExpression re(QStringLiteral("\"([^\"]+)\"\\s*\\(audio\\)"));
-    auto it = re.globalMatch(output);
-    while (it.hasNext()) {
-        const QString name = it.next().captured(1).trimmed();
-        if (!name.isEmpty() && !devices.contains(name))
-            devices.append(name);
-    }
-    return devices;
 }
 
 QStringList platformAudioDevices(const QString &ffmpegPath)
@@ -122,12 +100,6 @@ void stopRecorderWhenParentExits(QProcess *process)
 #endif
 
 #ifdef Q_OS_WIN
-void writeLe16(QFile &file, quint16 value)
-{
-    char b[2] = { static_cast<char>(value & 0xff), static_cast<char>((value >> 8) & 0xff) };
-    file.write(b, 2);
-}
-
 void writeLe32(QFile &file, quint32 value)
 {
     char b[4] = {
@@ -489,6 +461,13 @@ void VideoRecorder::start(const QRect &captureRect, int fps, int maxSeconds, int
     }
 #endif
 
+    startCountdown();
+}
+
+// Marks the recording as started and drives the elapsed/remaining time
+// signals, stopping automatically once the time limit is reached.
+void VideoRecorder::startCountdown()
+{
     m_recording = true;
     m_elapsed.start();
     emit recordingStarted();
@@ -904,30 +883,7 @@ bool VideoRecorder::startWaylandPortalRecording(const QRect &captureRect)
         if (!canceled) emit recordingFailed(reason);
     });
 
-    m_recording = true;
-    m_elapsed.start();
-    emit recordingStarted();
-    emit remainingTimeChanged(m_maxSeconds > 0 ? m_maxSeconds : -1);
-    emit elapsedTimeChanged(0);
-
-    m_countdownTimer = new QTimer(this);
-    m_countdownTimer->setInterval(500);
-    connect(m_countdownTimer, &QTimer::timeout, this, [this]() {
-        if (!m_recording || m_paused)
-            return;
-        const int elapsed = static_cast<int>(activeElapsedMs() / 1000);
-        if (elapsed != m_lastElapsedSeconds) {
-            m_lastElapsedSeconds = elapsed;
-            emit elapsedTimeChanged(elapsed);
-        }
-        if (m_maxSeconds > 0) {
-            const int remaining = qMax(0, m_maxSeconds - elapsed);
-            emit remainingTimeChanged(remaining);
-            if (remaining == 0)
-                stop();
-        }
-    });
-    m_countdownTimer->start();
+    startCountdown();
     return true;
 #else
     Q_UNUSED(captureRect);

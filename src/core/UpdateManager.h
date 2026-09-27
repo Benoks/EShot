@@ -18,7 +18,6 @@ public:
     bool updateAvailable() const { return m_updateAvailable; }
     bool isBusy() const { return m_checking || m_downloading || m_installing; }
     QString latestVersion() const { return m_latestVersion; }
-    QString releaseUrl() const { return m_releaseUrl; }
     QString statusText() const { return m_statusText; }
     bool isSilentUpdate() const { return m_silentUpdate; }
 

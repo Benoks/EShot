@@ -49,8 +49,6 @@
 #include "core/LinuxPortalHostRegistry.h"
 #endif
 #include "capture/CaptureOverlay.h"
-#include "capture/PinnedWindow.h"
-#include "capture/PinManager.h"
 #include "recording/ScreenRecorder.h"
 #include "recording/VideoRecorder.h"
 #include "recording/RecordingIndicator.h"
@@ -564,16 +562,6 @@ public slots:
         dlg.exec();
     }
 
-    void onCloseAllPins()
-    {
-        // Prune dangling QPointers left behind by closed pin windows.
-        m_pinnedWindows.removeAll(QPointer<PinnedWindow>());
-        for (auto &w : m_pinnedWindows) {
-            if (w) w->close();
-        }
-        m_pinnedWindows.clear();
-    }
-
     // GIF and video share one recording indicator and one set of stop/cancel
     // hotkeys, so only one recording may run or be starting at a time. A
     // portal start also spins a nested event loop; replacing the recorder
@@ -1062,10 +1050,6 @@ private:
         connect(m_overlay, &CaptureOverlay::regionSelected, this, &EShotApp::onRegionSelected);
         connect(m_overlay, &CaptureOverlay::gifCaptureRequested, this, &EShotApp::onRecordGifSelected);
         connect(m_overlay, &CaptureOverlay::videoCaptureRequested, this, &EShotApp::onRecordVideoSelected);
-        connect(m_overlay, &CaptureOverlay::pinnedWindowCreated, this, [this](PinnedWindow *w) {
-            m_pinnedWindows.append(QPointer<PinnedWindow>(w));
-            m_pinnedWindows.removeAll(QPointer<PinnedWindow>());
-        });
         // Pre-warm: force first paint of overlay + toolbar offscreen at startup
         // to avoid 2-3 s stall on first user capture.
         m_overlay->prewarm();
@@ -1195,14 +1179,12 @@ private:
     bool m_blackTrayIcon = false;
     bool m_updateAvailable = false;
     QString m_latestVersion;
-    QString m_latestReleaseUrl;
     QString m_lastNotificationPath;
 #if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
     LinuxDesktopNotification *m_linuxNotification = nullptr;
 #endif
     qint64 m_skipNextCaptureNotificationMs = 0;
     bool m_hotkeysInitialized = false;
-    QList<QPointer<PinnedWindow>> m_pinnedWindows;
     ScreenRecorder *m_screenRecorder = nullptr;
     VideoRecorder *m_videoRecorder = nullptr;
     bool m_recordingStartPending = false;

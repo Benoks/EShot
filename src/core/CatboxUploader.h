@@ -21,7 +21,6 @@ public:
     bool setAuthValue(const QString &value) override { return setUserHash(value); }
 
     bool setUserHash(const QString &hash);
-    QString userHash() const { return m_userHash; }
 
     void upload() override;
     void cancel() override;
