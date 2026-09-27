@@ -54,6 +54,7 @@ private:
     bool setProcessSuspended(bool suspended);
     void cleanupProcess();
     void stopSystemAudioCapture();
+    void removeRecordingFiles();
     bool startSystemAudioMux();
     void cleanupMuxProcess();
     bool startWaylandPortalRecording(const QRect &captureRect);

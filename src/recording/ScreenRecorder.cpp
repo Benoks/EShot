@@ -4,6 +4,7 @@
 #include "LinuxRecordingSupport.h"
 #include "RecordingSettingsPolicy.h"
 #include "RecordingFinalizationPolicy.h"
+#include "VideoRecordingCompletionPolicy.h"
 
 #include <QGuiApplication>
 #include <QScreen>
@@ -88,16 +89,15 @@ void ScreenRecorder::start(const QRect &captureRect, int fps, int maxSeconds, in
     m_fps = fps;
     m_maxSeconds = maxSeconds;
     m_frameCount = 0;
-    m_delayCs = qMax(1, qRound(100.0 / m_fps));
     m_lastFrameMs = -1;
     m_outputPath = outputPath;
     m_loopCount = loopCount;
     m_portalVideoPath.clear();
     closePortalSession();
     m_paused = false;
+    m_stopping = false;
     m_hasPendingFrame = false;
     m_pendingFrame = QImage();
-    m_pendingDelayCs = 0;
 
     if (m_outputPath.isEmpty()) {
         m_outputPath = makeDefaultOutputPath();
@@ -206,6 +206,13 @@ void ScreenRecorder::stop()
     if (m_paused)
         resume();
     if (m_portalRecording && m_process) {
+        // A second SIGINT (repeated Stop, or the countdown ticking at 0)
+        // aborts gst-launch while it is still finalizing the MP4.
+        if (m_stopping)
+            return;
+        m_stopping = true;
+        if (m_countdownTimer)
+            m_countdownTimer->stop();
 #if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
         if (m_process->processId() > 0)
             QProcess::execute(QStringLiteral("kill"),
@@ -235,6 +242,7 @@ void ScreenRecorder::cancel()
     m_recording = false;
     m_portalRecording = false;
     m_paused = false;
+    m_stopping = false;
     if (m_process) { m_process->kill(); m_process->deleteLater(); m_process = nullptr; }
     cleanupPortalConversion();
     if (m_frameTimer)     { m_frameTimer->stop();     m_frameTimer->deleteLater();     m_frameTimer = nullptr; }
@@ -243,7 +251,6 @@ void ScreenRecorder::cancel()
     releaseCaptureResources();
     m_hasPendingFrame = false;
     m_pendingFrame = QImage();
-    m_pendingDelayCs = 0;
     if (!m_outputPath.isEmpty() && QFile::exists(m_outputPath)) {
         QFile::remove(m_outputPath);
     }
@@ -294,8 +301,9 @@ void ScreenRecorder::finishRecording()
         QImage frame = grabScreenRegion(m_captureRect);
         if (!frame.isNull()) {
             m_pendingFrame = frame;
-            m_pendingDelayCs = m_delayCs;
             m_hasPendingFrame = true;
+            m_lastFrameMs = m_timeline.activeElapsedMs(nowMs());
+            m_gifClock.start(m_lastFrameMs);
         }
     }
     const bool hasCapturedFrame = m_frameCount > 0 || m_hasPendingFrame;
@@ -304,13 +312,12 @@ void ScreenRecorder::finishRecording()
     QString savedPath = m_outputPath;
     bool ok = false;
     if (m_encoder) {
-        ok = flushPendingFrame() && m_encoder->close();
+        ok = flushPendingFrame(finalFrameDelayCs()) && m_encoder->close();
         QString err = m_encoder->errorString();
         delete m_encoder;
         m_encoder = nullptr;
         m_hasPendingFrame = false;
         m_pendingFrame = QImage();
-        m_pendingDelayCs = 0;
         if (!ok) {
             if (QFile::exists(savedPath)) QFile::remove(savedPath);
             emit recordingFailed(err);
@@ -332,16 +339,20 @@ void ScreenRecorder::onPortalProcessFinished(int exitCode, QProcess::ExitStatus 
         return;
     const QString stderrText = m_process ? QString::fromLocal8Bit(m_process->readAll()).trimmed() : QString();
     const QString output = m_outputPath;
+    const bool expectedStop = m_stopping;
 
     m_recording = false;
     m_portalRecording = false;
     m_paused = false;
+    m_stopping = false;
     closePortalSession();
     if (m_countdownTimer) { m_countdownTimer->stop(); m_countdownTimer->deleteLater(); m_countdownTimer = nullptr; }
     if (m_process) { m_process->deleteLater(); m_process = nullptr; }
 
-    if (status == QProcess::NormalExit && exitCode == 0
-        && QFileInfo::exists(m_portalVideoPath)
+    // gst-launch may report the SIGINT sent by stop() as its exit status once
+    // the MP4 is finalized; the GIF conversion validates the file either way.
+    if (videoRecordingProcessSucceeded(true, expectedStop, status, exitCode,
+                                       QFileInfo(m_portalVideoPath).size())
         && startPortalVideoToGifConversion()) {
         return;
     }
@@ -394,27 +405,25 @@ void ScreenRecorder::captureFrame()
     // Derive GIF frame delays from the real elapsed time (monotonic,
     // pause-aware) instead of accumulating the nominal 1000/fps interval,
     // whose truncation makes playback speed drift over long recordings.
+    // A pending frame is shown until the next distinct frame is captured.
     const qint64 frameMs = m_timeline.activeElapsedMs(nowMs());
-    if (m_lastFrameMs >= 0 && m_hasPendingFrame)
-        m_pendingDelayCs += static_cast<int>(qMax<qint64>(0, (frameMs - m_lastFrameMs + 5) / 10));
     m_lastFrameMs = frameMs;
 
     if (!m_hasPendingFrame) {
         m_pendingFrame = frame;
-        m_pendingDelayCs = 0;
         m_hasPendingFrame = true;
-    } else if (framesEqual(m_pendingFrame, frame) && m_pendingDelayCs < 65000) {
-        // Identical frame: its delay was already extended by the measured
-        // delta above.
+        m_gifClock.start(frameMs);
+    } else if (framesEqual(m_pendingFrame, frame) && m_gifClock.pendingCs(frameMs) < 65000) {
+        // Identical frame: the pending frame's delay keeps growing until a
+        // different frame arrives.
     } else {
-        if (!flushPendingFrame()) {
+        if (!flushPendingFrame(m_gifClock.takeDelayCs(frameMs))) {
             QString err = m_encoder->errorString();
             cancel();
             emit recordingFailed(err);
             return;
         }
         m_pendingFrame = frame;
-        m_pendingDelayCs = 0;
         m_hasPendingFrame = true;
     }
     ++m_frameCount;
@@ -427,16 +436,24 @@ void ScreenRecorder::captureFrame()
     }
 }
 
-bool ScreenRecorder::flushPendingFrame()
+bool ScreenRecorder::flushPendingFrame(int delayCs)
 {
     if (!m_hasPendingFrame || !m_encoder) return true;
-    const bool ok = m_encoder->addFrame(m_pendingFrame, qMax(1, m_pendingDelayCs));
+    const bool ok = m_encoder->addFrame(m_pendingFrame, qMax(1, delayCs));
     if (ok) {
         m_hasPendingFrame = false;
         m_pendingFrame = QImage();
-        m_pendingDelayCs = 0;
     }
     return ok;
+}
+
+int ScreenRecorder::finalFrameDelayCs()
+{
+    // The last frame has no successor to end it: show it until the recording
+    // stopped, but at least for one frame interval.
+    const qint64 endMs = qMax(m_timeline.activeElapsedMs(nowMs()),
+                              m_lastFrameMs + qMax(1, 1000 / m_fps));
+    return m_gifClock.takeDelayCs(endMs);
 }
 
 bool ScreenRecorder::framesEqual(const QImage &a, const QImage &b) const
@@ -562,12 +579,15 @@ bool ScreenRecorder::startWaylandPortalRecording(const QRect &captureRect)
     }
 
     connect(m_process, &QProcess::finished, this, &ScreenRecorder::onPortalProcessFinished);
-    connect(m_process, &QProcess::errorOccurred, this, [this](QProcess::ProcessError) {
-        if (!m_recording) return;
+    connect(m_process, &QProcess::errorOccurred, this, [this](QProcess::ProcessError error) {
+        // Crashes (including the SIGINT exit after stop()) are followed by
+        // finished() and handled in onPortalProcessFinished().
+        if (!m_recording || error != QProcess::FailedToStart) return;
         const QString reason = m_process ? m_process->errorString() : QStringLiteral("gstreamer process error");
         m_recording = false;
         m_portalRecording = false;
         m_paused = false;
+        m_stopping = false;
         if (m_process) { m_process->deleteLater(); m_process = nullptr; }
         QFile::remove(m_portalVideoPath);
         closePortalSession();
@@ -772,15 +792,36 @@ void ScreenRecorder::releaseCaptureResources()
 QImage ScreenRecorder::grabScreenRegion(const QRect &rect)
 {
 #ifndef Q_OS_WIN
-    QScreen *screen = QGuiApplication::screenAt(rect.center());
+    // rect is in physical (snapshot) pixels, but QScreen::grabWindow() and
+    // screenAt() take logical coordinates. Prefer the logical display rect
+    // from the overlay; otherwise scale by the DPR of the screen containing it.
+    QRect logicalRect = m_displayRect;
+    QScreen *screen = nullptr;
+    if (logicalRect.isValid()) {
+        screen = QGuiApplication::screenAt(logicalRect.center());
+    } else {
+        for (QScreen *candidate : QGuiApplication::screens()) {
+            const QRect sg = candidate->geometry();
+            const qreal dpr = candidate->devicePixelRatio();
+            const QRectF physical(sg.x() * dpr, sg.y() * dpr, sg.width() * dpr, sg.height() * dpr);
+            if (physical.contains(QRectF(rect).center())) {
+                screen = candidate;
+                break;
+            }
+        }
+        if (!screen) screen = QGuiApplication::primaryScreen();
+        const qreal dpr = screen ? screen->devicePixelRatio() : 1.0;
+        logicalRect = QRectF(rect.x() / dpr, rect.y() / dpr,
+                             rect.width() / dpr, rect.height() / dpr).toAlignedRect();
+    }
     if (!screen) screen = QGuiApplication::primaryScreen();
     if (screen) {
         const QRect sg = screen->geometry();
         QPixmap pix = screen->grabWindow(0,
-                                         rect.x() - sg.x(),
-                                         rect.y() - sg.y(),
-                                         rect.width(),
-                                         rect.height());
+                                         logicalRect.x() - sg.x(),
+                                         logicalRect.y() - sg.y(),
+                                         logicalRect.width(),
+                                         logicalRect.height());
         if (!pix.isNull()) {
             QImage img = pix.toImage().convertToFormat(QImage::Format_RGB32);
             if (m_outputSize.isValid() && img.size() != m_outputSize)

@@ -340,9 +340,15 @@ bool GifEncoder::writeIndexedImageData(const QByteArray &indices, int colorTable
     const uchar *data = reinterpret_cast<const uchar *>(indices.constData());
     const int count = indices.size();
     int codesSinceClear = 0;
+    // Every code is written as a literal, but decoders still add one table
+    // entry per code after the first following a CLEAR and widen the code
+    // size once the table reaches 2^CODE_SIZE entries. Clearing after
+    // CLEAR_CODE - 2 codes keeps the table below that limit so the fixed
+    // CODE_SIZE stays valid for every color table size.
+    const int maxCodesPerClear = CLEAR_CODE - 2;
 
     for (int i = 0; i < count; ++i) {
-        if (codesSinceClear >= 250) {
+        if (codesSinceClear >= maxCodesPerClear) {
             if (!writeBits(CLEAR_CODE)) return false;
             codesSinceClear = 0;
         }

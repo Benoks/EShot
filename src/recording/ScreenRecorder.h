@@ -57,7 +57,8 @@ private slots:
 
 private:
     void finishRecording();
-    bool flushPendingFrame();
+    bool flushPendingFrame(int delayCs);
+    int finalFrameDelayCs();
     bool framesEqual(const QImage &a, const QImage &b) const;
     QString makeDefaultOutputPath() const;
     QImage grabScreenRegion(const QRect &rect);
@@ -85,13 +86,13 @@ private:
     int m_fps = 10;
     int m_maxSeconds = 0;
     int m_frameCount = 0;
-    int m_delayCs = 10;
     bool m_recording = false;
     bool m_portalRecording = false;
     bool m_paused = false;
+    bool m_stopping = false;
     bool m_hasPendingFrame = false;
     QImage m_pendingFrame;
-    int m_pendingDelayCs = 0;
+    GifFrameClock m_gifClock;
     qint64 m_lastFrameMs = -1;
     QString m_outputPath;
     QString m_portalVideoPath;

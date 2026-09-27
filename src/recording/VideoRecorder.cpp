@@ -196,10 +196,19 @@ void recordWasapiLoopback(const QString &path, std::atomic_bool *stopFlag)
         return;
     }
 
+    // Loopback capture delivers no packets while nothing is playing. Pad those
+    // gaps with silence based on elapsed time so the WAV stays as long as (and
+    // in sync with) the video instead of collapsing silent stretches.
+    const quint64 bytesPerSecond = static_cast<quint64>(format->nSamplesPerSec) * format->nBlockAlign;
+    const quint64 gapToleranceBytes = bytesPerSecond / 5;
+    const ULONGLONG startTick = GetTickCount64();
+
     while (!stopFlag->load()) {
         Sleep(10);
+        bool gotPacket = false;
         UINT32 packetFrames = 0;
         while (SUCCEEDED(capture->GetNextPacketSize(&packetFrames)) && packetFrames > 0) {
+            gotPacket = true;
             BYTE *data = nullptr;
             UINT32 frames = 0;
             DWORD flags = 0;
@@ -214,6 +223,16 @@ void recordWasapiLoopback(const QString &path, std::atomic_bool *stopFlag)
             }
             dataBytes += bytes;
             capture->ReleaseBuffer(frames);
+        }
+        if (!gotPacket) {
+            const quint64 expectedBytes = (GetTickCount64() - startTick) * bytesPerSecond / 1000;
+            if (expectedBytes > dataBytes + gapToleranceBytes) {
+                quint64 missing = expectedBytes - dataBytes;
+                missing -= missing % format->nBlockAlign;
+                QByteArray zeros(static_cast<qsizetype>(missing), 0);
+                file.write(zeros);
+                dataBytes += static_cast<quint32>(missing);
+            }
         }
     }
 
@@ -285,7 +304,8 @@ void VideoRecorder::start(const QRect &captureRect, int fps, int maxSeconds, int
 #ifdef Q_OS_WIN
     if (m_desktopAudioDevice.isEmpty() || m_desktopAudioDevice == QStringLiteral("virtual-audio-capturer"))
         m_desktopAudioDevice = QStringLiteral("__wasapi__");
-    m_systemAudioLoopback = m_desktopAudioEnabled && m_desktopAudioDevice == QStringLiteral("__wasapi__");
+    m_systemAudioLoopback = m_desktopAudioEnabled && m_desktopVolume > 0
+        && m_desktopAudioDevice == QStringLiteral("__wasapi__");
 #else
     m_systemAudioLoopback = false;
     if (m_desktopAudioDevice.isEmpty() || m_desktopAudioDevice == QStringLiteral("__wasapi__"))
@@ -344,10 +364,6 @@ void VideoRecorder::start(const QRect &captureRect, int fps, int maxSeconds, int
         m_videoOnlyPath = dir.filePath(QStringLiteral(".eshot_video_%1.mp4").arg(stamp));
         m_audioPath = dir.filePath(QStringLiteral(".eshot_audio_%1.wav").arg(stamp));
         ffmpegOutputPath = m_videoOnlyPath;
-        m_audioStop.store(false);
-#ifdef Q_OS_WIN
-        m_audioThread = std::thread(recordWasapiLoopback, m_audioPath, &m_audioStop);
-#endif
     }
 
     QStringList args;
@@ -445,16 +461,16 @@ void VideoRecorder::start(const QRect &captureRect, int fps, int maxSeconds, int
     stopRecorderWhenParentExits(m_process);
 #endif
     connect(m_process, &QProcess::finished, this, &VideoRecorder::onProcessFinished);
-    connect(m_process, &QProcess::errorOccurred, this, [this](QProcess::ProcessError) {
-        if (!m_recording)
+    connect(m_process, &QProcess::errorOccurred, this, [this](QProcess::ProcessError error) {
+        // Crashes and kills (cancel, stop timeouts) are followed by finished()
+        // and handled in onProcessFinished(), which knows about expected stops.
+        if (!m_recording || error != QProcess::FailedToStart)
             return;
         const bool canceled = m_canceling;
         const QString reason = m_process ? m_process->errorString() : QStringLiteral("ffmpeg process error");
-        const QString output = m_outputPath;
         stopSystemAudioCapture();
         cleanupProcess();
-        if (!output.isEmpty())
-            QFile::remove(output);
+        removeRecordingFiles();
         if (!canceled)
             emit recordingFailed(reason);
     });
@@ -462,10 +478,23 @@ void VideoRecorder::start(const QRect &captureRect, int fps, int maxSeconds, int
     m_process->start();
     if (!m_process->waitForStarted(3000)) {
         const QString reason = m_process->errorString();
+        stopSystemAudioCapture();
         cleanupProcess();
+        removeRecordingFiles();
         emit recordingFailed(reason.isEmpty() ? QStringLiteral("cannot start ffmpeg") : reason);
         return;
     }
+
+#ifdef Q_OS_WIN
+    if (m_systemAudioLoopback) {
+        // Start loopback capture only once ffmpeg is running so no failure
+        // path can leave the thread behind. Assigning to a still-joinable
+        // std::thread would call std::terminate, so join any previous one.
+        stopSystemAudioCapture();
+        m_audioStop.store(false);
+        m_audioThread = std::thread(recordWasapiLoopback, m_audioPath, &m_audioStop);
+    }
+#endif
 
     m_recording = true;
     m_elapsed.start();
@@ -495,11 +524,15 @@ void VideoRecorder::start(const QRect &captureRect, int fps, int maxSeconds, int
 
 void VideoRecorder::stop()
 {
-    if (!m_recording || !m_process)
+    // Stop only once: the countdown keeps firing at 0 and users may press Stop
+    // repeatedly, and a second SIGINT aborts gst-launch mid-finalize.
+    if (!m_recording || !m_process || m_stopping)
         return;
     if (m_paused)
         resume();
     m_stopping = true;
+    if (m_countdownTimer)
+        m_countdownTimer->stop();
 #if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
     if (m_usesGStreamer && m_process->processId() > 0)
         QProcess::execute(QStringLiteral("kill"),
@@ -528,9 +561,7 @@ void VideoRecorder::cancel()
         return;
     if (isFinalizing()) {
         cleanupMuxProcess();
-        QFile::remove(m_outputPath);
-        QFile::remove(m_videoOnlyPath);
-        QFile::remove(m_audioPath);
+        removeRecordingFiles();
         return;
     }
     m_canceling = true;
@@ -580,12 +611,7 @@ void VideoRecorder::onProcessFinished(int exitCode, QProcess::ExitStatus status)
     stopSystemAudioCapture();
 
     if (canceled) {
-        if (!output.isEmpty())
-            QFile::remove(output);
-        if (!m_videoOnlyPath.isEmpty())
-            QFile::remove(m_videoOnlyPath);
-        if (!m_audioPath.isEmpty())
-            QFile::remove(m_audioPath);
+        removeRecordingFiles();
         cleanupProcess();
         return;
     }
@@ -594,12 +620,7 @@ void VideoRecorder::onProcessFinished(int exitCode, QProcess::ExitStatus status)
     bool ok = videoRecordingProcessSucceeded(m_usesGStreamer, expectedStop,
                                              status, exitCode, completedFile.size());
     if (!ok) {
-        if (!output.isEmpty())
-            QFile::remove(output);
-        if (!m_videoOnlyPath.isEmpty())
-            QFile::remove(m_videoOnlyPath);
-        if (!m_audioPath.isEmpty())
-            QFile::remove(m_audioPath);
+        removeRecordingFiles();
         cleanupProcess();
         const QString processName = m_usesGStreamer ? QStringLiteral("gstreamer") : QStringLiteral("ffmpeg");
         emit recordingFailed(stderrText.isEmpty() ? QStringLiteral("%1 exited with code %2").arg(processName).arg(exitCode) : stderrText);
@@ -637,6 +658,16 @@ void VideoRecorder::stopSystemAudioCapture()
         m_audioThread.join();
 }
 
+void VideoRecorder::removeRecordingFiles()
+{
+    // Output plus the hidden loopback intermediates (.eshot_video_*.mp4 /
+    // .eshot_audio_*.wav); call after the audio thread has been joined.
+    for (const QString &path : {m_outputPath, m_videoOnlyPath, m_audioPath}) {
+        if (!path.isEmpty())
+            QFile::remove(path);
+    }
+}
+
 bool VideoRecorder::startSystemAudioMux()
 {
     if (m_videoOnlyPath.isEmpty() || m_audioPath.isEmpty())
@@ -656,17 +687,21 @@ bool VideoRecorder::startSystemAudioMux()
     };
 
     const bool videoHasAudio = m_microphoneEnabled && m_microphoneVolume > 0;
+    const QString desktopVolume = QString::number(m_desktopVolume / 100.0, 'f', 2);
 
+    // apad makes the audio endless so -shortest always ends on the video:
+    // a short system-audio track must never truncate the recording.
     if (videoHasAudio) {
         args << QStringLiteral("-filter_complex")
-             << QStringLiteral("[0:a][1:a]amix=inputs=2:duration=longest[aout]")
-             << QStringLiteral("-map") << QStringLiteral("0:v")
-             << QStringLiteral("-map") << QStringLiteral("[aout]");
+             << QStringLiteral("[1:a]volume=%1[desk];[0:a][desk]amix=inputs=2:duration=longest,apad[aout]")
+                    .arg(desktopVolume);
     } else {
-        args << QStringLiteral("-map") << QStringLiteral("0:v")
-             << QStringLiteral("-map") << QStringLiteral("1:a");
+        args << QStringLiteral("-filter_complex")
+             << QStringLiteral("[1:a]volume=%1,apad[aout]").arg(desktopVolume);
     }
-    args << QStringLiteral("-c:v") << QStringLiteral("copy")
+    args << QStringLiteral("-map") << QStringLiteral("0:v")
+         << QStringLiteral("-map") << QStringLiteral("[aout]")
+         << QStringLiteral("-c:v") << QStringLiteral("copy")
          << QStringLiteral("-c:a") << QStringLiteral("aac")
          << QStringLiteral("-shortest")
          << m_outputPath;
@@ -865,13 +900,14 @@ bool VideoRecorder::startWaylandPortalRecording(const QRect &captureRect)
     }
 
     connect(m_process, &QProcess::finished, this, &VideoRecorder::onProcessFinished);
-    connect(m_process, &QProcess::errorOccurred, this, [this](QProcess::ProcessError) {
-        if (!m_recording) return;
+    connect(m_process, &QProcess::errorOccurred, this, [this](QProcess::ProcessError error) {
+        // gst-launch may exit through the SIGINT sent by stop(); crashes are
+        // followed by finished(), so let onProcessFinished() judge the file.
+        if (!m_recording || error != QProcess::FailedToStart) return;
         const bool canceled = m_canceling;
         const QString reason = m_process ? m_process->errorString() : QStringLiteral("gstreamer process error");
-        const QString output = m_outputPath;
         cleanupProcess();
-        if (!output.isEmpty()) QFile::remove(output);
+        removeRecordingFiles();
         if (!canceled) emit recordingFailed(reason);
     });
 

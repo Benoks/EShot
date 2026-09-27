@@ -685,6 +685,15 @@ if(BUILD_TESTING)
     target_link_libraries(eshot_recording_timeline_tests PRIVATE Qt6::Core Qt6::Test)
     add_test(NAME recording_timeline COMMAND eshot_recording_timeline_tests)
 
+    qt_add_executable(eshot_gif_encoder_tests
+        tests/GifEncoderTests.cpp
+        src/recording/GifEncoder.cpp
+        src/recording/GifEncoder.h
+    )
+    target_include_directories(eshot_gif_encoder_tests PRIVATE src)
+    target_link_libraries(eshot_gif_encoder_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Test)
+    add_test(NAME gif_encoder COMMAND eshot_gif_encoder_tests)
+
     qt_add_executable(eshot_screen_recorder_pause_api_tests
         tests/ScreenRecorderPauseApiTests.cpp
     )

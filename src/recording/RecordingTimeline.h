@@ -21,4 +21,21 @@ private:
     bool m_paused = false;
 };
 
+// Converts frame boundaries on the active recording timeline into GIF
+// centisecond delays. Rounding the running total instead of each frame keeps
+// the rounding error from accumulating (e.g. 33 ms frames at 30 fps).
+class GifFrameClock
+{
+public:
+    void start(qint64 firstFrameMs);
+    // Centiseconds not yet emitted up to frameEndMs.
+    int pendingCs(qint64 frameEndMs) const;
+    // Delay for the frame ending at frameEndMs; always at least 1 cs.
+    int takeDelayCs(qint64 frameEndMs);
+
+private:
+    qint64 m_originMs = 0;
+    qint64 m_emittedCs = 0;
+};
+
 #endif
