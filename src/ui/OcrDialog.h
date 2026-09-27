@@ -32,6 +32,8 @@ private:
     void setBusy(bool busy);
     void translateUi();
     void runOcr();
+    void requestOcr();
+    void finishOcrRun();
     void populateLanguages();
     bool isLanguageInstalled(const QString &tag) const;
     int firstInstalledLanguageIndex() const;
@@ -40,6 +42,9 @@ private:
     OcrEngine *m_engine;
     QString m_languageTag = "auto";
     QString m_preferredLanguageTag = "en";
+    bool m_initialRunPending = true;
+    bool m_ocrRunning = false;
+    bool m_rerunPending = false;
 
     QComboBox *m_langCombo;
     QLabel *m_statusLabel;

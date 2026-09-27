@@ -17,6 +17,8 @@
 #include <QStandardItemModel>
 #include <QStandardItem>
 #include <QColor>
+#include <QSignalBlocker>
+#include <QTimer>
 
 namespace {
 constexpr int LanguageInstalledRole = Qt::UserRole + 1;
@@ -106,8 +108,14 @@ OcrDialog::OcrDialog(const QPixmap &pixmap, QWidget *parent)
     connect(m_retryBtn, &QPushButton::clicked, this, &OcrDialog::onRetryClicked);
     connect(m_closeBtn, &QPushButton::clicked, this, &QDialog::accept);
 
+    // Defer the first run to the event loop so a setLanguageTag() call made
+    // right after construction (before exec()) decides the language, and OCR
+    // runs exactly once with it.
     setBusy(true);
-    m_engine->recognize(m_pixmap, m_languageTag, m_preferredLanguageTag);
+    QTimer::singleShot(0, this, [this]() {
+        m_initialRunPending = false;
+        runOcr();
+    });
 }
 
 OcrDialog::~OcrDialog() = default;
@@ -117,9 +125,16 @@ void OcrDialog::setLanguageTag(const QString &tag)
     if (tag.isEmpty()) return;
     if (m_langCombo) {
         const int idx = m_langCombo->findData(tag);
-        if (idx >= 0 && m_langCombo->itemData(idx, LanguageInstalledRole).toBool()) {
+        if (idx >= 0 && m_langCombo->itemData(idx, LanguageInstalledRole).toBool()
+            && tag != m_languageTag) {
             m_languageTag = tag;
-            m_langCombo->setCurrentIndex(idx);
+            {
+                const QSignalBlocker blocker(m_langCombo);
+                m_langCombo->setCurrentIndex(idx);
+            }
+            // Before the deferred first run the new tag is simply picked up.
+            if (!m_initialRunPending)
+                requestOcr();
         }
     }
 }
@@ -214,8 +229,28 @@ void OcrDialog::setBusy(bool busy)
     }
 }
 
+void OcrDialog::requestOcr()
+{
+    if (m_ocrRunning) {
+        // Recognition cannot be restarted mid-run; redo it once it finishes.
+        m_rerunPending = true;
+        return;
+    }
+    runOcr();
+}
+
+void OcrDialog::finishOcrRun()
+{
+    m_ocrRunning = false;
+    if (m_rerunPending) {
+        m_rerunPending = false;
+        runOcr();
+    }
+}
+
 void OcrDialog::runOcr()
 {
+    m_ocrRunning = true;
     setBusy(true);
     m_textEdit->clear();
     m_copyBtn->setEnabled(false);
@@ -237,14 +272,18 @@ void OcrDialog::onLanguageChanged(int index)
             m_preferredLanguageTag = tag;
             settings.setValue(QStringLiteral("ocrPreferredLanguage"), tag);
         }
-        if (!m_textEdit->toPlainText().isEmpty()) {
-            runOcr();
-        }
+        if (!m_initialRunPending)
+            requestOcr();
     }
 }
 
 void OcrDialog::onTextReady(const QString &text)
 {
+    if (m_rerunPending) {
+        finishOcrRun();
+        return;
+    }
+    m_ocrRunning = false;
     setBusy(false);
     if (text.trimmed().isEmpty()) {
         m_statusLabel->setText(TranslationManager::ocrEmpty());
@@ -261,6 +300,11 @@ void OcrDialog::onTextReady(const QString &text)
 
 void OcrDialog::onOcrFailed(const QString &reason)
 {
+    if (m_rerunPending) {
+        finishOcrRun();
+        return;
+    }
+    m_ocrRunning = false;
     setBusy(false);
     m_statusLabel->setText(TranslationManager::ocrFailed() + QStringLiteral(" - ") + reason);
     m_textEdit->clear();
@@ -286,9 +330,12 @@ void OcrDialog::onTranslateClicked()
     QUrlQuery query;
     query.addQueryItem(QStringLiteral("sl"), QStringLiteral("auto"));
     query.addQueryItem(QStringLiteral("tl"), TranslationManager::langCode());
-    query.addQueryItem(QStringLiteral("text"), text);
+    // QUrlQuery leaves '+' (and similar) literal, which the server reads as a
+    // space; percent-encode the free-form text explicitly.
+    query.addQueryItem(QStringLiteral("text"),
+                       QString::fromLatin1(QUrl::toPercentEncoding(text)));
     query.addQueryItem(QStringLiteral("op"), QStringLiteral("translate"));
-    url.setQuery(query);
+    url.setQuery(query.query(QUrl::FullyEncoded), QUrl::StrictMode);
     if (!QDesktopServices::openUrl(url)) {
         QMessageBox::warning(this, TranslationManager::tr("visualSearchBrowserLaunchTitle"),
                              TranslationManager::tr("ocrTranslateBrowserError"));

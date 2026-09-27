@@ -116,6 +116,9 @@ private:
         qreal rotationDegrees = 0.0;
         qreal textScaleX = 1.0;
         qreal textScaleY = 1.0;
+        // Blur pixel size captured when the blur was drawn, so later slider
+        // changes only affect new blurs.
+        int blurIntensity = 16;
     };
 
     struct HistoryAction {
@@ -128,7 +131,7 @@ private:
     };
 
     void drawAnnotation(QPainter *painter, const Annotation &ann, const QPoint &offset);
-    void drawBlurEffect(QPainter *painter, const QRect &rect, const QPoint &offset);
+    void drawBlurEffect(QPainter *painter, const QRect &rect, const QPoint &offset, int intensity);
     QRect textBaseBackgroundRect(const Annotation &ann) const;
     QRect textBackgroundRect(const Annotation &ann) const;
     QRect rawAnnotationBounds(const Annotation &ann, int padding = 10) const;
@@ -138,6 +141,9 @@ private:
     void pushHistory(HistoryAction::Type type, const Annotation &annotation, int index);
     void appendHistoryAction(const HistoryAction &action);
     void recalculateCounterValue();
+    void adjustSelectionForInsert(int index);
+    void adjustSelectionForRemove(int index);
+    void resetGestureState();
 
     Tool m_currentTool;
     QColor m_color;

@@ -57,7 +57,18 @@ AnnotationEngine::AnnotationEngine(QObject *parent)
 
 AnnotationEngine::~AnnotationEngine() {}
 
-void AnnotationEngine::setCurrentTool(Tool tool) { m_currentTool = tool; }
+void AnnotationEngine::setCurrentTool(Tool tool)
+{
+    // Commit a stroke left open by a tool switch mid-drag while the old tool
+    // is still active; otherwise m_isDrawing would leak into the new tool.
+    if (m_isDrawing && tool != m_currentTool) {
+        if (!m_currentAnnotation.points.isEmpty())
+            endDraw(m_currentAnnotation.points.last());
+        m_isDrawing = false;
+        m_currentAnnotation = Annotation();
+    }
+    m_currentTool = tool;
+}
 void AnnotationEngine::setColor(const QColor &color) { m_color = color; }
 void AnnotationEngine::setPenWidth(int width) { m_penWidth = qBound(1, width, 20); }
 void AnnotationEngine::setTextFontFamily(const QString &family)
@@ -79,6 +90,7 @@ void AnnotationEngine::beginDraw(const QPoint &pos)
     m_currentAnnotation.tool = m_currentTool;
     m_currentAnnotation.color = m_color;
     m_currentAnnotation.penWidth = m_penWidth;
+    m_currentAnnotation.blurIntensity = m_blurIntensity;
     m_currentAnnotation.points.append(pos);
 
     if (m_currentTool == Highlighter)
@@ -271,7 +283,7 @@ void AnnotationEngine::drawAnnotation(QPainter *painter, const Annotation &ann, 
     case Blur: {
         if (ann.points.size() < 2) break;
         QRect r = QRect(ann.points.first(), ann.points.last()).normalized();
-        drawBlurEffect(painter, r, offset);
+        drawBlurEffect(painter, r, offset, ann.blurIntensity);
         break;
     }
     case Text: {
@@ -349,7 +361,7 @@ void AnnotationEngine::clear()
     m_isDrawing = false;
     m_currentAnnotation = Annotation();
     m_selectedIndex = -1;
-    m_textResizeIndex = -1;
+    resetGestureState();
 
     m_annotations.clear();
     m_undoStack.clear();
@@ -363,16 +375,16 @@ void AnnotationEngine::undo()
 
     HistoryAction action = m_undoStack.takeLast();
     if (action.type == HistoryAction::Add) {
-        if (action.index >= 0 && action.index < m_annotations.size())
-            m_annotations.removeAt(action.index);
-        else if (!m_annotations.isEmpty())
-            m_annotations.removeLast();
-        if (m_selectedIndex == action.index
-            || m_selectedIndex >= m_annotations.size())
-            m_selectedIndex = -1;
+        const int removeAt = action.index >= 0 && action.index < m_annotations.size()
+            ? action.index : m_annotations.size() - 1;
+        if (removeAt >= 0) {
+            m_annotations.removeAt(removeAt);
+            adjustSelectionForRemove(removeAt);
+        }
     } else if (action.type == HistoryAction::Remove) {
         int insertAt = qBound(0, action.index, m_annotations.size());
         m_annotations.insert(insertAt, action.annotation);
+        adjustSelectionForInsert(insertAt);
     } else if (action.type == HistoryAction::Resize
                && action.index >= 0 && action.index < m_annotations.size()) {
         m_annotations[action.index] = action.previousAnnotation;
@@ -391,11 +403,14 @@ void AnnotationEngine::redo()
     if (action.type == HistoryAction::Add) {
         int insertAt = qBound(0, action.index, m_annotations.size());
         m_annotations.insert(insertAt, action.annotation);
+        adjustSelectionForInsert(insertAt);
     } else if (action.type == HistoryAction::Remove) {
-        if (action.index >= 0 && action.index < m_annotations.size())
-            m_annotations.removeAt(action.index);
-        else if (!m_annotations.isEmpty())
-            m_annotations.removeLast();
+        const int removeAt = action.index >= 0 && action.index < m_annotations.size()
+            ? action.index : m_annotations.size() - 1;
+        if (removeAt >= 0) {
+            m_annotations.removeAt(removeAt);
+            adjustSelectionForRemove(removeAt);
+        }
     } else if (action.type == HistoryAction::Resize
                && action.index >= 0 && action.index < m_annotations.size()) {
         m_annotations[action.index] = action.annotation;
@@ -623,6 +638,32 @@ void AnnotationEngine::resizeTextAnnotation(int index, const QRectF &bounds)
     if (baseBounds.isEmpty() || bounds.width() < 2.0 || bounds.height() < 2.0)
         return;
 
+    if (!qFuzzyIsNull(m_textResizeOriginal.rotationDegrees)) {
+        // Rotated text: callers drag the axis-aligned box of the rotated text
+        // (rotatedBoundingRectOf at gesture start). Translate that box's
+        // stretch into the text's local axes and keep the rotated text
+        // centred in the requested box, instead of treating it as the
+        // unrotated background.
+        const QRectF startBounds = rotatedAnnotationBounds(m_textResizeOriginal, 0);
+        if (startBounds.width() <= 0.0 || startBounds.height() <= 0.0)
+            return;
+        const qreal kx = bounds.width() / startBounds.width();
+        const qreal ky = bounds.height() / startBounds.height();
+        const qreal radians = qDegreesToRadians(m_textResizeOriginal.rotationDegrees);
+        const qreal cos2 = qCos(radians) * qCos(radians);
+        const qreal sin2 = 1.0 - cos2;
+        ann.textScaleX = qBound(0.1, m_textResizeOriginal.textScaleX * (kx * cos2 + ky * sin2), 20.0);
+        ann.textScaleY = qBound(0.1, m_textResizeOriginal.textScaleY * (kx * sin2 + ky * cos2), 20.0);
+        // Rotation pivots on the scaled background's centre, so placing that
+        // centre on the requested centre keeps the rotated box inside bounds.
+        const QPointF center = bounds.center();
+        ann.points[0] = QPoint(qRound(center.x() - baseBounds.width() * ann.textScaleX / 2.0
+                                      + 4.0 * ann.textScaleX),
+                               qRound(center.y() - baseBounds.height() * ann.textScaleY / 2.0
+                                      + 4.0 * ann.textScaleY));
+        return;
+    }
+
     ann.textScaleX = qBound(0.1, bounds.width() / baseBounds.width(), 20.0);
     ann.textScaleY = qBound(0.1, bounds.height() / baseBounds.height(), 20.0);
     ann.points[0] = QPoint(qRound(bounds.left() + 4.0 * ann.textScaleX),
@@ -815,7 +856,14 @@ bool AnnotationEngine::annotationContainsPoint(const Annotation &ann, const QPoi
     case Circle: {
         if (ann.points.size() < 2)
             return rawAnnotationBounds(ann, tolerance).contains(hitPos);
-        const QRect r = QRect(ann.points.first(), ann.points.last()).normalized();
+        QRect r = QRect(ann.points.first(), ann.points.last());
+        if (ann.shiftConstrained) {
+            // Match drawAnnotation's shift-constrained geometry.
+            const int side = qMin(qAbs(r.width()), qAbs(r.height()));
+            r.setWidth(r.width() < 0 ? -side : side);
+            r.setHeight(r.height() < 0 ? -side : side);
+        }
+        r = r.normalized();
         if (r.width() <= 0 || r.height() <= 0)
             return rawAnnotationBounds(ann, tolerance).contains(hitPos);
         if (!r.adjusted(-tolerance, -tolerance, tolerance, tolerance).contains(hitPos))
@@ -830,6 +878,10 @@ bool AnnotationEngine::annotationContainsPoint(const Annotation &ann, const QPoi
         return qAbs(edge - 1.0) <= normalizedTolerance;
     }
     case Text:
+        // hitPos is already mapped back into unscaled text space above, so
+        // compare against the unscaled background.
+        return textBaseBackgroundRect(ann)
+            .adjusted(-padding, -padding, padding, padding).contains(hitPos);
     case Blur:
     case SemiRect:
     case Counter:
@@ -854,14 +906,9 @@ void AnnotationEngine::appendHistoryAction(const HistoryAction &action)
 {
     constexpr qsizetype MaxUndoActions = 200;
     if (m_undoStack.size() >= MaxUndoActions) {
-        const HistoryAction evicted = m_undoStack.first();
+        // Every later action was recorded on top of the evicted one, so their
+        // indices stay valid; the evicted change just becomes permanent.
         m_undoStack.removeFirst();
-        if (evicted.type == HistoryAction::Add) {
-            // Evicting an Add desynchronises the indices used by redo (and by
-            // later undos); the only safe move is dropping the whole history.
-            m_undoStack.clear();
-            m_redoStack.clear();
-        }
     }
     m_undoStack.append(action);
 }
@@ -874,6 +921,32 @@ void AnnotationEngine::recalculateCounterValue()
             maxCounter = qMax(maxCounter, ann.counterValue);
     }
     m_counterValue = maxCounter;
+}
+
+void AnnotationEngine::adjustSelectionForInsert(int index)
+{
+    if (m_selectedIndex >= index)
+        ++m_selectedIndex;
+}
+
+void AnnotationEngine::adjustSelectionForRemove(int index)
+{
+    if (m_selectedIndex == index)
+        m_selectedIndex = -1;
+    else if (m_selectedIndex > index)
+        --m_selectedIndex;
+}
+
+void AnnotationEngine::resetGestureState()
+{
+    m_textResizeIndex = -1;
+    m_textResizeOriginal = Annotation();
+    m_rotateIndex = -1;
+    m_rotateOriginalDegrees = 0.0;
+    m_moveGestureIndex = -1;
+    m_moveGestureOriginal = Annotation();
+    m_moveGestureHistoryStarted = false;
+    m_moveHistorySize = -1;
 }
 
 void AnnotationEngine::setScreenSnapshot(const QPixmap &snapshot)
@@ -891,62 +964,60 @@ void AnnotationEngine::setSelectionRect(const QRect &rect)
     m_selectionRect = rect;
 }
 
-void AnnotationEngine::drawBlurEffect(QPainter *painter, const QRect &rect, const QPoint &offset)
+void AnnotationEngine::drawBlurEffect(QPainter *painter, const QRect &rect, const QPoint &offset,
+                                      int intensity)
 {
     QRect target = rect.translated(offset);
-    painter->save();
-
-    if (target.isEmpty()) {
-        painter->restore();
+    if (target.isEmpty())
         return;
-    }
 
-    // Final capture: painter draws on a QPixmap (the cropped result). The
-    // painter may carry a scale transform on high-DPI displays, so map the blur
-    // target into the device's physical pixels before sampling it back.
-    QPixmap *dev = dynamic_cast<QPixmap*>(painter->device());
-    if (dev) {
-        QRect clamped = painter->transform().mapRect(target).intersected(dev->rect());
+    painter->save();
+    const int ps = qMax(1, intensity);
+    const auto pixelate = [ps](const QPixmap &region) {
+        const QImage img = region.toImage();
+        const QImage scaled = img.scaled(qMax(1, img.width() / ps), qMax(1, img.height() / ps),
+                                         Qt::IgnoreAspectRatio, Qt::FastTransformation);
+        return QPixmap::fromImage(scaled.scaled(img.width(), img.height(),
+                                                Qt::IgnoreAspectRatio, Qt::FastTransformation));
+    };
+
+    // Sample the untouched screenshot for both the live preview and the final
+    // capture, so earlier annotations never bleed into the mosaic. rect is in
+    // logical overlay coordinates (before offset); the snapshot is physical
+    // pixels scaled by m_snapshotScale. The destination goes through the
+    // painter transform (e.g. the high-DPI scale of the final capture).
+    if (!m_screenSnapshot.isNull()) {
+        const qreal s = m_snapshotScale;
+        QRect sourceRect(qRound(rect.x() * s), qRound(rect.y() * s),
+                         qRound(rect.width() * s), qRound(rect.height() * s));
+        QRect clamped = sourceRect.intersected(m_screenSnapshot.rect());
         if (!clamped.isEmpty()) {
-            QPixmap region = dev->copy(clamped);
+            QPixmap region = m_screenSnapshot.copy(clamped);
             if (!region.isNull()) {
-                int ps = m_blurIntensity;
-                QImage img = region.toImage();
-                QImage scaled = img.scaled(qMax(1, img.width() / ps), qMax(1, img.height() / ps),
-                                           Qt::IgnoreAspectRatio, Qt::FastTransformation);
-                QImage mosaic = scaled.scaled(img.width(), img.height(),
-                                              Qt::IgnoreAspectRatio, Qt::FastTransformation);
-                // clamped is in device pixels; draw it back bypassing the transform.
-                painter->save();
-                painter->resetTransform();
-                painter->drawPixmap(clamped.topLeft(), QPixmap::fromImage(mosaic));
-                painter->restore();
+                const QPixmap mosaic = pixelate(region);
+                // Map the clamped physical region back to its logical destination.
+                QRectF dst(clamped.x() / s + offset.x(), clamped.y() / s + offset.y(),
+                           clamped.width() / s, clamped.height() / s);
+                painter->drawPixmap(dst, mosaic, QRectF(mosaic.rect()));
                 painter->restore();
                 return;
             }
         }
     }
 
-    // Live preview: take from m_screenSnapshot. target is in logical overlay
-    // coordinates; the snapshot is physical pixels scaled by m_snapshotScale.
-    if (!m_screenSnapshot.isNull()) {
-        const qreal s = m_snapshotScale;
-        QRect sourceRect(qRound(target.x() * s), qRound(target.y() * s),
-                         qRound(target.width() * s), qRound(target.height() * s));
-        QRect clamped = sourceRect.intersected(m_screenSnapshot.rect());
+    // No snapshot: fall back to pixelating what the painter's QPixmap device
+    // already holds. The painter may carry a scale transform on high-DPI
+    // displays, so map the blur target into the device's physical pixels.
+    QPixmap *dev = dynamic_cast<QPixmap*>(painter->device());
+    if (dev) {
+        QRect clamped = painter->transform().mapRect(target).intersected(dev->rect());
         if (!clamped.isEmpty()) {
-            QPixmap region = m_screenSnapshot.copy(clamped);
+            QPixmap region = dev->copy(clamped);
             if (!region.isNull()) {
-                int ps = m_blurIntensity;
-                QImage img = region.toImage();
-                QImage scaled = img.scaled(qMax(1, img.width() / ps), qMax(1, img.height() / ps),
-                                           Qt::IgnoreAspectRatio, Qt::FastTransformation);
-                QImage mosaic = scaled.scaled(img.width(), img.height(),
-                                              Qt::IgnoreAspectRatio, Qt::FastTransformation);
-                // Map the clamped physical region back to its logical destination.
-                QRectF dst(clamped.x() / s, clamped.y() / s,
-                           clamped.width() / s, clamped.height() / s);
-                painter->drawPixmap(dst, QPixmap::fromImage(mosaic), QRectF(mosaic.rect()));
+                const QPixmap mosaic = pixelate(region);
+                // clamped is in device pixels; draw it back bypassing the transform.
+                painter->resetTransform();
+                painter->drawPixmap(clamped.topLeft(), mosaic);
                 painter->restore();
                 return;
             }
