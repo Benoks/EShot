@@ -3,8 +3,10 @@
 #include "TranslationManager.h"
 #include "UpdateAssetSelector.h"
 #include "UpdatePolicy.h"
+#include "WindowsInstallPolicy.h"
 #include <QCoreApplication>
 #include <QDateTime>
+#include <QDesktopServices>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -41,6 +43,21 @@ QString psSingleQuote(QString value)
     value.replace('\'', "''");
     return QStringLiteral("'") + value + QStringLiteral("'");
 }
+
+#ifdef Q_OS_WIN
+WindowsInstallMode currentWindowsInstallMode()
+{
+    const QString uninstallKey = QStringLiteral(
+        "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{E5H0T-SCAP-2024-GUID-000000000001}_is1");
+    QSettings currentUser(QStringLiteral("HKEY_CURRENT_USER\\") + uninstallKey,
+                          QSettings::NativeFormat);
+    QSettings allUsers(QStringLiteral("HKEY_LOCAL_MACHINE\\") + uninstallKey,
+                       QSettings::NativeFormat);
+    return windowsInstallMode(QCoreApplication::applicationDirPath(),
+                              currentUser.value(QStringLiteral("InstallLocation")).toString(),
+                              allUsers.value(QStringLiteral("InstallLocation")).toString());
+}
+#endif
 }
 
 UpdateManager::UpdateManager(QObject *parent)
@@ -213,17 +230,9 @@ void UpdateManager::checkSilentUpdateEligibility()
 bool UpdateManager::isSelfManagedInstall() const
 {
 #ifdef Q_OS_WIN
-    const QString appDirectory = QDir::cleanPath(QCoreApplication::applicationDirPath());
-    const QString uninstallKey = QStringLiteral(
-        "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{E5H0T-SCAP-2024-GUID-000000000001}_is1");
-    for (const QString &root : {QStringLiteral("HKEY_CURRENT_USER\\"),
-                                QStringLiteral("HKEY_LOCAL_MACHINE\\")}) {
-        QSettings install(root + uninstallKey, QSettings::NativeFormat);
-        const QString installDirectory = QDir::cleanPath(install.value(QStringLiteral("InstallLocation")).toString());
-        if (!installDirectory.isEmpty() && installDirectory == appDirectory)
-            return true;
-    }
-    return false;
+    // An all-users install needs administrator approval. Never launch that
+    // installer silently from a standard-user session.
+    return currentWindowsInstallMode() == WindowsInstallMode::CurrentUser;
 #elif defined(Q_OS_LINUX)
     const QFileInfo appImage(qEnvironmentVariable("APPIMAGE"));
     const QString integratedPath = QDir::home().filePath(
@@ -261,7 +270,17 @@ void UpdateManager::installUpdate(bool silent)
         emit failed(msg);
         return;
     }
-#if defined(Q_OS_LINUX)
+#if defined(Q_OS_WIN)
+    // Setup would install a second, per-user copy next to a portable one and
+    // the portable exe would keep running the old version. Let the user
+    // download the new portable archive instead.
+    if (currentWindowsInstallMode() == WindowsInstallMode::Portable) {
+        if (!silent && !m_releaseUrl.isEmpty())
+            QDesktopServices::openUrl(QUrl(m_releaseUrl));
+        setStatus(TranslationManager::updateStatusAvailable(m_latestVersion));
+        return;
+    }
+#elif defined(Q_OS_LINUX)
     const QString appImagePath = qEnvironmentVariable("APPIMAGE");
     if (appImagePath.isEmpty() || !QFileInfo::exists(appImagePath)) {
         const QString msg = TranslationManager::updateNoInstaller();
@@ -291,6 +310,7 @@ void UpdateManager::downloadInstaller()
 #endif
         : QFileInfo(m_installerName).fileName();
     if (fileName.isEmpty() || fileName == QLatin1String(".") || fileName == QLatin1String("..")) {
+        m_downloading = false;
         const QString msg = TranslationManager::updateNoInstaller();
         setStatus(TranslationManager::updateStatusFailed(msg));
         emit failed(msg);
@@ -365,15 +385,9 @@ void UpdateManager::finishDownload()
         return;
     }
 
-    // GitHub exposes a digest for AppImage assets, which is mandatory for a
-    // self-replacing Linux update. Older Windows releases do not always carry
-    // the optional digest field, so keep accepting their size-validated setup
-    // executables while verifying them whenever a digest is present.
-#ifdef Q_OS_WIN
-    const bool digestRequired = false;
-#else
+    // GitHub exposes a SHA-256 digest for every release asset. Require it:
+    // the Windows setup may run elevated for all-users installs.
     const bool digestRequired = true;
-#endif
     const bool digestValid = downloadedAssetDigestIsValid(
         path, m_installerSha256, digestRequired);
     if (!digestValid) {
@@ -411,9 +425,19 @@ void UpdateManager::launchInstaller(const QString &installerPath)
     script += QStringLiteral("$exe = %1\r\n").arg(psSingleQuote(QDir::toNativeSeparators(exePath)));
     script += QStringLiteral("$log = %1\r\n").arg(psSingleQuote(QDir::toNativeSeparators(logPath)));
     script += QStringLiteral("try { Wait-Process -Id $pidToWait -Timeout 45 } catch {}\r\n");
-    script += QStringLiteral("$args = @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/SP-',('/LOG=' + $log))\r\n");
-    script += QStringLiteral("$p = Start-Process -FilePath $installer -ArgumentList $args -Wait -PassThru\r\n");
-    script += QStringLiteral("if ($p.ExitCode -eq 0) { Start-Sleep -Milliseconds 800; if (Test-Path $exe) { Start-Process -FilePath $exe -ArgumentList '--silent' } }\r\n");
+    script += QStringLiteral("$args = @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/SP-',%1,('/LOG=\"' + $log + '\"'))\r\n")
+                  .arg(psSingleQuote(windowsInstallerModeArgument(currentWindowsInstallMode())));
+    // The installer waits in a user-writable cache; re-check it right before
+    // it runs, since an all-users update is approved with an elevation prompt.
+    script += QStringLiteral("$expected = %1\r\n").arg(psSingleQuote(m_installerSha256));
+    script += QStringLiteral("$actual = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash\r\n");
+    script += QStringLiteral("if ($actual -and $actual -ieq $expected) {\r\n");
+    script += QStringLiteral("try { Start-Process -FilePath $installer -ArgumentList $args -Wait | Out-Null } catch {}\r\n");
+    script += QStringLiteral("}\r\n");
+    // Reopen EShot even when Setup failed or its elevation prompt was declined,
+    // so the tray app never silently disappears.
+    script += QStringLiteral("Start-Sleep -Milliseconds 800\r\n");
+    script += QStringLiteral("if (Test-Path $exe) { Start-Process -FilePath $exe -ArgumentList '--silent' }\r\n");
     script += QStringLiteral("Remove-Item -LiteralPath $installer -Force\r\n");
     script += QStringLiteral("Remove-Item -LiteralPath $PSCommandPath -Force\r\n");
 

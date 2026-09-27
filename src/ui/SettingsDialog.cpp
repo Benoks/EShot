@@ -494,34 +494,30 @@ static QKeySequence win32ToKeySequence(UINT modifiers, UINT vkey)
     return QKeySequence(Qt::Key_Print);
 }
 
+#ifdef Q_OS_WIN
+// Versions before 4.3.3 started EShot through an elevated scheduled task.
+static bool legacyAutoStartTaskExists()
+{
+    QProcess query;
+    query.start(QStringLiteral("schtasks"),
+                {QStringLiteral("/Query"), QStringLiteral("/TN"), QStringLiteral("EShot")});
+    return query.waitForFinished(3000) && query.exitStatus() == QProcess::NormalExit
+        && query.exitCode() == 0;
+}
+#endif
+
 bool SettingsDialog::isAutoStartEnabled()
 {
 #ifdef Q_OS_WIN
-    // Fast path: the HKCU Run key check needs no external process. Only fall
-    // back to schtasks when the Run entry is absent.
+    // Startup is per-user; an old scheduled task may belong to another account.
     QSettings runKey(QStringLiteral("HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run"),
                      QSettings::NativeFormat);
     const QString runEntry = runKey.value(QStringLiteral("EShot")).toString();
     QString appPath = QCoreApplication::applicationFilePath().replace('/', '\\');
-    if (!runEntry.isEmpty())
-        return runEntry.contains(appPath, Qt::CaseInsensitive);
-
-    auto queryTaskXml = [](const QString &taskName) {
-        QProcess query;
-        query.start(QStringLiteral("schtasks"),
-                    {QStringLiteral("/Query"), QStringLiteral("/TN"), taskName, QStringLiteral("/XML")});
-        if (!query.waitForFinished(3000) || query.exitCode() != 0)
-            return QString();
-        return QString::fromLocal8Bit(query.readAllStandardOutput());
-    };
-
-    QString xml = queryTaskXml(QStringLiteral("EShot"));
-    if (xml.isEmpty())
-        xml = queryTaskXml(QStringLiteral("\\EShot"));
-    if (xml.isEmpty())
-        return false;
-
-    return xml.contains(appPath, Qt::CaseInsensitive);
+    if (runEntry.compare(QStringLiteral("\"%1\" --silent").arg(appPath), Qt::CaseInsensitive) == 0)
+        return true;
+    // Show a leftover legacy task as enabled so it can be switched off here.
+    return legacyAutoStartTaskExists();
 #else
     const QString path = QDir(QStandardPaths::writableLocation(QStandardPaths::ConfigLocation))
         .filePath(QStringLiteral("autostart/io.github.benoks.EShot.desktop"));
@@ -535,38 +531,26 @@ bool SettingsDialog::isAutoStartEnabled()
 #endif
 }
 
-static bool setAutoStartTask(bool enabled)
+static bool setAutoStartEnabled(bool enabled)
 {
 #ifdef Q_OS_WIN
+    // Remove the old elevated task. It may belong to a different administrator
+    // account on corporate machines, in which case deleting it fails.
     QProcess::execute(QStringLiteral("schtasks"),
                       {QStringLiteral("/Delete"), QStringLiteral("/TN"), QStringLiteral("EShot"), QStringLiteral("/F")});
+    if (!enabled && legacyAutoStartTaskExists())
+        return false;
 
     QSettings reg(QStringLiteral("HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run"),
                   QSettings::NativeFormat);
-    reg.remove(QStringLiteral("EShot"));
-
-    if (!enabled)
-        return true;
-
-    QString appPath = QCoreApplication::applicationFilePath().replace('/', '\\');
-    QString psPath = appPath;
-    psPath.replace(QStringLiteral("'"), QStringLiteral("''"));
-    QString script = QStringLiteral(
-        "Unregister-ScheduledTask -TaskName 'EShot' -Confirm:$false -ErrorAction SilentlyContinue; "
-        "$User=[System.Security.Principal.WindowsIdentity]::GetCurrent().Name; "
-        "$A=New-ScheduledTaskAction -Execute '%1' -Argument '--silent'; "
-        "$T=New-ScheduledTaskTrigger -AtLogOn -User $User; "
-        "$T.Delay='PT30S'; "
-        "$P=New-ScheduledTaskPrincipal -UserId $User -LogonType Interactive -RunLevel Highest; "
-        "$S=New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries; "
-        "Register-ScheduledTask -TaskName 'EShot' -Action $A -Trigger $T -Principal $P -Settings $S -Force | Out-Null")
-        .arg(psPath);
-
-    return QProcess::execute(QStringLiteral("powershell.exe"),
-                             {QStringLiteral("-NoProfile"),
-                              QStringLiteral("-ExecutionPolicy"), QStringLiteral("Bypass"),
-                              QStringLiteral("-WindowStyle"), QStringLiteral("Hidden"),
-                              QStringLiteral("-Command"), script}) == 0;
+    if (enabled) {
+        const QString appPath = QCoreApplication::applicationFilePath().replace('/', '\\');
+        reg.setValue(QStringLiteral("EShot"), QStringLiteral("\"%1\" --silent").arg(appPath));
+    } else {
+        reg.remove(QStringLiteral("EShot"));
+    }
+    reg.sync();
+    return reg.status() == QSettings::NoError;
 #else
     const QString autostartDir = QDir(QStandardPaths::writableLocation(QStandardPaths::ConfigLocation))
         .filePath(QStringLiteral("autostart"));
@@ -2052,16 +2036,9 @@ void SettingsDialog::loadSettings()
     m_filenamePatternEdit->setText(m_settings->value("filenamePattern", "Screenshot_%Y-%M-%D_%h-%m-%s").toString());
     onFilenamePatternChanged(m_filenamePatternEdit->text());
 
-#ifdef Q_OS_WIN
+    // Reflect the actual autostart entry for this executable instead of a
+    // stale QSettings flag or an entry left by another EShot copy.
     m_autoStartCheck->setChecked(isAutoStartEnabled());
-#else
-    // Reflect the actual autostart desktop entry instead of a stale
-    // QSettings flag.
-    const QString autostartDesktopPath =
-        QDir(QStandardPaths::writableLocation(QStandardPaths::ConfigLocation))
-            .filePath(QStringLiteral("autostart/io.github.benoks.EShot.desktop"));
-    m_autoStartCheck->setChecked(QFileInfo::exists(autostartDesktopPath));
-#endif
     m_loadedAutoStart = m_autoStartCheck->isChecked();
     m_showNotificationsCheck->setChecked(m_settings->value("showNotifications", true).toBool());
     if (m_notifyCopyCheck) m_notifyCopyCheck->setChecked(m_settings->value("notifyCopy", false).toBool());
@@ -2541,10 +2518,10 @@ void SettingsDialog::onSave()
         return;
     }
 
-    // Apply the autostart change before persisting anything: if the task
-    // registration fails, no partial settings are written (onSave partial
+    // Apply the autostart change before persisting anything: if the Run key
+    // update fails, no partial settings are written (onSave partial
     // success guard).
-    if (m_autoStartCheck->isChecked() != m_loadedAutoStart && !setAutoStartTask(m_autoStartCheck->isChecked())) {
+    if (m_autoStartCheck->isChecked() != m_loadedAutoStart && !setAutoStartEnabled(m_autoStartCheck->isChecked())) {
         QMessageBox::warning(this, TranslationManager::errTitle(),
                              TranslationManager::autoStartSaveFailed());
         return;

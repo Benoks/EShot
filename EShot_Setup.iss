@@ -25,6 +25,8 @@ AppUpdatesURL={#MyAppURL}
 DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
+PrivilegesRequired=lowest
+PrivilegesRequiredOverridesAllowed=dialog
 
 OutputDir=installer_output
 OutputBaseFilename=EShot_Setup_v{#MyAppVersion}
@@ -105,7 +107,7 @@ english.AlreadyInstalled=already installed
 
 [Tasks]
 Name: "desktopicon";  Description: "{cm:CreateDesktopShortcut}"; GroupDescription: "{cm:AdditionalIcons}"
-Name: "startupicon";  Description: "{cm:AutoStartWithWindows}"; GroupDescription: "{cm:Startup}"; Flags: unchecked
+Name: "startupicon";  Description: "{cm:AutoStartWithWindows}"; GroupDescription: "{cm:Startup}"; Flags: unchecked; Check: not IsAdminInstallMode
 Name: "ffmpeg";       Description: "{code:ComponentDescription|ffmpeg}"; GroupDescription: "{cm:OptionalComponents}"
 Name: "ocrengine";    Description: "{code:ComponentDescription|ocrengine}"; GroupDescription: "{cm:OptionalComponents}"
 Name: "ocrengine\lang_eng"; Description: "{code:ComponentDescription|lang_eng}"; GroupDescription: "{cm:OptionalComponents}"
@@ -123,6 +125,8 @@ Name: "ocrengine\lang_kor"; Description: "{code:ComponentDescription|lang_kor}";
 Name: "ocrengine\lang_chi_sim"; Description: "{code:ComponentDescription|lang_chi_sim}"; GroupDescription: "{cm:OptionalComponents}"; Flags: unchecked
 
 [Files]
+; Used only while replacing the old elevated auto-start task.
+Source: "scripts\windows\migrate-startup.ps1"; DestDir: "{app}"; Flags: deleteafterinstall; Check: IsAdminInstallMode
 ; Main application
 Source: "{#ReleaseDir}\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
 Source: "LICENSE"; DestDir: "{app}"; Flags: ignoreversion
@@ -177,9 +181,17 @@ Name: "{group}\{#MyAppName}";        Filename: "{app}\{#MyAppExeName}"; Comment:
 Name: "{group}\{cm:UninstallEntry}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#MyAppName}";  Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
+[Registry]
+; Autostart belongs to the signed-in user, not an elevated installer account.
+; In all-users mode, each user can enable it from EShot settings instead.
+Root: HKA; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "EShot"; ValueData: """{app}\{#MyAppExeName}"" --silent"; Tasks: startupicon; Check: not IsAdminInstallMode
+
 [Run]
-Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command ""Unregister-ScheduledTask -TaskName '{#MyAppName}' -Confirm:$false -ErrorAction SilentlyContinue"""; Flags: runhidden; Tasks: startupicon
-Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command ""$User=[System.Security.Principal.WindowsIdentity]::GetCurrent().Name; $A=New-ScheduledTaskAction -Execute '{app}\{#MyAppExeName}' -Argument '--silent'; $T=New-ScheduledTaskTrigger -AtLogOn -User $User; $T.Delay='PT30S'; $P=New-ScheduledTaskPrincipal -UserId $User -LogonType Interactive -RunLevel Highest; $S=New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries; Register-ScheduledTask -TaskName '{#MyAppName}' -Action $A -Trigger $T -Principal $P -Settings $S -Force | Out-Null"""; Flags: runhidden; Tasks: startupicon
+; Preserve auto-start for the original user before deleting the legacy task.
+Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File ""{app}\migrate-startup.ps1"" -Exe ""{app}\{#MyAppExeName}"""; Flags: runhidden runasoriginaluser; Check: IsAdminInstallMode
+; A standard user may have installed the old version with a separate admin
+; account. In that case the old scheduled task belongs to that admin account.
+Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File ""{app}\migrate-startup.ps1"" -Exe ""{app}\{#MyAppExeName}"" -RemoveTask"; Flags: runhidden; Check: IsAdminInstallMode
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchAfterInstall}"; Flags: shellexec nowait postinstall skipifsilent
 
 [UninstallRun]
@@ -190,6 +202,38 @@ Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile
 var
   GOcrPreinstalled: Boolean;
   GInstallStateFrozen: Boolean;
+
+procedure DeleteMatchingStartup(RootKey: Integer; RunKey, ExpectedCommand: String);
+var
+  RunCommand: String;
+begin
+  if RegQueryStringValue(RootKey, RunKey, '{#MyAppName}', RunCommand) and
+     (CompareText(RunCommand, ExpectedCommand) = 0) then
+    RegDeleteValue(RootKey, RunKey, '{#MyAppName}');
+end;
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  RunKey: String;
+  ExpectedCommand: String;
+  UserHives: TArrayOfString;
+  I: Integer;
+begin
+  if CurUninstallStep <> usUninstall then
+    Exit;
+
+  // Settings can enable auto-start after Setup finishes, so its Run value
+  // may not appear in the install log. Never delete another EShot copy's entry.
+  RunKey := 'Software\Microsoft\Windows\CurrentVersion\Run';
+  ExpectedCommand := '"' + ExpandConstant('{app}\{#MyAppExeName}') + '" --silent';
+  DeleteMatchingStartup(HKCU, RunKey, ExpectedCommand);
+
+  // An all-users uninstall may be elevated with different credentials from
+  // the signed-in user. Clean matching entries in profiles currently loaded.
+  if IsAdminInstallMode and RegGetSubkeyNames(HKEY_USERS, '', UserHives) then
+    for I := 0 to GetArrayLength(UserHives) - 1 do
+      DeleteMatchingStartup(HKEY_USERS, UserHives[I] + '\' + RunKey, ExpectedCommand);
+end;
 
 function IsInstalledFile(RelativePath: String): Boolean;
 begin

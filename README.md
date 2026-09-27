@@ -65,6 +65,8 @@ Download the latest build from [GitHub Releases](https://github.com/Benoks/EShot
 2. Run the installer and choose the optional FFmpeg/OCR components you need.
 3. Launch EShot from the Start menu or system tray.
 
+The installer defaults to the current user and does not require administrator permission. An all-users install is optional and may require an administrator account; each account can enable auto-start from EShot Settings. Existing all-users installations stay in that mode when updated; uninstall the old installation first if you want to switch to a per-user install. For all-users installs, uninstall can remove per-user auto-start entries only from profiles loaded at that time. Windows may restrict capture or keyboard focus over elevated applications and the UAC secure desktop.
+
 Portable x64 and ARM64 ZIP archives are also attached to each release.
 
 ### Linux: KDE Plasma 6 and GNOME Wayland
@@ -99,7 +101,7 @@ The AppImage bundles EShot and Qt. Optional media, OCR, and desktop-integration 
 
 Each release also includes `EShot-v<version>-linux-x64.tar.gz` for users who prefer an unpacked build. Unlike the AppImage, this archive relies on compatible Qt and runtime libraries installed by the Linux distribution.
 
-Integrated AppImages are stored for the current user under `~/.local/opt/EShot`. EShot checks for updates and always keeps manual updating available. If an EShot-managed Windows installation or integrated AppImage is at least two stable releases behind, EShot downloads the matching release asset, verifies its GitHub SHA-256 digest, updates silently, and restarts. Native package builds should be updated through their package manager.
+Integrated AppImages are stored for the current user under `~/.local/opt/EShot`. EShot checks for updates and always keeps manual updating available. If a per-user Windows installation or integrated AppImage is at least two stable releases behind, EShot downloads the matching release asset, verifies its GitHub SHA-256 digest, updates silently, and restarts. All-users Windows installations require an administrator for updates. Native package builds should be updated through their package manager.
 
 ### Arch Linux and CachyOS
 

@@ -48,6 +48,7 @@ set(SOURCES
     src/core/VisualSearch.cpp
     src/core/UpdateAssetSelector.cpp
     src/core/UpdatePolicy.cpp
+    src/core/WindowsInstallPolicy.cpp
     src/core/LinuxUpdateScript.cpp
     src/core/LinuxDependencySelection.cpp
     src/core/CatboxUploader.cpp
@@ -109,6 +110,7 @@ set(HEADERS
     src/core/VisualSearch.h
     src/core/UpdateAssetSelector.h
     src/core/UpdatePolicy.h
+    src/core/WindowsInstallPolicy.h
     src/core/LinuxUpdateScript.h
     src/core/LinuxDependencySelection.h
     src/core/CatboxUploader.h
@@ -160,7 +162,7 @@ if(UNIX AND NOT APPLE)
     list(APPEND HEADERS src/core/LinuxDesktopNotification.h)
 endif()
 
-# Embed admin manifest into the executable (MSVC auto-embeds .manifest files
+# Embed the application manifest into the executable (MSVC auto-embeds .manifest files
 # listed as sources; for MinGW we use a .rc file)
 if(MINGW)
     configure_file(
@@ -210,6 +212,8 @@ if(WIN32)
         Shell32
         Dwmapi
         Advapi32
+        Ole32
+        OleAut32
     )
 endif()
 
@@ -480,6 +484,15 @@ if(BUILD_TESTING)
     target_include_directories(eshot_update_policy_tests PRIVATE src)
     target_link_libraries(eshot_update_policy_tests PRIVATE Qt6::Core Qt6::Test)
     add_test(NAME update_policy COMMAND eshot_update_policy_tests)
+
+    qt_add_executable(eshot_windows_install_policy_tests
+        tests/WindowsInstallPolicyTests.cpp
+        src/core/WindowsInstallPolicy.cpp
+        src/core/WindowsInstallPolicy.h
+    )
+    target_include_directories(eshot_windows_install_policy_tests PRIVATE src)
+    target_link_libraries(eshot_windows_install_policy_tests PRIVATE Qt6::Core Qt6::Test)
+    add_test(NAME windows_install_policy COMMAND eshot_windows_install_policy_tests)
 
     qt_add_executable(eshot_linux_update_script_tests
         tests/LinuxUpdateScriptTests.cpp

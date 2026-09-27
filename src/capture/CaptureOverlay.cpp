@@ -1877,8 +1877,8 @@ void CaptureOverlay::performCapture()
 #endif
 
 #ifdef Q_OS_WIN
-    // Force the overlay to the very top of the z-order, even above elevated windows.
-    // This works because EShot now runs with administrator privileges (see EShot.manifest).
+    // Keep the overlay above ordinary windows. Windows may restrict focus or
+    // input over elevated windows because EShot runs under the signed-in user.
     HWND hwnd = reinterpret_cast<HWND>(winId());
     ::SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
                    SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);

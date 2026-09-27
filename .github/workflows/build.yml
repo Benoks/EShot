@@ -266,6 +266,28 @@ jobs:
           --config Release
           --prefix "${{ env.DIST_DIR }}"
 
+      - name: Verify Windows install policy
+        shell: pwsh
+        run: |
+          # The install policy unit tests run in the Linux job. Running them
+          # here would need the target Qt DLLs on PATH, which the Arm runner's
+          # cross-compiled Qt does not provide.
+          $exe = "${{ env.DIST_DIR }}/bin/EShot.exe"
+          $manifestPath = Join-Path $env:RUNNER_TEMP 'EShot.embedded.manifest'
+          # No vcvars env in this step, so mt.exe is not on PATH. Use the SDK copy.
+          $mt = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Recurse -Filter mt.exe -ErrorAction SilentlyContinue |
+            Where-Object { $_.Directory.Name -eq 'x64' } |
+            Sort-Object FullName -Descending |
+            Select-Object -First 1
+          if (-not $mt) { throw 'mt.exe was not found in the Windows SDK' }
+          & $mt.FullName "-inputresource:$exe;#1" "-out:$manifestPath"
+          if ($LASTEXITCODE -ne 0) { throw 'Could not inspect the embedded manifest' }
+          [xml]$manifest = Get-Content $manifestPath -Raw
+          $level = $manifest.SelectSingleNode("//*[local-name()='requestedExecutionLevel']")
+          if (-not $level -or $level.GetAttribute('level') -ne 'asInvoker') {
+            throw 'EShot.exe must run without administrator elevation'
+          }
+
       # Bundle the Qt runtime + the MSVC redistributable DLLs next to the exe so
       # the artifact (and installer) is self-contained.
       #
@@ -336,6 +358,48 @@ jobs:
           path: ${{ env.DIST_DIR }}/bin
           if-no-files-found: error
 
+      - name: Verify legacy startup migration
+        shell: pwsh
+        run: |
+          $runKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+          $previous = (Get-ItemProperty $runKey -ErrorAction SilentlyContinue).EShot
+          $exe = 'C:\Program Files\EShot\EShot.exe'
+          try {
+            function Get-ScheduledTask {
+              [CmdletBinding()]
+              param([string]$TaskName)
+              [pscustomobject]@{
+                Principal = [pscustomobject]@{ UserId = $global:taskUserId }
+                Actions = @([pscustomobject]@{ Execute = 'C:\Old\EShot.exe' })
+              }
+            }
+            function Unregister-ScheduledTask {
+              [CmdletBinding(SupportsShouldProcess)]
+              param([string]$TaskName)
+              if ($TaskName -eq 'EShot') { $global:removedTask = $true }
+            }
+            # Task Scheduler reports local principals with or without the
+            # machine prefix; both forms must be recognised as this user.
+            $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent()
+            foreach ($userId in @($identity.Name, $env:USERNAME, $identity.User.Value)) {
+              $global:taskUserId = $userId
+              $global:removedTask = $false
+              Remove-ItemProperty -Path $runKey -Name 'EShot' -ErrorAction SilentlyContinue
+              & ./scripts/windows/migrate-startup.ps1 -Exe $exe -RemoveTask
+              $actual = (Get-ItemProperty $runKey -ErrorAction SilentlyContinue).EShot
+              if ($actual -ne ('"' + $exe + '" --silent')) {
+                throw "Legacy startup migration wrote an incorrect command for ${userId}: $actual"
+              }
+              if (-not $global:removedTask) { throw "Legacy task was not removed for $userId" }
+            }
+          } finally {
+            if ($null -eq $previous) {
+              Remove-ItemProperty -Path $runKey -Name 'EShot' -ErrorAction SilentlyContinue
+            } else {
+              Set-ItemProperty -Path $runKey -Name 'EShot' -Value $previous
+            }
+          }
+
       # Build the Inno Setup installer from the assembled dist/bin tree.
       # ISCC is x86; on the Arm runner it runs under emulation and still
       # packages the native Arm payload. /F overrides the output basename so
@@ -347,6 +411,59 @@ jobs:
             "/DReleaseDir=${{ env.DIST_DIR }}\bin" `
             "/FEShot_Setup_v${{ env.APP_VERSION }}_${{ matrix.arch }}" `
             EShot_Setup.iss
+
+      - name: Smoke test per-user installer
+        shell: pwsh
+        run: |
+          $setup = (Resolve-Path "installer_output/EShot_Setup_v${{ env.APP_VERSION }}_${{ matrix.arch }}.exe").Path
+          $result = Start-Process -FilePath $setup -ArgumentList @('/VERYSILENT', '/CURRENTUSER', '/TASKS=startupicon', '/NORESTART') -Wait -PassThru
+          if ($result.ExitCode -ne 0) { throw "Per-user installation failed: $($result.ExitCode)" }
+
+          $uninstallKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{E5H0T-SCAP-2024-GUID-000000000001}_is1'
+          $installLocation = (Get-ItemProperty $uninstallKey).InstallLocation
+          $installedExe = Join-Path $installLocation 'EShot.exe'
+          if (-not (Test-Path $installedExe)) { throw 'EShot was not installed for the current user' }
+
+          $runKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+          $startup = (Get-ItemProperty $runKey).EShot
+          $expectedStartup = '"' + $installedExe + '" --silent'
+          if ($startup -ne $expectedStartup) { throw "Incorrect per-user startup entry: $startup" }
+
+          $uninstaller = Join-Path $installLocation 'unins000.exe'
+          $result = Start-Process -FilePath $uninstaller -ArgumentList '/VERYSILENT' -Wait -PassThru
+          if ($result.ExitCode -ne 0) { throw "Per-user uninstall failed: $($result.ExitCode)" }
+          if ((Get-ItemProperty $runKey -ErrorAction SilentlyContinue).EShot) {
+            throw 'Uninstall left behind the per-user startup entry'
+          }
+
+          # Startup is unchecked by default. The Settings dialog can enable it
+          # later, so uninstall must also clean that independently created value.
+          $result = Start-Process -FilePath $setup -ArgumentList @('/VERYSILENT', '/CURRENTUSER', '/TASKS=desktopicon', '/NORESTART') -Wait -PassThru
+          if ($result.ExitCode -ne 0) { throw "Default per-user installation failed: $($result.ExitCode)" }
+          $installLocation = (Get-ItemProperty $uninstallKey).InstallLocation
+          $installedExe = Join-Path $installLocation 'EShot.exe'
+          Set-ItemProperty -Path $runKey -Name 'EShot' -Value ('"' + $installedExe + '" --silent')
+          $uninstaller = Join-Path $installLocation 'unins000.exe'
+          $result = Start-Process -FilePath $uninstaller -ArgumentList '/VERYSILENT' -Wait -PassThru
+          if ($result.ExitCode -ne 0) { throw "Default per-user uninstall failed: $($result.ExitCode)" }
+          if ((Get-ItemProperty $runKey -ErrorAction SilentlyContinue).EShot) {
+            throw 'Uninstall left behind startup enabled later in Settings'
+          }
+
+          # Uninstall must not erase another copy's startup value, even if the
+          # installer originally created this one with startupicon selected.
+          $result = Start-Process -FilePath $setup -ArgumentList @('/VERYSILENT', '/CURRENTUSER', '/TASKS=startupicon', '/NORESTART') -Wait -PassThru
+          if ($result.ExitCode -ne 0) { throw "Per-user reinstallation failed: $($result.ExitCode)" }
+          $installLocation = (Get-ItemProperty $uninstallKey).InstallLocation
+          $foreignStartup = '"C:\Other\EShot.exe" --silent'
+          Set-ItemProperty -Path $runKey -Name 'EShot' -Value $foreignStartup
+          $uninstaller = Join-Path $installLocation 'unins000.exe'
+          $result = Start-Process -FilePath $uninstaller -ArgumentList '/VERYSILENT' -Wait -PassThru
+          if ($result.ExitCode -ne 0) { throw "Per-user reinstallation uninstall failed: $($result.ExitCode)" }
+          if ((Get-ItemProperty $runKey).EShot -ne $foreignStartup) {
+            throw 'Uninstall removed another EShot copy startup entry'
+          }
+          Remove-ItemProperty -Path $runKey -Name 'EShot'
 
       - name: Upload installer
         uses: actions/upload-artifact@v4

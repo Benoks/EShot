@@ -8,13 +8,12 @@
   />
   <description>EShot Screenshot Tool</description>
 
-  <!-- Request highest available privileges so the overlay can sit on top of
-       elevated windows (Task Manager, admin apps, etc.) and RegisterHotKey
-       works even when an elevated window is in the foreground. -->
+  <!-- Run under the signed-in user. Capturing elevated windows and the UAC
+       secure desktop is intentionally outside the standard-user guarantee. -->
   <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3">
     <security>
       <requestedPrivileges>
-        <requestedExecutionLevel level="requireAdministrator" uiAccess="false"/>
+        <requestedExecutionLevel level="asInvoker" uiAccess="false"/>
       </requestedPrivileges>
     </security>
   </trustInfo>

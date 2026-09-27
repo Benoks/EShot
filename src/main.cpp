@@ -64,9 +64,93 @@
 
 #ifdef Q_OS_WIN
 #include <windows.h>
+#include <exdisp.h>
+#include <shldisp.h>
+#include <shlobj.h>
+#include <shlguid.h>
 #endif
 
 namespace {
+
+#ifdef Q_OS_WIN
+bool isProcessElevated()
+{
+    HANDLE token = nullptr;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token))
+        return false;
+    TOKEN_ELEVATION elevation = {};
+    DWORD size = 0;
+    const bool elevated = GetTokenInformation(token, TokenElevation, &elevation,
+                                              sizeof(elevation), &size)
+        && elevation.TokenIsElevated != 0;
+    CloseHandle(token);
+    return elevated;
+}
+
+// Starts a program through the desktop shell, so it runs as the signed-in
+// user without the elevated token of the calling process.
+bool launchAsDesktopUser(const QString &program, const QString &arguments)
+{
+    bool launched = false;
+    IShellWindows *shellWindows = nullptr;
+    IDispatch *desktopDispatch = nullptr;
+    IServiceProvider *serviceProvider = nullptr;
+    IShellBrowser *shellBrowser = nullptr;
+    IShellView *shellView = nullptr;
+    IDispatch *backgroundDispatch = nullptr;
+    IShellFolderViewDual *folderView = nullptr;
+    IDispatch *applicationDispatch = nullptr;
+    IShellDispatch2 *shellDispatch = nullptr;
+
+    VARIANT location;
+    VariantInit(&location);
+    location.vt = VT_I4;
+    location.lVal = CSIDL_DESKTOP;
+    VARIANT empty;
+    VariantInit(&empty);
+    long desktopWindow = 0;
+
+    if (SUCCEEDED(CoCreateInstance(CLSID_ShellWindows, nullptr, CLSCTX_LOCAL_SERVER,
+                                   IID_PPV_ARGS(&shellWindows)))
+        && shellWindows->FindWindowSW(&location, &empty, SWC_DESKTOP, &desktopWindow,
+                                      SWFO_NEEDDISPATCH, &desktopDispatch) == S_OK
+        && desktopDispatch
+        && SUCCEEDED(desktopDispatch->QueryInterface(IID_PPV_ARGS(&serviceProvider)))
+        && SUCCEEDED(serviceProvider->QueryService(SID_STopLevelBrowser,
+                                                   IID_PPV_ARGS(&shellBrowser)))
+        && SUCCEEDED(shellBrowser->QueryActiveShellView(&shellView))
+        && SUCCEEDED(shellView->GetItemObject(SVGIO_BACKGROUND,
+                                              IID_PPV_ARGS(&backgroundDispatch)))
+        && SUCCEEDED(backgroundDispatch->QueryInterface(IID_PPV_ARGS(&folderView)))
+        && SUCCEEDED(folderView->get_Application(&applicationDispatch))
+        && SUCCEEDED(applicationDispatch->QueryInterface(IID_PPV_ARGS(&shellDispatch)))) {
+        const QString nativeProgram = QDir::toNativeSeparators(program);
+        BSTR file = SysAllocString(reinterpret_cast<const OLECHAR *>(nativeProgram.utf16()));
+        VARIANT args;
+        VariantInit(&args);
+        args.vt = VT_BSTR;
+        args.bstrVal = SysAllocString(reinterpret_cast<const OLECHAR *>(arguments.utf16()));
+        VARIANT show;
+        VariantInit(&show);
+        show.vt = VT_I4;
+        show.lVal = SW_SHOWNORMAL;
+        launched = SUCCEEDED(shellDispatch->ShellExecute(file, args, empty, empty, show));
+        VariantClear(&args);
+        SysFreeString(file);
+    }
+
+    if (shellDispatch) shellDispatch->Release();
+    if (applicationDispatch) applicationDispatch->Release();
+    if (folderView) folderView->Release();
+    if (backgroundDispatch) backgroundDispatch->Release();
+    if (shellView) shellView->Release();
+    if (shellBrowser) shellBrowser->Release();
+    if (serviceProvider) serviceProvider->Release();
+    if (desktopDispatch) desktopDispatch->Release();
+    if (shellWindows) shellWindows->Release();
+    return launched;
+}
+#endif
 
 void prepareKWinScreenshotPermission()
 {
@@ -1314,6 +1398,9 @@ int main(int argc, char *argv[])
     parser.addOption(saveOption);
     QCommandLineOption silentOption("silent", "Start silently in the background (used by autostart).");
     parser.addOption(silentOption);
+    QCommandLineOption relaunchedOption("relaunched-as-user");
+    relaunchedOption.setFlags(QCommandLineOption::HiddenFromHelp);
+    parser.addOption(relaunchedOption);
     QCommandLineOption testGifOption("test-gif", "Run internal GIF encoder test and exit.");
     parser.addOption(testGifOption);
     QCommandLineOption testRecordGifOption("test-record-gif", "Run internal GIF recording test and exit.");
@@ -1345,11 +1432,40 @@ int main(int argc, char *argv[])
         qWarning() << "[EShot] System tray is not available yet; keeping the app alive for startup.";
     }
 
-    const QString instanceName = QStringLiteral("EShot.SingleInstance");
+#ifdef Q_OS_WIN
+    // Older releases required administrator rights, so their updater and
+    // legacy autostart task start this build elevated. Settings would then
+    // live under the elevated account; hand over to the signed-in user. The
+    // marker stops a loop when the desktop shell itself is elevated (UAC off).
+    if (parser.isSet(silentOption) && !parser.isSet(relaunchedOption)
+        && isProcessElevated()) {
+        const HRESULT comInit = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+        const bool relaunched = launchAsDesktopUser(
+            QCoreApplication::applicationFilePath(),
+            QStringLiteral("--silent --relaunched-as-user"));
+        if (SUCCEEDED(comInit))
+            CoUninitialize();
+        if (relaunched)
+            return 0;
+    }
+#endif
+
+    // Keep the lock private to this user. A shared name in /tmp (or a
+    // machine-wide pipe on Windows) lets another account's instance, or a
+    // squatting process, swallow our commands.
+#ifdef Q_OS_WIN
+    const QString instanceName = QStringLiteral("EShot.SingleInstance.%1")
+        .arg(qEnvironmentVariable("USERNAME"));
+#else
+    const QString runtimeDir = QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation);
+    const QString instanceName = runtimeDir.isEmpty()
+        ? QStringLiteral("EShot.SingleInstance.%1").arg(qEnvironmentVariable("USER"))
+        : QDir(runtimeDir).filePath(QStringLiteral("EShot.SingleInstance"));
+#endif
     // Returns true if the command was forwarded to an already-running instance.
     auto forwardToRunningInstance = [&parser, &controlOption, &captureOption,
                                      &settingsOption, &saveOption, &quitOption,
-                                     &instanceName]() {
+                                     &silentOption, &instanceName]() {
         QLocalSocket socket;
         socket.connectToServer(instanceName);
         if (!socket.waitForConnected(150))
@@ -1358,7 +1474,8 @@ int main(int argc, char *argv[])
             ? ApplicationInstanceCommand::Control
             : ApplicationInstanceCommand::fromInvocation(
                 parser.isSet(captureOption), parser.isSet(settingsOption),
-                parser.isSet(saveOption), parser.isSet(quitOption), true);
+                parser.isSet(saveOption), parser.isSet(quitOption),
+                !parser.isSet(silentOption));
         const QByteArray wireCommand = ApplicationInstanceCommand::toWire(command);
         if (!wireCommand.isEmpty()) {
             socket.write(wireCommand);
@@ -1376,6 +1493,7 @@ int main(int argc, char *argv[])
         return 0;
 
     QLocalServer instanceServer;
+    instanceServer.setSocketOptions(QLocalServer::UserAccessOption);
     if (!instanceServer.listen(instanceName)) {
         // Another instance may have grabbed the lock between the probe above
         // and this listen() call. Retry the connection before removing the
