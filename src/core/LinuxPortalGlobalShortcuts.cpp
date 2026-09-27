@@ -4,6 +4,7 @@
 #include "LinuxPortalHostRegistry.h"
 #include "LinuxPortalRequest.h"
 
+#include <QTimer>
 #include <QCoreApplication>
 #include <QDebug>
 #include <QGuiApplication>
@@ -221,7 +222,13 @@ void LinuxPortalGlobalShortcuts::createSession()
 void LinuxPortalGlobalShortcuts::bindShortcuts()
 {
 #if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
-    if (m_bindPending || m_sessionHandle.isEmpty() || m_bindCompleted)
+    // Shortcuts changed while a bind is waiting for the user (e.g. GNOME's
+    // permission dialog). Bind the new set once that request finishes.
+    if (m_bindPending) {
+        m_rebindAfterPending = true;
+        return;
+    }
+    if (m_sessionHandle.isEmpty() || m_bindCompleted)
         return;
 
     QList<PortalShortcut> shortcuts;
@@ -310,6 +317,7 @@ void LinuxPortalGlobalShortcuts::closeSession()
     m_createPending = false;
     m_bindPending = false;
     m_bindCompleted = false;
+    m_rebindAfterPending = false;
 #endif
 }
 
@@ -366,7 +374,7 @@ QString LinuxPortalGlobalShortcuts::preferredTrigger(UINT modifiers, UINT virtua
     if (modifiers & MOD_CONTROL) parts << QStringLiteral("CTRL");
     if (modifiers & MOD_ALT) parts << QStringLiteral("ALT");
     if (modifiers & MOD_SHIFT) parts << QStringLiteral("SHIFT");
-    if (modifiers & MOD_WIN) parts << QStringLiteral("SUPER");
+    if (modifiers & MOD_WIN) parts << QStringLiteral("LOGO");
 
     const int modifierCount = parts.size();
     if (virtualKey >= 'A' && virtualKey <= 'Z') {
@@ -459,6 +467,10 @@ void LinuxPortalGlobalShortcuts::onBindShortcutsResponse(uint response, const QV
     qInfo() << "[HotkeyManager] Global shortcuts portal bound:" << results;
     m_bindCompleted = true;
     updateAssignedTriggers(results);
+    if (m_rebindAfterPending) {
+        m_rebindAfterPending = false;
+        QTimer::singleShot(0, this, [this]() { setShortcuts(m_shortcuts); });
+    }
 
     const LinuxDesktopEnvironment desktop = LinuxDesktopIntegration::detect(
         qEnvironmentVariable("XDG_CURRENT_DESKTOP"),

@@ -459,10 +459,10 @@ public:
     bool needsAuth() const override { return true; }
     QString authValue() const override { return m_apiKey; }
     QString authPlaceholder() const override { return TranslationManager::uploadApiKeyPlaceholder(m_name); }
-    void setAuthValue(const QString &value) override
+    bool setAuthValue(const QString &value) override
     {
         m_apiKey = value.trimmed();
-        SecureCredentialStore::write(m_settingsKey, m_apiKey);
+        return SecureCredentialStore::write(m_settingsKey, m_apiKey);
     }
 
     void upload() override
@@ -609,10 +609,10 @@ public:
     bool needsAuth() const override { return true; }
     QString authValue() const override { return m_token; }
     QString authPlaceholder() const override { return TranslationManager::yandexAuthPlaceholder(); }
-    void setAuthValue(const QString &value) override
+    bool setAuthValue(const QString &value) override
     {
         m_token = normalizeOAuthTokenInput(value);
-        SecureCredentialStore::write(QStringLiteral("yandexDiskToken"), m_token);
+        return SecureCredentialStore::write(QStringLiteral("yandexDiskToken"), m_token);
     }
 
     void upload() override
@@ -840,10 +840,10 @@ public:
     bool needsAuth() const override { return true; }
     QString authValue() const override { return m_token; }
     QString authPlaceholder() const override { return TranslationManager::googleDriveAuthPlaceholder(); }
-    void setAuthValue(const QString &value) override
+    bool setAuthValue(const QString &value) override
     {
         m_token = normalizeOAuthTokenInput(value);
-        SecureCredentialStore::write(QStringLiteral("googleDriveToken"), m_token);
+        return SecureCredentialStore::write(QStringLiteral("googleDriveToken"), m_token);
     }
 
     void upload() override

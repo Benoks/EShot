@@ -12,6 +12,7 @@ struct Result {
 QString captureCommand(const QString &executablePath);
 QString gsettingsStringValue(const QString &value);
 QString acceleratorFromPortableSequence(const QString &portableSequence);
+QString acceleratorFromPortalTrigger(const QString &trigger);
 QString preferredExecutable(const QString &appImagePath,
                             const QString &applicationFilePath,
                             const QString &integratedAppImagePath);

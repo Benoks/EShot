@@ -70,6 +70,7 @@ private:
     bool m_createPending = false;
     bool m_bindPending = false;
     bool m_bindCompleted = false;
+    bool m_rebindAfterPending = false;
     uint m_version = 0;
     QStringList m_createRequestPaths;
     QStringList m_bindRequestPaths;

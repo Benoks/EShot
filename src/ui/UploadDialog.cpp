@@ -211,9 +211,11 @@ void UploadDialog::updateAuthHelp()
 void UploadDialog::onSaveAuth()
 {
     if (!m_uploader) return;
-    m_uploader->setAuthValue(m_authEdit->text());
+    const bool stored = m_uploader->setAuthValue(m_authEdit->text());
     m_authEdit->setText(m_uploader->authValue());
-    m_statusLabel->setText(TranslationManager::uploadAuthSaved());
+    // Without a working keyring the value only lasts for this session.
+    m_statusLabel->setText(stored ? TranslationManager::uploadAuthSaved()
+                                  : TranslationManager::uploadAuthSaveFailed());
 }
 
 void UploadDialog::onUploadClicked()

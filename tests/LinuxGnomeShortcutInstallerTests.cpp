@@ -49,6 +49,20 @@ private slots:
                     QStringLiteral("Unknown+P")).isEmpty());
     }
 
+    void convertsPortalTriggersToGnomeAccelerators()
+    {
+        QCOMPARE(LinuxGnomeShortcutInstaller::acceleratorFromPortalTrigger(
+                     QStringLiteral("CTRL+SHIFT+s")),
+                 QStringLiteral("<Primary><Shift>s"));
+        QCOMPARE(LinuxGnomeShortcutInstaller::acceleratorFromPortalTrigger(
+                     QStringLiteral("LOGO+ALT+F12")),
+                 QStringLiteral("<Super><Alt>F12"));
+        QCOMPARE(LinuxGnomeShortcutInstaller::acceleratorFromPortalTrigger(
+                     QStringLiteral("Print")), QStringLiteral("Print"));
+        QVERIFY(LinuxGnomeShortcutInstaller::acceleratorFromPortalTrigger(
+                    QStringLiteral("NUM+p")).isEmpty());
+    }
+
     void serializesShellCommandsAsGSettingsStringValues()
     {
         QCOMPARE(LinuxGnomeShortcutInstaller::gsettingsStringValue(

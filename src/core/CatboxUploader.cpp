@@ -53,10 +53,10 @@ QString CatboxUploader::authPlaceholder() const
     return TranslationManager::catboxUserHashPlaceholder();
 }
 
-void CatboxUploader::setUserHash(const QString &hash)
+bool CatboxUploader::setUserHash(const QString &hash)
 {
     m_userHash = hash.trimmed();
-    SecureCredentialStore::write(QStringLiteral("catboxUserHash"), m_userHash);
+    return SecureCredentialStore::write(QStringLiteral("catboxUserHash"), m_userHash);
 }
 
 void CatboxUploader::upload()

@@ -2408,10 +2408,72 @@ void SettingsDialog::onSave()
         newVKey = VK_SNAPSHOT;
     }
 
+    // Validate every hotkey and apply autostart before touching live
+    // registrations, so a refused step cannot leave keys half applied.
+    UINT pauseMod = 0, pauseVKey = 0;
+    UINT stopMod = 0, stopVKey = 0;
+    UINT cancelMod = 0, cancelVKey = 0;
+    if (!m_recordingPauseHotkeyEdit || !keySequenceToWin32(m_recordingPauseHotkeyEdit->keySequence(), pauseMod, pauseVKey) ||
+        !m_recordingStopHotkeyEdit || !keySequenceToWin32(m_recordingStopHotkeyEdit->keySequence(), stopMod, stopVKey) ||
+        !m_recordingCancelHotkeyEdit || !keySequenceToWin32(m_recordingCancelHotkeyEdit->keySequence(), cancelMod, cancelVKey)) {
+        QMessageBox::warning(this, TranslationManager::errInvalidHotkeyTitle(), TranslationManager::errInvalidHotkey());
+        return;
+    }
+    const bool recordingHotkeysChanged =
+        settingsHotkeyChanged({pauseMod, pauseVKey},
+                              {static_cast<quint32>(m_settings->value("recordingPauseHotkeyModifiers", MOD_CONTROL | MOD_ALT).toUInt()),
+                               static_cast<quint32>(m_settings->value("recordingPauseHotkeyVKey", 'P').toUInt())}) ||
+        settingsHotkeyChanged({stopMod, stopVKey},
+                              {static_cast<quint32>(m_settings->value("recordingStopHotkeyModifiers", MOD_CONTROL | MOD_ALT).toUInt()),
+                               static_cast<quint32>(m_settings->value("recordingStopHotkeyVKey", 'S').toUInt())}) ||
+        settingsHotkeyChanged({cancelMod, cancelVKey},
+                              {static_cast<quint32>(m_settings->value("recordingCancelHotkeyModifiers", MOD_CONTROL | MOD_ALT).toUInt()),
+                               static_cast<quint32>(m_settings->value("recordingCancelHotkeyVKey", 'X').toUInt())});
+    auto optionalHotkey = [](QKeySequenceEdit *edit, UINT &mod, UINT &vkey) {
+        mod = 0;
+        vkey = 0;
+        if (!edit || edit->keySequence().isEmpty())
+            return true;
+        return keySequenceToWin32(edit->keySequence(), mod, vkey);
+    };
+    UINT instantMod = 0, instantVKey = 0;
+    UINT gifMod = 0, gifVKey = 0;
+    UINT videoMod = 0, videoVKey = 0;
+    UINT windowMod = 0, windowVKey = 0;
+    if (!optionalHotkey(m_instantCaptureHotkeyEdit, instantMod, instantVKey) ||
+        !optionalHotkey(m_gifCaptureHotkeyEdit, gifMod, gifVKey) ||
+        !optionalHotkey(m_videoCaptureHotkeyEdit, videoMod, videoVKey) ||
+        !optionalHotkey(m_windowCaptureHotkeyEdit, windowMod, windowVKey)) {
+        QMessageBox::warning(this, TranslationManager::errInvalidHotkeyTitle(), TranslationManager::errInvalidHotkey());
+        return;
+    }
+    const bool actionHotkeysChanged =
+        settingsHotkeyChanged({instantMod, instantVKey},
+                              {static_cast<quint32>(m_settings->value("instantCaptureHotkeyModifiers", 0).toUInt()),
+                               static_cast<quint32>(m_settings->value("instantCaptureHotkeyVKey", 0).toUInt())}) ||
+        settingsHotkeyChanged({gifMod, gifVKey},
+                              {static_cast<quint32>(m_settings->value("gifCaptureHotkeyModifiers", 0).toUInt()),
+                               static_cast<quint32>(m_settings->value("gifCaptureHotkeyVKey", 0).toUInt())}) ||
+        settingsHotkeyChanged({videoMod, videoVKey},
+                              {static_cast<quint32>(m_settings->value("videoCaptureHotkeyModifiers", 0).toUInt()),
+                               static_cast<quint32>(m_settings->value("videoCaptureHotkeyVKey", 0).toUInt())}) ||
+        settingsHotkeyChanged({windowMod, windowVKey},
+                              {static_cast<quint32>(m_settings->value("windowCaptureHotkeyModifiers", defaultWindowCaptureModifiers()).toUInt()),
+                               static_cast<quint32>(m_settings->value("windowCaptureHotkeyVKey", defaultWindowCaptureVirtualKey()).toUInt())});
+    // Apply the autostart change before persisting anything: if the Run key
+    // update fails, no partial settings are written (onSave partial
+    // success guard).
+    if (m_autoStartCheck->isChecked() != m_loadedAutoStart && !setAutoStartEnabled(m_autoStartCheck->isChecked())) {
+        QMessageBox::warning(this, TranslationManager::errTitle(),
+                             TranslationManager::autoStartSaveFailed());
+        return;
+    }
+    m_loadedAutoStart = m_autoStartCheck->isChecked();
+    const UINT oldCaptureMod = m_settings->value("hotkeyModifiers", 0).toUInt();
+    const UINT oldCaptureVKey = m_settings->value("hotkeyVKey", VK_SNAPSHOT).toUInt();
     const bool captureHotkeyChanged = settingsHotkeyChanged(
         {newMod, newVKey},
-        {static_cast<quint32>(m_settings->value("hotkeyModifiers", 0).toUInt()),
-         static_cast<quint32>(m_settings->value("hotkeyVKey", VK_SNAPSHOT).toUInt())});
+        {static_cast<quint32>(oldCaptureMod), static_cast<quint32>(oldCaptureVKey)});
     if (captureHotkeyChanged) {
 #if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
         const LinuxDesktopEnvironment desktop = LinuxDesktopIntegration::detect(
@@ -2450,64 +2512,21 @@ void SettingsDialog::onSave()
         return;
     }
 
-    UINT pauseMod = 0, pauseVKey = 0;
-    UINT stopMod = 0, stopVKey = 0;
-    UINT cancelMod = 0, cancelVKey = 0;
-    if (!m_recordingPauseHotkeyEdit || !keySequenceToWin32(m_recordingPauseHotkeyEdit->keySequence(), pauseMod, pauseVKey) ||
-        !m_recordingStopHotkeyEdit || !keySequenceToWin32(m_recordingStopHotkeyEdit->keySequence(), stopMod, stopVKey) ||
-        !m_recordingCancelHotkeyEdit || !keySequenceToWin32(m_recordingCancelHotkeyEdit->keySequence(), cancelMod, cancelVKey)) {
-        QMessageBox::warning(this, TranslationManager::errInvalidHotkeyTitle(), TranslationManager::errInvalidHotkey());
-        return;
-    }
-    const bool recordingHotkeysChanged =
-        settingsHotkeyChanged({pauseMod, pauseVKey},
-                              {static_cast<quint32>(m_settings->value("recordingPauseHotkeyModifiers", MOD_CONTROL | MOD_ALT).toUInt()),
-                               static_cast<quint32>(m_settings->value("recordingPauseHotkeyVKey", 'P').toUInt())}) ||
-        settingsHotkeyChanged({stopMod, stopVKey},
-                              {static_cast<quint32>(m_settings->value("recordingStopHotkeyModifiers", MOD_CONTROL | MOD_ALT).toUInt()),
-                               static_cast<quint32>(m_settings->value("recordingStopHotkeyVKey", 'S').toUInt())}) ||
-        settingsHotkeyChanged({cancelMod, cancelVKey},
-                              {static_cast<quint32>(m_settings->value("recordingCancelHotkeyModifiers", MOD_CONTROL | MOD_ALT).toUInt()),
-                               static_cast<quint32>(m_settings->value("recordingCancelHotkeyVKey", 'X').toUInt())});
+    // Hotkeys are applied one group at a time. If a later group is refused,
+    // restore the earlier groups so the live keys keep matching the settings.
+    auto rollBackCapture = [&]() {
+        if (captureHotkeyChanged)
+            HotkeyManager::instance().reRegisterCaptureHotkey(oldCaptureMod, oldCaptureVKey);
+    };
     if (recordingHotkeysChanged && !HotkeyManager::instance().reRegisterRecordingHotkeys(pauseMod, pauseVKey, stopMod, stopVKey, cancelMod, cancelVKey)) {
         QMessageBox::warning(
             this,
             TranslationManager::errInvalidHotkeyTitle(),
             TranslationManager::errInvalidHotkey() + QStringLiteral("\n\n") + TranslationManager::recordingHotkeyMayBeInUse());
+        rollBackCapture();
         return;
     }
 
-    auto optionalHotkey = [](QKeySequenceEdit *edit, UINT &mod, UINT &vkey) {
-        mod = 0;
-        vkey = 0;
-        if (!edit || edit->keySequence().isEmpty())
-            return true;
-        return keySequenceToWin32(edit->keySequence(), mod, vkey);
-    };
-    UINT instantMod = 0, instantVKey = 0;
-    UINT gifMod = 0, gifVKey = 0;
-    UINT videoMod = 0, videoVKey = 0;
-    UINT windowMod = 0, windowVKey = 0;
-    if (!optionalHotkey(m_instantCaptureHotkeyEdit, instantMod, instantVKey) ||
-        !optionalHotkey(m_gifCaptureHotkeyEdit, gifMod, gifVKey) ||
-        !optionalHotkey(m_videoCaptureHotkeyEdit, videoMod, videoVKey) ||
-        !optionalHotkey(m_windowCaptureHotkeyEdit, windowMod, windowVKey)) {
-        QMessageBox::warning(this, TranslationManager::errInvalidHotkeyTitle(), TranslationManager::errInvalidHotkey());
-        return;
-    }
-    const bool actionHotkeysChanged =
-        settingsHotkeyChanged({instantMod, instantVKey},
-                              {static_cast<quint32>(m_settings->value("instantCaptureHotkeyModifiers", 0).toUInt()),
-                               static_cast<quint32>(m_settings->value("instantCaptureHotkeyVKey", 0).toUInt())}) ||
-        settingsHotkeyChanged({gifMod, gifVKey},
-                              {static_cast<quint32>(m_settings->value("gifCaptureHotkeyModifiers", 0).toUInt()),
-                               static_cast<quint32>(m_settings->value("gifCaptureHotkeyVKey", 0).toUInt())}) ||
-        settingsHotkeyChanged({videoMod, videoVKey},
-                              {static_cast<quint32>(m_settings->value("videoCaptureHotkeyModifiers", 0).toUInt()),
-                               static_cast<quint32>(m_settings->value("videoCaptureHotkeyVKey", 0).toUInt())}) ||
-        settingsHotkeyChanged({windowMod, windowVKey},
-                              {static_cast<quint32>(m_settings->value("windowCaptureHotkeyModifiers", defaultWindowCaptureModifiers()).toUInt()),
-                               static_cast<quint32>(m_settings->value("windowCaptureHotkeyVKey", defaultWindowCaptureVirtualKey()).toUInt())});
     if (actionHotkeysChanged && !HotkeyManager::instance().reRegisterActionHotkeys(
             instantMod, instantVKey, gifMod, gifVKey, videoMod, videoVKey,
             windowMod, windowVKey)) {
@@ -2515,18 +2534,18 @@ void SettingsDialog::onSave()
             this,
             TranslationManager::errInvalidHotkeyTitle(),
             TranslationManager::errInvalidHotkey() + QStringLiteral("\n\n") + TranslationManager::directCaptureHotkeyMayBeInUse());
+        rollBackCapture();
+        if (recordingHotkeysChanged)
+            HotkeyManager::instance().reRegisterRecordingHotkeys(
+                m_settings->value("recordingPauseHotkeyModifiers", MOD_CONTROL | MOD_ALT).toUInt(),
+                m_settings->value("recordingPauseHotkeyVKey", 'P').toUInt(),
+                m_settings->value("recordingStopHotkeyModifiers", MOD_CONTROL | MOD_ALT).toUInt(),
+                m_settings->value("recordingStopHotkeyVKey", 'S').toUInt(),
+                m_settings->value("recordingCancelHotkeyModifiers", MOD_CONTROL | MOD_ALT).toUInt(),
+                m_settings->value("recordingCancelHotkeyVKey", 'X').toUInt());
         return;
     }
 
-    // Apply the autostart change before persisting anything: if the Run key
-    // update fails, no partial settings are written (onSave partial
-    // success guard).
-    if (m_autoStartCheck->isChecked() != m_loadedAutoStart && !setAutoStartEnabled(m_autoStartCheck->isChecked())) {
-        QMessageBox::warning(this, TranslationManager::errTitle(),
-                             TranslationManager::autoStartSaveFailed());
-        return;
-    }
-    m_loadedAutoStart = m_autoStartCheck->isChecked();
 
     // Save language
     QString newLang = m_langCombo->currentData().toString();
@@ -2558,6 +2577,8 @@ void SettingsDialog::onSave()
     m_rememberSettingsWindowSizeEnabled = m_rememberSettingsWindowSizeCheck
         && m_rememberSettingsWindowSizeCheck->isChecked();
     m_settings->setValue("rememberSettingsWindowSize", m_rememberSettingsWindowSizeEnabled);
+    if (m_importedUploadProvider.isValid())
+        m_settings->setValue("uploadProvider", m_importedUploadProvider.toInt());
     if (m_rememberSettingsWindowSizeEnabled)
         m_settings->setValue("settingsWindowSize", size());
     else
@@ -2668,9 +2689,15 @@ void SettingsDialog::onReset()
             QMessageBox::Yes | QMessageBox::No, QMessageBox::No) == QMessageBox::Yes) {
         m_settings->clear();
         m_settings->sync();
-        // clear() wiped the hotkey config; restore the default PrintScreen
-        // binding so capture keeps working without reopening Settings.
+        // clear() wiped the hotkey config; re-register every group with its
+        // defaults so the live keys match what the dialog now shows.
         HotkeyManager::instance().reRegisterCaptureHotkey(0, VK_SNAPSHOT);
+        HotkeyManager::instance().reRegisterRecordingHotkeys(
+            MOD_CONTROL | MOD_ALT, 'P', MOD_CONTROL | MOD_ALT, 'S',
+            MOD_CONTROL | MOD_ALT, 'X');
+        HotkeyManager::instance().reRegisterActionHotkeys(
+            0, 0, 0, 0, 0, 0,
+            defaultWindowCaptureModifiers(), defaultWindowCaptureVirtualKey());
         TranslationManager::init();
         loadSettings();
     }
@@ -2750,7 +2777,13 @@ void SettingsDialog::onExportSettings()
     appendHotkey("gifCaptureHotkeyModifiers", "gifCaptureHotkeyVKey", m_gifCaptureHotkeyEdit);
     appendHotkey("videoCaptureHotkeyModifiers", "videoCaptureHotkeyVKey", m_videoCaptureHotkeyEdit);
     appendHotkey("windowCaptureHotkeyModifiers", "windowCaptureHotkeyVKey", m_windowCaptureHotkeyEdit);
-    obj["uploadProvider"] = m_settings->value("uploadProvider", 0).toInt();
+    obj["uploadProvider"] = m_importedUploadProvider.isValid()
+        ? m_importedUploadProvider.toInt()
+        : m_settings->value("uploadProvider", 0).toInt();
+    if (m_visualSearchProviderCombo)
+        obj["visualSearchProvider"] = m_visualSearchProviderCombo->currentData().toString();
+    if (m_rememberSettingsWindowSizeCheck)
+        obj["rememberSettingsWindowSize"] = m_rememberSettingsWindowSizeCheck->isChecked();
     QJsonObject overlayShortcuts;
     for (auto it = m_overlayHotkeyEdits.constBegin(); it != m_overlayHotkeyEdits.constEnd(); ++it) {
         if (it.value())
@@ -2906,7 +2939,13 @@ void SettingsDialog::onImportSettings()
     importHotkey("videoCaptureHotkeyModifiers", "videoCaptureHotkeyVKey", m_videoCaptureHotkeyEdit);
     importHotkey("windowCaptureHotkeyModifiers", "windowCaptureHotkeyVKey", m_windowCaptureHotkeyEdit);
     if (obj.contains("uploadProvider"))
-        m_settings->setValue("uploadProvider", obj["uploadProvider"].toInt());
+        m_importedUploadProvider = obj["uploadProvider"].toInt();
+    if (obj.contains("visualSearchProvider") && m_visualSearchProviderCombo) {
+        const int index = m_visualSearchProviderCombo->findData(obj["visualSearchProvider"].toString());
+        if (index >= 0) m_visualSearchProviderCombo->setCurrentIndex(index);
+    }
+    if (obj.contains("rememberSettingsWindowSize") && m_rememberSettingsWindowSizeCheck)
+        m_rememberSettingsWindowSizeCheck->setChecked(obj["rememberSettingsWindowSize"].toBool());
     if (obj.contains("overlayShortcuts") && obj["overlayShortcuts"].isObject()) {
         const QJsonObject shortcuts = obj["overlayShortcuts"].toObject();
         for (auto it = m_overlayHotkeyEdits.begin(); it != m_overlayHotkeyEdits.end(); ++it) {

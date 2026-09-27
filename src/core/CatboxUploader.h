@@ -18,9 +18,9 @@ public:
     bool needsAuth() const override { return true; }
     QString authValue() const override { return m_userHash; }
     QString authPlaceholder() const override;
-    void setAuthValue(const QString &value) override { setUserHash(value); }
+    bool setAuthValue(const QString &value) override { return setUserHash(value); }
 
-    void setUserHash(const QString &hash);
+    bool setUserHash(const QString &hash);
     QString userHash() const { return m_userHash; }
 
     void upload() override;

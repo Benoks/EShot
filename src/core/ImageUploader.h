@@ -38,7 +38,8 @@ public:
     virtual bool needsAuth() const { return false; }
     virtual QString authValue() const { return QString(); }
     virtual QString authPlaceholder() const { return QString(); }
-    virtual void setAuthValue(const QString &) {}
+    // Returns false when the credential could not be stored for later runs.
+    virtual bool setAuthValue(const QString &) { return true; }
 
     void setImage(const QPixmap &pixmap);
     void setImagePath(const QString &path);

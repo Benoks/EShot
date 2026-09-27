@@ -142,6 +142,12 @@ QString HotkeyManager::recordingCancelShortcutText() const
 HotkeyManager::HotkeyManager(QObject *parent) : QObject(parent)
 {
     qApp->installNativeEventFilter(this);
+    // The singleton outlives QApplication; release hotkeys, D-Bus shortcuts
+    // and the native filter while the application object still exists.
+    connect(qApp, &QCoreApplication::aboutToQuit, this, [this]() {
+        unregisterAllHotkeys();
+        qApp->removeNativeEventFilter(this);
+    });
 
 #if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
     const QString desktop = qEnvironmentVariable("XDG_CURRENT_DESKTOP",
@@ -294,7 +300,8 @@ HotkeyManager::~HotkeyManager()
         m_x11RootWindow = 0;
     }
 #endif
-    qApp->removeNativeEventFilter(this);
+    if (qApp)
+        qApp->removeNativeEventFilter(this);
 }
 
 bool HotkeyManager::registerHotkey(int id, UINT modifiers, UINT virtualKey)
@@ -311,8 +318,10 @@ bool HotkeyManager::registerHotkey(int id, UINT modifiers, UINT virtualKey)
     return false;
 #elif defined(ESHOT_HAVE_X11)
     if (m_useGnomeShortcutFallback) {
+        // The gsettings fallback can only bind the capture command. Other
+        // hotkeys stay inactive there; refusing them would block Settings.
         if (id != HOTKEY_CAPTURE)
-            return false;
+            return true;
         const auto previous = m_registeredHotkeyDefs;
         if (!m_registeredHotkeys.contains(id))
             m_registeredHotkeys.append(id);
@@ -391,8 +400,10 @@ bool HotkeyManager::registerHotkey(int id, UINT modifiers, UINT virtualKey)
     return true;
 #elif defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
     if (m_useGnomeShortcutFallback) {
+        // The gsettings fallback can only bind the capture command. Other
+        // hotkeys stay inactive there; refusing them would block Settings.
         if (id != HOTKEY_CAPTURE)
-            return false;
+            return true;
         const auto previous = m_registeredHotkeyDefs;
         if (!m_registeredHotkeys.contains(id))
             m_registeredHotkeys.append(id);
@@ -693,8 +704,8 @@ bool HotkeyManager::activateGnomeShortcutFallback()
     m_usePortalShortcuts = false;
     m_useGnomeShortcutFallback = true;
     const auto capture = m_registeredHotkeyDefs.value(HOTKEY_CAPTURE);
-    const QString binding = LinuxPortalGlobalShortcuts::preferredTrigger(
-        capture.first, capture.second);
+    const QString binding = LinuxGnomeShortcutInstaller::acceleratorFromPortalTrigger(
+        LinuxPortalGlobalShortcuts::preferredTrigger(capture.first, capture.second));
     const QString integratedAppImage = QDir::home().filePath(
         QStringLiteral(".local/opt/EShot/EShot.AppImage"));
     const QString executable = LinuxGnomeShortcutInstaller::preferredExecutable(

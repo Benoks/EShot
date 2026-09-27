@@ -48,6 +48,9 @@ private slots:
                  QStringLiteral("SHIFT+7"));
         QCOMPARE(LinuxPortalGlobalShortcuts::preferredTrigger(MOD_CONTROL, VK_F12),
                  QStringLiteral("CTRL+F12"));
+        // The XDG shortcuts spec names the Super key LOGO.
+        QCOMPARE(LinuxPortalGlobalShortcuts::preferredTrigger(MOD_WIN | MOD_SHIFT, 'S'),
+                 QStringLiteral("SHIFT+LOGO+s"));
         QVERIFY(LinuxPortalGlobalShortcuts::preferredTrigger(0, 0).isEmpty());
         // Modifiers-only triggers (unmapped key) must not produce dangling "+" parts.
         QVERIFY(LinuxPortalGlobalShortcuts::preferredTrigger(

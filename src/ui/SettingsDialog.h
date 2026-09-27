@@ -2,6 +2,7 @@
 #define SETTINGSDIALOG_H
 
 #include <QDialog>
+#include <QVariant>
 #include <QLineEdit>
 #include <QCheckBox>
 #include <QComboBox>
@@ -156,6 +157,8 @@ private:
     QComboBox *m_visualSearchProviderCombo = nullptr;
     QCheckBox *m_rememberSettingsWindowSizeCheck = nullptr;
     bool m_rememberSettingsWindowSizeEnabled = false;
+    // Imported upload provider; it has no widget here, so it is written on Save.
+    QVariant m_importedUploadProvider;
 
     // Shortcut
     QKeySequenceEdit *m_hotkeyEdit = nullptr;

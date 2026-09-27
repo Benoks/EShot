@@ -119,6 +119,33 @@ QString acceleratorFromPortableSequence(const QString &portableSequence)
     return key.isEmpty() ? QString() : accelerator + key;
 }
 
+QString acceleratorFromPortalTrigger(const QString &trigger)
+{
+    // Portal triggers follow the XDG shortcuts spec ("CTRL+SHIFT+s"), while
+    // gsettings bindings use GTK accelerators ("<Primary><Shift>s").
+    const QStringList parts = trigger.split(QLatin1Char('+'), Qt::SkipEmptyParts);
+    if (parts.isEmpty())
+        return {};
+
+    QString accelerator;
+    for (int i = 0; i + 1 < parts.size(); ++i) {
+        const QString modifier = parts.at(i).trimmed().toUpper();
+        if (modifier == QLatin1String("CTRL"))
+            accelerator += QStringLiteral("<Primary>");
+        else if (modifier == QLatin1String("ALT"))
+            accelerator += QStringLiteral("<Alt>");
+        else if (modifier == QLatin1String("SHIFT"))
+            accelerator += QStringLiteral("<Shift>");
+        else if (modifier == QLatin1String("LOGO") || modifier == QLatin1String("SUPER"))
+            accelerator += QStringLiteral("<Super>");
+        else
+            return {};
+    }
+
+    const QString key = parts.constLast().trimmed();
+    return key.isEmpty() ? QString() : accelerator + key;
+}
+
 QString preferredExecutable(const QString &appImagePath,
                             const QString &applicationFilePath,
                             const QString &integratedAppImagePath)

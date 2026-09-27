@@ -249,7 +249,9 @@ public:
     {
         if (m_trayIcon) m_trayIcon->hide();
         if (m_recordingIndicator) { m_recordingIndicator->stop(); m_recordingIndicator->deleteLater(); m_recordingIndicator = nullptr; }
-        if (m_overlay) { m_overlay->deleteLater(); m_overlay = nullptr; }
+        // The event loop has stopped, so deleteLater() would never run and the
+        // overlay's debounced settings would not be flushed.
+        if (m_overlay) { delete m_overlay; m_overlay = nullptr; }
         if (m_screenRecorder) { m_screenRecorder->stop(); m_screenRecorder->deleteLater(); m_screenRecorder = nullptr; }
         if (m_trayMenu) { delete m_trayMenu; m_trayMenu = nullptr; }
     }
@@ -422,7 +424,15 @@ public slots:
 
     void onSettingsRequested()
     {
+        // Two dialogs would each save the values they loaded when opened and
+        // overwrite each other; bring the open one forward instead.
+        if (m_settingsDialog) {
+            m_settingsDialog->raise();
+            m_settingsDialog->activateWindow();
+            return;
+        }
         SettingsDialog dlg;
+        m_settingsDialog = &dlg;
         if (m_updateManager) {
             dlg.setUpdateInfo(m_updateManager->updateAvailable(),
                               m_updateManager->latestVersion(),
@@ -564,12 +574,31 @@ public slots:
         m_pinnedWindows.clear();
     }
 
+    // GIF and video share one recording indicator and one set of stop/cancel
+    // hotkeys, so only one recording may run or be starting at a time. A
+    // portal start also spins a nested event loop; replacing the recorder
+    // during it would delete an object that is still on the stack.
+    bool recordingBusy() const
+    {
+        // A start that never reports back (e.g. a silent portal failure) must
+        // not block recording forever: the portal dialog times out at 120 s
+        // and the start delay is at most 10 s.
+        constexpr qint64 MaxRecordingStartMs = 150000;
+        const bool starting = m_recordingStartPending
+            && m_recordingStartTimer.isValid()
+            && m_recordingStartTimer.elapsed() < MaxRecordingStartMs;
+        return starting
+            || (m_videoRecorder && m_videoRecorder->isRecording())
+            || (m_screenRecorder && m_screenRecorder->isRecording());
+    }
+
     void onRecordGifRequested()
     {
         if (m_screenRecorder && m_screenRecorder->isRecording()) {
             m_screenRecorder->stop();
             return;
         }
+        if (recordingBusy()) return;
         if (m_overlay && m_overlay->isVisible()) return;
         m_pendingMode = 2;
         ensureOverlay();
@@ -582,6 +611,7 @@ public slots:
             m_videoRecorder->stop();
             return;
         }
+        if (recordingBusy()) return;
         if (m_overlay && m_overlay->isVisible()) return;
         m_pendingMode = 3;
         ensureOverlay();
@@ -606,10 +636,13 @@ public slots:
             m_videoRecorder->stop();
             return;
         }
+        if (recordingBusy()) return;
         if (m_videoRecorder) { m_videoRecorder->deleteLater(); m_videoRecorder = nullptr; }
         if (m_recordingIndicator) { m_recordingIndicator->stop(); m_recordingIndicator->deleteLater(); m_recordingIndicator = nullptr; }
 
         m_videoRecorder = new VideoRecorder(this);
+        m_recordingStartPending = true;
+        m_recordingStartTimer.start();
         connect(m_videoRecorder, &VideoRecorder::recordingStarted, this, &EShotApp::onVideoRecordingStarted);
         connect(m_videoRecorder, &VideoRecorder::recordingStopped, this, &EShotApp::onVideoRecordingStopped);
         connect(m_videoRecorder, &VideoRecorder::recordingFailed, this, &EShotApp::onVideoRecordingFailed);
@@ -661,9 +694,12 @@ public slots:
     void onRecordGifSelected(QRect rect, QRect displayRect = QRect())
     {
         if (rect.isEmpty()) return;
+        if (recordingBusy()) return;
         if (m_screenRecorder) { m_screenRecorder->stop(); m_screenRecorder->deleteLater(); m_screenRecorder = nullptr; }
         if (m_recordingIndicator) { m_recordingIndicator->stop(); m_recordingIndicator->deleteLater(); m_recordingIndicator = nullptr; }
         m_screenRecorder = new ScreenRecorder(this);
+        m_recordingStartPending = true;
+        m_recordingStartTimer.start();
         connect(m_screenRecorder, &ScreenRecorder::recordingStarted, this, &EShotApp::onRecordingStarted);
         connect(m_screenRecorder, &ScreenRecorder::recordingStopped, this, &EShotApp::onRecordingStopped);
         connect(m_screenRecorder, &ScreenRecorder::recordingFailed, this, &EShotApp::onRecordingFailed);
@@ -697,6 +733,7 @@ public slots:
 
     void onRecordingStarted()
     {
+        m_recordingStartPending = false;
         if (m_screenRecorder) {
             m_recordingIndicator = new RecordingIndicator(
                 m_screenRecorder->captureRect(), nullptr, 2, true,
@@ -740,6 +777,7 @@ public slots:
 
     void onRecordingStopped(QString outputPath)
     {
+        m_recordingStartPending = false;
         if (m_recordingIndicator) { m_recordingIndicator->stop(); m_recordingIndicator->deleteLater(); m_recordingIndicator = nullptr; }
         if (m_trayIcon && m_showNotifications && m_notifyGif) {
             QFileInfo fi(outputPath);
@@ -751,6 +789,7 @@ public slots:
 
     void onRecordingFailed(QString reason)
     {
+        m_recordingStartPending = false;
         if (m_recordingIndicator) { m_recordingIndicator->stop(); m_recordingIndicator->deleteLater(); m_recordingIndicator = nullptr; }
         m_lastNotificationPath.clear();
         reason = localizedRecordingFailureReason(reason);
@@ -761,6 +800,7 @@ public slots:
 
     void onVideoRecordingStarted()
     {
+        m_recordingStartPending = false;
         if (m_videoRecorder) {
             m_recordingIndicator = new RecordingIndicator(
                 m_videoRecorder->captureRect(), nullptr, 2, true,
@@ -808,6 +848,7 @@ public slots:
 
     void onVideoRecordingStopped(QString outputPath)
     {
+        m_recordingStartPending = false;
         if (m_recordingIndicator) { m_recordingIndicator->stop(); m_recordingIndicator->deleteLater(); m_recordingIndicator = nullptr; }
         if (m_trayIcon && m_showNotifications && m_notifyVideo) {
             QFileInfo fi(outputPath);
@@ -819,6 +860,7 @@ public slots:
 
     void onVideoRecordingFailed(QString reason)
     {
+        m_recordingStartPending = false;
         if (m_recordingIndicator) { m_recordingIndicator->stop(); m_recordingIndicator->deleteLater(); m_recordingIndicator = nullptr; }
         m_lastNotificationPath.clear();
         reason = localizedRecordingFailureReason(reason);
@@ -1072,6 +1114,10 @@ private:
         for (QWidget *widget : widgets) {
             if (!widget || widget == m_overlay || !widget->isVisible())
                 continue;
+            // Rejecting the wizard deletes it and kills a running Linux
+            // dependency installer; let the capture open over it instead.
+            if (qobject_cast<FirstRunWizard *>(widget))
+                continue;
             auto *dialog = qobject_cast<QDialog *>(widget);
             if (!dialog)
                 continue;
@@ -1159,6 +1205,9 @@ private:
     QList<QPointer<PinnedWindow>> m_pinnedWindows;
     ScreenRecorder *m_screenRecorder = nullptr;
     VideoRecorder *m_videoRecorder = nullptr;
+    bool m_recordingStartPending = false;
+    QPointer<SettingsDialog> m_settingsDialog;
+    QElapsedTimer m_recordingStartTimer;
     RecordingIndicator *m_recordingIndicator = nullptr;
     int m_pendingMode = 0;
 };
@@ -1551,10 +1600,14 @@ int main(int argc, char *argv[])
             // The Linux setup is a fresh onboarding flow even when an older
             // Windows configuration was carried over. Start it in English;
             // the user can choose another application language in the wizard.
-            TranslationManager::setLanguage(TranslationManager::English);
+            // Do not persist it: closing the wizard must keep the saved language.
+            TranslationManager::setLanguage(TranslationManager::English, false);
 #endif
             auto *wizard = new FirstRunWizard();
             wizard->setAttribute(Qt::WA_DeleteOnClose);
+#ifdef Q_OS_LINUX
+            QObject::connect(wizard, &QObject::destroyed, []() { TranslationManager::init(); });
+#endif
             wizard->show();
             QApplication::processEvents();
             QScreen *screen = QGuiApplication::screenAt(QCursor::pos());
