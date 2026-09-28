@@ -20,8 +20,10 @@ qt_plugin_url="https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/dow
 qt_plugin_sha256="15106be885c1c48a021198e7e1e9a48ce9d02a86dd0a1848f00bdbf3c1c92724"
 appimagetool_url="https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage"
 appimagetool_sha256="a6d71e2b6cd66f8e8d16c37ad164658985e0cf5fcaa950c90a482890cb9d13e0"
-runtime_url="https://github.com/AppImage/type2-runtime/releases/download/continuous/runtime-x86_64"
-runtime_sha256="1cc49bcf1e2ccd593c379adb17c9f85a36d619088296504de95b1d06215aebbf"
+# Pinned to a tagged release: the "continuous" asset is replaced upstream
+# without notice, which breaks the checksum and every release build.
+runtime_url="https://github.com/AppImage/type2-runtime/releases/download/20251108/runtime-x86_64"
+runtime_sha256="2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d"
 
 download_verified() {
   local url="$1"
