@@ -2,6 +2,7 @@
 #include <QPainter>
 
 #include "annotation/AnnotationEngine.h"
+#include "annotation/ImageEffects.h"
 
 class AnnotationEngineTests : public QObject {
     Q_OBJECT
@@ -26,6 +27,14 @@ private slots:
     void shiftConstrainedCircleHitTestingUsesTheRenderedCircle();
     void clearResetsInProgressGestures();
     void switchingToolMidStrokeFinishesTheStroke();
+    void pixelateAveragesEachBlock();
+    void pixelateGridStaysFixedWhenTheRegionMoves();
+    void smoothBlurKeepsFlatColoursAndSoftensEdges();
+    void blurAndPixelateAreDifferentTools();
+    void editingTextIsOneUndoStep();
+    void emptyingTextRemovesIt();
+    void recolouringAndDeletingCanBeUndone();
+    void textStyleIsStoredPerLabel();
 };
 
 void AnnotationEngineTests::rotatesRectangleAroundItsCenter()
@@ -364,6 +373,172 @@ void AnnotationEngineTests::switchingToolMidStrokeFinishesTheStroke()
     engine.endDraw(QPoint(80, 80));
     engine.undo();
     QVERIFY(!engine.hasAnnotations());
+}
+
+void AnnotationEngineTests::pixelateAveragesEachBlock()
+{
+    // A 4x4 block with one white and three black columns averages to 64 grey,
+    // instead of taking the colour of a single sampled pixel.
+    QImage image(8, 4, QImage::Format_ARGB32_Premultiplied);
+    image.fill(Qt::black);
+    for (int y = 0; y < 4; ++y)
+        image.setPixelColor(0, y, Qt::white);
+    const QImage result = ImageEffects::pixelate(image, 4);
+    QCOMPARE(result.pixelColor(0, 0), QColor(64, 64, 64));
+    QCOMPARE(result.pixelColor(3, 3), QColor(64, 64, 64));
+    QCOMPARE(result.pixelColor(4, 0), QColor(Qt::black));
+}
+
+void AnnotationEngineTests::pixelateGridStaysFixedWhenTheRegionMoves()
+{
+    const QImage full = gradientSnapshot().toImage();
+    const QImage whole = ImageEffects::pixelate(full, 10);
+    // A region cut at an odd offset keeps the blocks of the full image.
+    const QRect region(7, 13, 60, 40);
+    const QImage part = ImageEffects::pixelate(full.copy(region), 10, region.topLeft());
+    QCOMPARE(part.pixelColor(20, 20), whole.pixelColor(region.topLeft() + QPoint(20, 20)));
+
+    AnnotationEngine engine;
+    engine.setScreenSnapshot(gradientSnapshot());
+    engine.setCurrentTool(AnnotationEngine::Pixelate);
+    engine.setBlurIntensity(10);
+    engine.beginDraw(QPoint(3, 5));
+    engine.endDraw(QPoint(90, 70));
+    const QImage rendered = renderEngine(engine, gradientSnapshot());
+    QCOMPARE(rendered.pixelColor(35, 35), whole.pixelColor(35, 35));
+}
+
+void AnnotationEngineTests::smoothBlurKeepsFlatColoursAndSoftensEdges()
+{
+    QImage flat(40, 40, QImage::Format_ARGB32_Premultiplied);
+    flat.fill(QColor(30, 120, 200));
+    QCOMPARE(ImageEffects::smoothBlur(flat, 5).pixelColor(20, 20), QColor(30, 120, 200));
+    QCOMPARE(ImageEffects::smoothBlur(flat, 20).pixelColor(0, 0), QColor(30, 120, 200));
+
+    QImage edge(40, 10, QImage::Format_ARGB32_Premultiplied);
+    edge.fill(Qt::black);
+    for (int y = 0; y < 10; ++y)
+        for (int x = 20; x < 40; ++x)
+            edge.setPixelColor(x, y, Qt::white);
+    const QImage blurred = ImageEffects::smoothBlur(edge, 4);
+    const int middle = blurred.pixelColor(20, 5).red();
+    QVERIFY(middle > 60 && middle < 200);
+    QVERIFY(blurred.pixelColor(17, 5).red() < middle);
+    QVERIFY(blurred.pixelColor(23, 5).red() > middle);
+    QCOMPARE(blurred.pixelColor(0, 5), QColor(Qt::black));
+}
+
+void AnnotationEngineTests::blurAndPixelateAreDifferentTools()
+{
+    const QPixmap snapshot = gradientSnapshot();
+    AnnotationEngine blur;
+    blur.setScreenSnapshot(snapshot);
+    blur.setBlurIntensity(16);
+    drawBlur(blur, QRect(20, 20, 120, 120));
+
+    AnnotationEngine pixelate;
+    pixelate.setScreenSnapshot(snapshot);
+    pixelate.setBlurIntensity(16);
+    pixelate.setCurrentTool(AnnotationEngine::Pixelate);
+    pixelate.beginDraw(QPoint(20, 20));
+    pixelate.endDraw(QPoint(139, 139));
+
+    const QImage blurred = renderEngine(blur, snapshot);
+    const QImage pixelated = renderEngine(pixelate, snapshot);
+    QVERIFY(blurred != pixelated);
+    // Pixelate paints flat blocks; the smooth blur changes from pixel to pixel.
+    QCOMPARE(pixelated.pixelColor(33, 33), pixelated.pixelColor(34, 33));
+    QVERIFY(blurred.pixelColor(33, 80) != blurred.pixelColor(38, 80));
+    // Outside the region nothing changes.
+    QCOMPARE(blurred.pixelColor(5, 5), snapshot.toImage().pixelColor(5, 5));
+}
+
+void AnnotationEngineTests::editingTextIsOneUndoStep()
+{
+    AnnotationEngine engine;
+    engine.addTextAnnotation(QPoint(20, 20), QStringLiteral("before"));
+    AnnotationEngine::TextStyle style = engine.textStyleOf(0);
+    style.color = Qt::green;
+    style.bold = false;
+    QVERIFY(engine.updateTextAnnotation(0, QStringLiteral("after"), style));
+    QCOMPARE(engine.textOf(0), QStringLiteral("after"));
+    QCOMPARE(engine.textStyleOf(0).color, QColor(Qt::green));
+    QVERIFY(!engine.textStyleOf(0).bold);
+
+    engine.undo();
+    QCOMPARE(engine.textOf(0), QStringLiteral("before"));
+    QVERIFY(engine.textStyleOf(0).bold);
+    engine.redo();
+    QCOMPARE(engine.textOf(0), QStringLiteral("after"));
+    // An unchanged edit adds no history entry.
+    QVERIFY(!engine.updateTextAnnotation(0, QStringLiteral("after"), engine.textStyleOf(0)));
+}
+
+void AnnotationEngineTests::emptyingTextRemovesIt()
+{
+    AnnotationEngine engine;
+    engine.addTextAnnotation(QPoint(20, 20), QStringLiteral("gone"));
+    QVERIFY(engine.updateTextAnnotation(0, QString(), engine.textStyleOf(0)));
+    QVERIFY(!engine.hasAnnotations());
+    engine.undo();
+    QCOMPARE(engine.textOf(0), QStringLiteral("gone"));
+}
+
+void AnnotationEngineTests::recolouringAndDeletingCanBeUndone()
+{
+    AnnotationEngine engine;
+    engine.setColor(Qt::red);
+    engine.setCurrentTool(AnnotationEngine::Rectangle);
+    engine.beginDraw(QPoint(10, 10));
+    engine.endDraw(QPoint(60, 60));
+    engine.setSelectedIndex(0);
+
+    QVERIFY(engine.setAnnotationColor(0, Qt::blue));
+    QVERIFY(!engine.setAnnotationColor(0, Qt::blue));
+    QVERIFY(engine.removeAnnotation(0));
+    QVERIFY(!engine.hasAnnotations());
+    QCOMPARE(engine.selectedIndex(), -1);
+
+    engine.undo();
+    QVERIFY(engine.hasAnnotations());
+    engine.undo();
+    // Back to red: rendering the rectangle edge shows the original colour.
+    QPixmap canvas(80, 80);
+    canvas.fill(Qt::white);
+    const QImage image = renderEngine(engine, canvas);
+    QCOMPARE(image.pixelColor(35, 10).red(), 255);
+    QVERIFY(image.pixelColor(35, 10).blue() < 100);
+
+    // Blur regions have no colour to change.
+    engine.setCurrentTool(AnnotationEngine::Blur);
+    engine.beginDraw(QPoint(0, 0));
+    engine.endDraw(QPoint(20, 20));
+    QVERIFY(!engine.setAnnotationColor(1, Qt::green));
+}
+
+void AnnotationEngineTests::textStyleIsStoredPerLabel()
+{
+    AnnotationEngine engine;
+    engine.setTextBold(false);
+    engine.setTextBackground(AnnotationEngine::TextOutline);
+    engine.addTextAnnotation(QPoint(10, 10), QStringLiteral("one"));
+    engine.setTextBold(true);
+    engine.setTextBackground(AnnotationEngine::TextPlain);
+    engine.addTextAnnotation(QPoint(10, 60), QStringLiteral("two"));
+
+    QVERIFY(!engine.textStyleOf(0).bold);
+    QCOMPARE(engine.textStyleOf(0).background, AnnotationEngine::TextOutline);
+    QVERIFY(engine.textStyleOf(1).bold);
+    QCOMPARE(engine.textStyleOf(1).background, AnnotationEngine::TextPlain);
+
+    // A label being edited in place is not drawn twice.
+    QPixmap canvas(200, 120);
+    canvas.fill(Qt::white);
+    const QImage visible = renderEngine(engine, canvas);
+    engine.setHiddenIndex(0);
+    const QImage hidden = renderEngine(engine, canvas);
+    QVERIFY(visible != hidden);
+    engine.setHiddenIndex(-1);
 }
 
 QTEST_MAIN(AnnotationEngineTests)

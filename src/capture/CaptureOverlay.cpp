@@ -9,6 +9,9 @@
 #include "ui/OverlayPanelStyle.h"
 #include "ui/OcrDialog.h"
 #include "core/ComponentPaths.h"
+#include "ShortcutSheet.h"
+#include "ui/HintBubble.h"
+#include "ui/OnboardingTips.h"
 #include "ui/UploadDialog.h"
 #include "core/ImageUploader.h"
 #include "core/DebouncedSettingsWriter.h"
@@ -191,7 +194,8 @@ void drawCaptureHints(QPainter &painter, const QRect &monitorRect, bool recordin
         : QList<HintShortcut>{
               {QStringLiteral("Ctrl+C"), TranslationManager::captureHintCopy()},
               {QStringLiteral("Ctrl+S"), TranslationManager::captureHintSave()},
-              {QStringLiteral("Esc"), TranslationManager::captureHintCancel()}};
+              {QStringLiteral("Esc"), TranslationManager::captureHintCancel()},
+              {QStringLiteral("?"), TranslationManager::tr("captureHintShortcuts")}};
 
     QFont keyFont = painter.font();
     keyFont.setPointSize(9);
@@ -265,7 +269,14 @@ public:
     void fitToAvailableHeight(int availableHeight)
     {
         setFixedHeight(quickSettingsTabHeight(
-            QFontMetrics(labelFont()).horizontalAdvance(text()), availableHeight));
+            QFontMetrics(labelFont()).horizontalAdvance(text()) + IconSpace, availableHeight));
+    }
+
+    // 0..1 accent glow used to draw attention to the tab for new users.
+    void setGlow(qreal glow)
+    {
+        m_glow = glow;
+        update();
     }
 
 protected:
@@ -300,16 +311,31 @@ protected:
         painter.setPen(QPen(QColor(0, 0, 0, 90), 1));
         painter.drawLine(rect().topLeft(), rect().bottomLeft());
 
+        if (m_glow > 0.0) {
+            painter.setPen(QPen(QColor(255, 255, 255, int(200 * m_glow)), 2));
+            painter.setBrush(QColor(255, 255, 255, int(45 * m_glow)));
+            painter.drawPath(tabPath);
+        }
+
+        // Gear above the rotated label so the tab reads as "settings".
+        const int iconSize = 14;
+        QIcon(QStringLiteral(":/icons/gear.svg"))
+            .paint(&painter, QRect((width() - iconSize) / 2, 8, iconSize, iconSize));
+
         painter.setFont(labelFont());
         painter.setPen(QColor(245, 245, 245));
-        painter.translate(width() / 2.0, height() / 2.0);
+        painter.translate(width() / 2.0, (height() + IconSpace) / 2.0);
         painter.rotate(-90);
-        painter.drawText(QRect(-height() / 2, -width() / 2, height(), width()),
+        const int textLength = height() - IconSpace;
+        painter.drawText(QRect(-textLength / 2, -width() / 2, textLength, width()),
                          Qt::AlignCenter,
                          text());
     }
 
 private:
+    static constexpr int IconSpace = 20;
+    qreal m_glow = 0.0;
+
     QFont labelFont() const
     {
         QFont result = font();
@@ -452,6 +478,7 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
             border-color: #1593e6;
         }
         QToolButton#textCommitButton:hover { background-color: #0b8de8; }
+        QToolButton:checked { background-color: #5a5d63; border-color: #8a8d93; }
         QFontComboBox, QSpinBox {
             background: #292b2f;
             color: white;
@@ -530,6 +557,20 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
     m_textInlineSizeSpin->setRange(8, 72);
     m_textInlineSizeSpin->setAlignment(Qt::AlignCenter);
     m_textInlineSizeSpin->setFixedSize(68, 32);
+    m_textBoldButton = new QToolButton(m_textEditPanel);
+    m_textBoldButton->setText(QStringLiteral("B"));
+    QFont boldButtonFont = m_textBoldButton->font();
+    boldButtonFont.setBold(true);
+    boldButtonFont.setPointSize(11);
+    m_textBoldButton->setFont(boldButtonFont);
+    m_textBoldButton->setCheckable(true);
+    m_textBoldButton->setFixedSize(30, 30);
+    m_textBoldButton->setToolTip(TranslationManager::tr("textBold") + QStringLiteral(" (Ctrl+B)"));
+    m_textBoldButton->setFocusPolicy(Qt::NoFocus);
+    m_textBackgroundButton = new QToolButton(m_textEditPanel);
+    m_textBackgroundButton->setIconSize(QSize(20, 20));
+    m_textBackgroundButton->setFixedSize(30, 30);
+    m_textBackgroundButton->setFocusPolicy(Qt::NoFocus);
     m_textCommitButton = new QToolButton(m_textEditPanel);
     m_textCommitButton->setObjectName(QStringLiteral("textCommitButton"));
     m_textCommitButton->setIcon(QIcon(QStringLiteral(":/icons/check.svg")));
@@ -546,11 +587,23 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
     textPanelLayout->addWidget(m_textMoveHandle);
     textPanelLayout->addWidget(m_textInlineFontCombo);
     textPanelLayout->addWidget(m_textInlineSizeSpin);
+    textPanelLayout->addWidget(m_textBoldButton);
+    textPanelLayout->addWidget(m_textBackgroundButton);
     textPanelLayout->addWidget(m_textCommitButton);
     textPanelLayout->addWidget(m_textCancelButton);
     m_textEditPanel->hide();
     connect(m_textCommitButton, &QToolButton::clicked, this, &CaptureOverlay::commitText);
     connect(m_textCancelButton, &QToolButton::clicked, this, &CaptureOverlay::cancelTextEdit);
+    connect(m_textBoldButton, &QToolButton::toggled, this, [this](bool bold) {
+        if (m_annotationEngine) m_annotationEngine->setTextBold(bold);
+        updateTextEditorStyle();
+    });
+    connect(m_textBackgroundButton, &QToolButton::clicked, this, [this]() {
+        if (!m_annotationEngine) return;
+        const int next = (int(m_annotationEngine->textBackground()) + 1) % 3;
+        m_annotationEngine->setTextBackground(static_cast<AnnotationEngine::TextBackground>(next));
+        refreshTextStyleButtons();
+    });
     connect(m_textInlineFontCombo, &QFontComboBox::currentFontChanged, this, [this](const QFont &font) {
         if (m_annotationEngine) m_annotationEngine->setTextFontFamily(font.family());
         updateTextEditorStyle();
@@ -579,7 +632,15 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
         if (m_annotationEngine) { m_annotationEngine->redo(); update(); updateUndoRedoState(); }
     });
     connect(m_toolbar, &AnnotationToolbar::colorChanged, [this](const QColor &c) {
-        if (m_annotationEngine) m_annotationEngine->setColor(c);
+        if (!m_annotationEngine) return;
+        m_annotationEngine->setColor(c);
+        if (m_textEdit && m_textEdit->isVisible()) {
+            updateTextEditorStyle();
+        } else if (m_annotationEngine->setAnnotationColor(m_annotationEngine->selectedIndex(), c)) {
+            // Picking a colour with an annotation selected recolours it.
+            update();
+            updateUndoRedoState();
+        }
     });
     connect(m_toolbar, &AnnotationToolbar::modalDialogClosed,
             this, &CaptureOverlay::restoreAfterModalDialog);
@@ -610,13 +671,6 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
             }
             updateTextEditorStyle();
             updateTextEditPanelPosition();
-        }
-    });
-    connect(m_toolbar, &AnnotationToolbar::blurIntensityChanged, [this](int i) {
-        if (m_annotationEngine) m_annotationEngine->setBlurIntensity(i);
-        if (m_quickBlurSlider) {
-            QSignalBlocker blocker(m_quickBlurSlider);
-            m_quickBlurSlider->setValue(i);
         }
     });
     connect(m_toolbar, &AnnotationToolbar::eyedropperRequested, this, &CaptureOverlay::onEyedropperRequested);
@@ -674,6 +728,19 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
         QPushButton *closeBtn = addBtn(":/icons/close.svg", TranslationManager::actionClose(),
             [this]() { onClose(); });
         closeBtn->setStyleSheet(R"(
+            QPushButton { background-color: #3a3a3a; border: 1px solid #505050; border-radius: 8px; }
+            QPushButton:hover { background-color: #454545; border-color: #606060; }
+            QPushButton:pressed { background-color: #333333; }
+        )");
+        // Shortcut sheet, set apart at the bottom: it helps rather than acts.
+        QFrame *helpSeparator = new QFrame(m_actionPanel);
+        helpSeparator->setFixedHeight(1);
+        helpSeparator->setStyleSheet(QStringLiteral("background: #404040; border: none;"));
+        actionLayout->addSpacing(2);
+        actionLayout->addWidget(helpSeparator);
+        actionLayout->addSpacing(2);
+        m_helpButton = addBtn(":/icons/help.svg", QString(), [this]() { toggleShortcutSheet(); });
+        m_helpButton->setStyleSheet(R"(
             QPushButton { background-color: #3a3a3a; border: 1px solid #505050; border-radius: 8px; }
             QPushButton:hover { background-color: #454545; border-color: #606060; }
             QPushButton:pressed { background-color: #333333; }
@@ -959,7 +1026,6 @@ void CaptureOverlay::setupToolSettingsDrawer()
         if (m_quickBlurValueLabel)
             m_quickBlurValueLabel->setText(QString::number(value));
         if (m_annotationEngine) m_annotationEngine->setBlurIntensity(value);
-        if (m_toolbar) m_toolbar->setBlurIntensity(value);
         if (m_settingsWriter)
             m_settingsWriter->schedule(QStringLiteral("blurIntensity"), value);
     });
@@ -1555,6 +1621,10 @@ void CaptureOverlay::refreshUI()
             buttons[i]->setToolTip(tips[i]);
         }
     }
+    if (m_helpButton) {
+        m_helpButton->setToolTip(QStringLiteral("<b>%1</b>&nbsp;&nbsp;<span style='color:#a8a8a8'>? / F1</span>")
+                                     .arg(TranslationManager::tr("sheetTitle").toHtmlEscaped()));
+    }
 }
 
 void CaptureOverlay::prewarm()
@@ -1633,6 +1703,10 @@ void CaptureOverlay::startCaptureInternal(CaptureSelectionMode selectionMode, bo
     if (m_textEditPanel) m_textEditPanel->hide();
     if (m_textFocusProxy) m_textFocusProxy->hide();
     m_textJustCommitted = false;
+    m_editingTextIndex = -1;
+    if (m_shortcutSheet)
+        m_shortcutSheet->hide();
+    m_showSelectionHint = false;
     if (m_annotationEngine) m_annotationEngine->clear();
     hideToolbar();
 
@@ -1671,7 +1745,6 @@ void CaptureOverlay::startCaptureInternal(CaptureSelectionMode selectionMode, bo
     // Load blur strength setting
     int blurIntensity = s.value("blurIntensity", 16).toInt();
     if (m_annotationEngine) m_annotationEngine->setBlurIntensity(blurIntensity);
-    if (m_toolbar) m_toolbar->setBlurIntensity(blurIntensity);
     if (m_quickBlurSlider) m_quickBlurSlider->setValue(blurIntensity);
     if (m_quickPenWidthSlider && m_annotationEngine) m_quickPenWidthSlider->setValue(m_annotationEngine->penWidth());
     setToolSettingsDrawerVisible(false);
@@ -2242,11 +2315,15 @@ void CaptureOverlay::paintEvent(QPaintEvent *event)
         painter.drawLine(0, cur.y(), width(), cur.y());
     }
 
-    if (shouldShowCaptureHints(m_showCaptureHints, m_isSelecting,
-                               m_selectionComplete, m_eyedropperActive)) {
+    if (!isShortcutSheetOpen()
+        && shouldShowCaptureHints(m_showCaptureHints, m_isSelecting,
+                                  m_selectionComplete, m_eyedropperActive)) {
         const QPoint cursorPos = mapFromGlobal(QCursor::pos());
         drawCaptureHints(painter, monitorRectAt(cursorPos), m_captureMode == ModeRecording);
     }
+
+    if (m_showSelectionHint && m_selectionComplete && !isShortcutSheetOpen())
+        drawSelectionHint(painter);
 
     if (m_showHighlighterStraightHint && m_selectionComplete) {
         const QString hint = TranslationManager::tr("highlighterStraightHint");
@@ -2416,15 +2493,9 @@ void CaptureOverlay::mousePressEvent(QMouseEvent *event)
                         updateUndoRedoState();
                     }
                 } else {
-                    const int existingAnnotation = m_annotationEngine->findAnnotationAt(rel);
-                    if (existingAnnotation >= 0) {
-                        m_annotationEngine->setCurrentTool(AnnotationEngine::None);
-                        m_annotationEngine->setSelectedIndex(existingAnnotation);
-                        if (m_toolbar)
-                            m_toolbar->selectTool(AnnotationEngine::None);
-                        update();
+                    if (handleAnnotationPress(rel, event->modifiers()))
                         return;
-                    }
+                    m_annotationEngine->setSelectedIndex(-1);
                     m_annotationEngine->beginDraw(rel);
                     update();
                 }
@@ -2433,15 +2504,9 @@ void CaptureOverlay::mousePressEvent(QMouseEvent *event)
 
             // Annotation click while no tool is selected → move mode
             if (!isDrawingTool && !selectionHandleHit && m_annotationEngine && selRect.contains(event->pos())) {
-                QPoint rel = event->pos();
-                int idx = m_annotationEngine->findAnnotationAt(rel);
+                const int idx = m_annotationEngine->findAnnotationAt(event->pos());
                 if (idx >= 0) {
-                    m_isDraggingAnnotation = true;
-                    m_dragAnnotationStart = rel;
-                    m_annotationEngine->setSelectedIndex(idx);
-                    m_annotationEngine->beginMove(idx);
-                    setCursor(Qt::SizeAllCursor);
-                    update();
+                    startAnnotationMove(idx, event->pos());
                     return;
                 }
             }
@@ -2476,15 +2541,9 @@ void CaptureOverlay::mousePressEvent(QMouseEvent *event)
             QRect selRect = normalizedSelectionRect();
             bool isDrawingTool = (m_annotationEngine && m_annotationEngine->currentTool() != AnnotationEngine::None);
             if (!isDrawingTool && m_annotationEngine && selRect.contains(event->pos())) {
-                QPoint rel = event->pos();
-                int idx = m_annotationEngine->findAnnotationAt(rel);
+                const int idx = m_annotationEngine->findAnnotationAt(event->pos());
                 if (idx >= 0) {
-                    m_isDraggingAnnotation = true;
-                    m_dragAnnotationStart = rel;
-                    m_annotationEngine->setSelectedIndex(idx);
-                    m_annotationEngine->beginMove(idx);
-                    setCursor(Qt::SizeAllCursor);
-                    update();
+                    startAnnotationMove(idx, event->pos());
                     return;
                 }
             }
@@ -2496,6 +2555,9 @@ void CaptureOverlay::mousePressEvent(QMouseEvent *event)
                         updateUndoRedoState();
                     }
                 } else {
+                    if (handleAnnotationPress(rel, event->modifiers()))
+                        return;
+                    m_annotationEngine->setSelectedIndex(-1);
                     m_annotationEngine->beginDraw(rel);
                     update();
                 }
@@ -2576,6 +2638,45 @@ void CaptureOverlay::resetSelection()
     update();
 }
 
+void CaptureOverlay::startAnnotationMove(int index, const QPoint &pos)
+{
+    m_isDraggingAnnotation = true;
+    m_dragAnnotationStart = pos;
+    m_annotationEngine->setSelectedIndex(index);
+    m_annotationEngine->beginMove(index);
+    setCursor(Qt::SizeAllCursor);
+    update();
+}
+
+bool CaptureOverlay::handleAnnotationPress(const QPoint &pos, Qt::KeyboardModifiers modifiers)
+{
+    if (!m_annotationEngine)
+        return false;
+    const int hit = m_annotationEngine->findAnnotationAt(pos);
+    if (hit < 0)
+        return false;
+    if (m_annotationEngine->currentTool() == AnnotationEngine::Text
+        && m_annotationEngine->isTextAnnotation(hit)) {
+        beginEditExistingText(hit);
+        m_ignoreNextMouseRelease = true;
+        return true;
+    }
+    // A drawing tool draws, even over other annotations; brushing past one
+    // must not select it and drop the tool. The selected annotation can still
+    // be dragged, and Ctrl+click picks any other one, keeping the tool.
+    if (!(modifiers & Qt::ControlModifier) && hit != m_annotationEngine->selectedIndex()) {
+        if (!OnboardingTips::isSeen(OnboardingTips::CtrlMoveTip)) {
+            OnboardingTips::markSeen(OnboardingTips::CtrlMoveTip);
+            hintBubble()->showTip(TranslationManager::tr("tipCtrlMove"),
+                                  QRect(pos - QPoint(0, 18), QSize(1, 1)),
+                                  HintBubble::Pointer::Down, rect());
+        }
+        return false;
+    }
+    startAnnotationMove(hit, pos);
+    return true;
+}
+
 void CaptureOverlay::mouseDoubleClickEvent(QMouseEvent *event)
 {
     if (event->button() != Qt::LeftButton || m_eyedropperActive || m_selectionLocked)
@@ -2583,6 +2684,18 @@ void CaptureOverlay::mouseDoubleClickEvent(QMouseEvent *event)
     // Inside a finished selection a quick second click belongs to the active
     // tool; treating it as "select monitor" would wipe the annotations.
     if (m_selectionComplete) {
+        // Double-clicking a label in select mode opens it for editing.
+        const int hit = m_annotationEngine && m_annotationEngine->currentTool() == AnnotationEngine::None
+            ? m_annotationEngine->findAnnotationAt(event->pos()) : -1;
+        if (hit >= 0 && m_annotationEngine->isTextAnnotation(hit)) {
+            if (m_isDraggingAnnotation) {
+                m_isDraggingAnnotation = false;
+                m_annotationEngine->endMove();
+            }
+            beginEditExistingText(hit);
+            m_ignoreNextMouseRelease = true;
+            return;
+        }
         mousePressEvent(event);
         return;
     }
@@ -2957,6 +3070,19 @@ void CaptureOverlay::mouseReleaseEvent(QMouseEvent *event)
 
 void CaptureOverlay::keyPressEvent(QKeyEvent *event)
 {
+    // Any key closes the shortcut sheet; "?" or F1 opens it.
+    if (isShortcutSheetOpen()) {
+        if (event->key() != Qt::Key_Shift) {
+            m_shortcutSheet->hide();
+            update();
+        }
+        return;
+    }
+    if ((event->text() == QLatin1String("?") || event->key() == Qt::Key_F1)
+        && (!m_textEdit || !m_textEdit->isVisible())) {
+        toggleShortcutSheet();
+        return;
+    }
     // Shift durumunu annotation engine'e bildir
     if (event->key() == Qt::Key_Shift && m_annotationEngine) {
         m_annotationEngine->setShiftHeld(true);
@@ -3020,6 +3146,18 @@ void CaptureOverlay::keyPressEvent(QKeyEvent *event)
         }
         if (m_selectionComplete) onCopyToClipboard();
     } else if (m_selectionComplete && m_annotationEngine) {
+        const int selectedAnnotation = m_annotationEngine->selectedIndex();
+        if (selectedAnnotation >= 0
+            && (event->key() == Qt::Key_Delete || event->key() == Qt::Key_Backspace)) {
+            m_annotationEngine->removeAnnotation(selectedAnnotation);
+            update();
+            updateUndoRedoState();
+            return;
+        }
+        if (event->key() == Qt::Key_F2 && m_annotationEngine->isTextAnnotation(selectedAnnotation)) {
+            beginEditExistingText(selectedAnnotation);
+            return;
+        }
         if (matchesOverlayShortcut(event, QStringLiteral("actionEyedropper"), QStringLiteral("I"))) { onEyedropperRequested(); return; }
         if (matchesOverlayShortcut(event, QStringLiteral("actionLock"), QStringLiteral("K"))) { onSelectionLockToggled(!m_selectionLocked); return; }
         if (matchesOverlayShortcut(event, QStringLiteral("actionPin"), QStringLiteral("Ctrl+P"))) { onPinToDesktop(); return; }
@@ -3038,6 +3176,7 @@ void CaptureOverlay::keyPressEvent(QKeyEvent *event)
         else if (matchesOverlayShortcut(event, QStringLiteral("toolHighlighter"), QStringLiteral("H"))) selectAnnotationTool(AnnotationEngine::Highlighter);
         else if (matchesOverlayShortcut(event, QStringLiteral("toolSemiRect"), QStringLiteral("D"))) selectAnnotationTool(AnnotationEngine::SemiRect);
         else if (matchesOverlayShortcut(event, QStringLiteral("toolBlur"), QStringLiteral("B"))) selectAnnotationTool(AnnotationEngine::Blur);
+        else if (matchesOverlayShortcut(event, QStringLiteral("toolPixelate"), QStringLiteral("M"))) selectAnnotationTool(AnnotationEngine::Pixelate);
         else if (matchesOverlayShortcut(event, QStringLiteral("toolCounter"), QStringLiteral("N"))) selectAnnotationTool(AnnotationEngine::Counter);
         else if (matchesOverlayShortcut(event, QStringLiteral("toolEraser"), QStringLiteral("X"))) selectAnnotationTool(AnnotationEngine::Eraser);
     }
@@ -3156,6 +3295,20 @@ bool CaptureOverlay::eventFilter(QObject *obj, QEvent *event)
 
     if ((obj == m_textEdit || obj == m_textFocusProxy) && event->type() == QEvent::KeyPress) {
         QKeyEvent *ke = static_cast<QKeyEvent*>(event);
+        if (ke->modifiers() & Qt::ControlModifier) {
+            if (ke->key() == Qt::Key_B && m_textBoldButton) {
+                m_textBoldButton->toggle();
+                return true;
+            }
+            if ((ke->key() == Qt::Key_Plus || ke->key() == Qt::Key_Equal) && m_textInlineSizeSpin) {
+                m_textInlineSizeSpin->stepBy(2);
+                return true;
+            }
+            if (ke->key() == Qt::Key_Minus && m_textInlineSizeSpin) {
+                m_textInlineSizeSpin->stepBy(-2);
+                return true;
+            }
+        }
         if (ke->key() == Qt::Key_Escape) {
             cancelTextEdit();
             return true;
@@ -3393,6 +3546,8 @@ void CaptureOverlay::showToolbar()
 
 void CaptureOverlay::hideToolbar()
 {
+    if (m_hintBubble)
+        m_hintBubble->hide();
     if (m_toolbar) m_toolbar->hide();
     if (m_actionPanel) m_actionPanel->hide();
     if (m_toolSettingsButton) m_toolSettingsButton->hide();
@@ -3483,6 +3638,7 @@ void CaptureOverlay::beginTextEditAt(const QPoint &pos)
         if (m_textInlineSizeSpin)
             m_textInlineSizeSpin->setValue(m_annotationEngine->textFontSize());
     }
+    refreshTextStyleButtons();
 
     m_textEdit->clear();
     if (m_textFocusProxy)
@@ -3582,7 +3738,7 @@ void CaptureOverlay::updateTextEditorStyle()
         return;
 
     QFont textFont(m_annotationEngine->textFontFamily(), m_annotationEngine->textFontSize());
-    textFont.setBold(true);
+    textFont.setBold(m_annotationEngine->textBold());
     m_textEdit->setFont(textFont);
     m_textEdit->setStyleSheet(QString(R"(
         QTextEdit {
@@ -3617,11 +3773,126 @@ void CaptureOverlay::updateTextEditPanelPosition()
     m_textEdit->raise();
 }
 
+void CaptureOverlay::applyTextStyleToEngine(const AnnotationEngine::TextStyle &style)
+{
+    m_annotationEngine->setTextFontFamily(style.fontFamily);
+    m_annotationEngine->setTextFontSize(style.fontSize);
+    m_annotationEngine->setColor(style.color);
+    m_annotationEngine->setTextBold(style.bold);
+    m_annotationEngine->setTextBackground(style.background);
+    if (m_toolbar)
+        m_toolbar->setColor(style.color);
+}
+
+void CaptureOverlay::beginEditExistingText(int index)
+{
+    if (!m_annotationEngine || !m_textEdit || !m_annotationEngine->isTextAnnotation(index))
+        return;
+    const QString text = m_annotationEngine->textOf(index);
+    const QPoint anchor = m_annotationEngine->textAnchorOf(index);
+    if (m_textEdit->isVisible()) {
+        commitText();
+        m_textJustCommitted = false;
+        // Committing an emptied label removes it and shifts later indices.
+        if (!m_annotationEngine->isTextAnnotation(index)
+            || m_annotationEngine->textOf(index) != text) {
+            return;
+        }
+    }
+
+    // The editor works on the engine's current text style; remember it so
+    // editing an old label does not change the style of the next new one.
+    m_styleBeforeTextEdit = m_annotationEngine->currentTextStyle();
+    applyTextStyleToEngine(m_annotationEngine->textStyleOf(index));
+    m_editingTextIndex = index;
+    m_annotationEngine->setSelectedIndex(-1);
+    m_annotationEngine->setHiddenIndex(index);
+
+    beginTextEditAt(anchor);
+    m_textEdit->setPlainText(text);
+    QTextCursor cursor = m_textEdit->textCursor();
+    cursor.movePosition(QTextCursor::End);
+    m_textEdit->setTextCursor(cursor);
+    if (m_textFocusProxy && m_textFocusProxy->isVisible()) {
+        QSignalBlocker blocker(m_textFocusProxy);
+        m_textFocusProxy->setPlainText(text);
+        m_textFocusProxy->moveCursor(QTextCursor::End);
+    }
+    update();
+}
+
+void CaptureOverlay::finishExistingTextEdit()
+{
+    if (m_editingTextIndex < 0)
+        return;
+    m_editingTextIndex = -1;
+    if (m_annotationEngine) {
+        m_annotationEngine->setHiddenIndex(-1);
+        applyTextStyleToEngine(m_styleBeforeTextEdit);
+    }
+}
+
+QIcon CaptureOverlay::textBackgroundIcon(int background) const
+{
+    QPixmap pixmap(QSize(40, 40));
+    pixmap.fill(Qt::transparent);
+    QPainter painter(&pixmap);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    QFont font(QStringLiteral("Segoe UI"));
+    font.setBold(true);
+    font.setPixelSize(26);
+    QPainterPath glyph;
+    glyph.addText(0, 0, font, QStringLiteral("A"));
+    const QRectF bounds = glyph.boundingRect();
+    glyph.translate(20 - bounds.center().x(), 20 - bounds.center().y());
+    if (background == AnnotationEngine::TextBox) {
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(QColor(255, 255, 255, 70));
+        painter.drawRoundedRect(QRectF(3, 3, 34, 34), 6, 6);
+    } else if (background == AnnotationEngine::TextOutline) {
+        painter.setPen(QPen(QColor(0, 0, 0, 230), 5, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        painter.setBrush(Qt::NoBrush);
+        painter.drawPath(glyph);
+    }
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(Qt::white);
+    painter.drawPath(glyph);
+    painter.end();
+    return QIcon(pixmap);
+}
+
+void CaptureOverlay::refreshTextStyleButtons()
+{
+    if (!m_annotationEngine)
+        return;
+    if (m_textBoldButton) {
+        QSignalBlocker blocker(m_textBoldButton);
+        m_textBoldButton->setChecked(m_annotationEngine->textBold());
+    }
+    if (m_textBackgroundButton) {
+        const int background = m_annotationEngine->textBackground();
+        m_textBackgroundButton->setIcon(textBackgroundIcon(background));
+        const QString names[] = {TranslationManager::tr("textBackgroundBox"),
+                                 TranslationManager::tr("textBackgroundPlain"),
+                                 TranslationManager::tr("textBackgroundOutline")};
+        m_textBackgroundButton->setToolTip(TranslationManager::tr("textBackground")
+                                           + QStringLiteral(": ") + names[background]);
+    }
+    updateTextEditorStyle();
+}
+
 void CaptureOverlay::commitText()
 {
     if (!m_textEdit || m_textEdit->isHidden()) return;
     QString text = m_textEdit->toPlainText().trimmed();
-    if (!text.isEmpty() && m_annotationEngine) {
+    if (m_editingTextIndex >= 0 && m_annotationEngine) {
+        // Clearing an existing label deletes it.
+        m_annotationEngine->updateTextAnnotation(m_editingTextIndex, text,
+                                                 m_annotationEngine->currentTextStyle());
+        finishExistingTextEdit();
+        update();
+        updateUndoRedoState();
+    } else if (!text.isEmpty() && m_annotationEngine) {
         m_annotationEngine->addTextAnnotation(m_textEditPosition, text);
         update();
         updateUndoRedoState();
@@ -3635,6 +3906,10 @@ void CaptureOverlay::commitText()
 
 void CaptureOverlay::cancelTextEdit()
 {
+    if (m_editingTextIndex >= 0) {
+        finishExistingTextEdit();
+        update();
+    }
     if (m_textEdit) {
         releaseTextKeyboardFocus();
         m_textEdit->hide();
@@ -3703,13 +3978,6 @@ void CaptureOverlay::onSelectionLockToggled(bool locked)
     m_selectionLocked = locked;
     if (m_toolbar)
         m_toolbar->setSelectionLocked(locked);
-}
-
-void CaptureOverlay::onBlurIntensityChanged(int intensity)
-{
-    if (m_annotationEngine) m_annotationEngine->setBlurIntensity(intensity);
-    if (m_settingsWriter)
-        m_settingsWriter->schedule(QStringLiteral("blurIntensity"), intensity);
 }
 
 void CaptureOverlay::onOcrRequested()
@@ -4076,6 +4344,7 @@ void CaptureOverlay::completeSelection(const QRect &selectionRect)
     }
     updateUndoRedoState();
     updateCursor(bounded.center());
+    showSelectionOnboarding();
     update();
 }
 
@@ -4104,11 +4373,190 @@ void CaptureOverlay::onToolSelected(int toolId)
             });
         }
     }
+    showToolOnboarding(toolId);
     QTimer::singleShot(0, this, [this]() {
         if (isVisible() && m_selectionComplete
             && (!m_textEdit || !m_textEdit->isVisible()))
             acquireCaptureKeyboardFocus();
     });
+}
+
+void CaptureOverlay::drawSelectionHint(QPainter &painter)
+{
+    struct Item { QString key; QString label; };
+    QList<Item> items;
+    const QString copyKey = OnboardingTips::overlayShortcutText(QStringLiteral("actionCopy"),
+                                                                QStringLiteral("Ctrl+C"));
+    items.append({copyKey.isEmpty() ? QStringLiteral("Enter") : QStringLiteral("Enter / ") + copyKey,
+                  TranslationManager::captureHintCopy()});
+    const QString saveKey = OnboardingTips::overlayShortcutText(QStringLiteral("actionSave"),
+                                                                QStringLiteral("Ctrl+S"));
+    if (!saveKey.isEmpty())
+        items.append({saveKey, TranslationManager::captureHintSave()});
+    items.append({QStringLiteral("?"), TranslationManager::tr("captureHintShortcuts")});
+
+    QFont keyFont = painter.font();
+    keyFont.setPointSize(9);
+    keyFont.setWeight(QFont::DemiBold);
+    QFont labelFont = keyFont;
+    labelFont.setWeight(QFont::Normal);
+    int width = 24;
+    for (int i = 0; i < items.size(); ++i) {
+        width += QFontMetrics(keyFont).horizontalAdvance(items[i].key) + 14
+            + 7 + QFontMetrics(labelFont).horizontalAdvance(items[i].label);
+        if (i + 1 < items.size())
+            width += 16;
+    }
+
+    // Inside the top of the selection, or above it when the region is small.
+    const QRect selection = normalizedSelectionRect();
+    QRect strip(0, 0, width, 34);
+    if (selection.width() >= width + 24 && selection.height() >= 120)
+        strip.moveTopLeft(QPoint(selection.center().x() - width / 2, selection.top() + 12));
+    else
+        strip.moveTopLeft(QPoint(selection.center().x() - width / 2, selection.top() - 44));
+    strip.moveLeft(qBound(4, strip.left(), qMax(4, this->width() - strip.width() - 4)));
+    strip.moveTop(qBound(4, strip.top(), qMax(4, height() - strip.height() - 4)));
+
+    painter.save();
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setPen(QPen(QColor(255, 255, 255, 42), 1));
+    painter.setBrush(QColor(20, 20, 22, 205));
+    painter.drawRoundedRect(strip, 9, 9);
+    int x = strip.left() + 12;
+    for (int i = 0; i < items.size(); ++i) {
+        drawCaptureHintShortcut(painter, x, strip.top() + 5, items[i].key, items[i].label, false);
+        x += 16;
+    }
+    painter.restore();
+}
+
+bool CaptureOverlay::isShortcutSheetOpen() const
+{
+    return m_shortcutSheet && m_shortcutSheet->isVisible();
+}
+
+void CaptureOverlay::toggleShortcutSheet()
+{
+    if (m_textEdit && m_textEdit->isVisible())
+        commitText();
+    if (m_hintBubble)
+        m_hintBubble->dismiss();
+    if (isShortcutSheetOpen()) {
+        m_shortcutSheet->hide();
+    } else {
+        if (!m_shortcutSheet) {
+            m_shortcutSheet = new ShortcutSheetLayer(this);
+            // Closed by a click: repaint the hints it covered and keep keys
+            // on the canvas.
+            connect(m_shortcutSheet, &ShortcutSheetLayer::closed, this, [this]() {
+                update();
+                acquireCaptureKeyboardFocus();
+            });
+        }
+        const QRect monitor = m_selectionComplete
+            ? monitorRectAt(normalizedSelectionRect().center())
+            : monitorRectAt(mapFromGlobal(QCursor::pos()));
+        m_shortcutSheet->open(monitor);
+    }
+    update();
+    // The panel button took focus; keep keys (Esc, ?) on the canvas.
+    acquireCaptureKeyboardFocus();
+}
+
+HintBubble *CaptureOverlay::hintBubble()
+{
+    if (!m_hintBubble)
+        m_hintBubble = new HintBubble(this);
+    return m_hintBubble;
+}
+
+void CaptureOverlay::showSelectionOnboarding()
+{
+    // A short strip with the three things to do next, for the first captures.
+    constexpr int SelectionHintCaptures = 3;
+    if (OnboardingTips::count(OnboardingTips::SelectionHintCount) < SelectionHintCaptures) {
+        OnboardingTips::increment(OnboardingTips::SelectionHintCount);
+        m_showSelectionHint = true;
+        QPointer<CaptureOverlay> self(this);
+        QTimer::singleShot(4500, this, [self]() {
+            if (!self)
+                return;
+            self->m_showSelectionHint = false;
+            self->update();
+        });
+    }
+
+    if (!m_toolSettingsButton)
+        return;
+    // The Quick Settings tab is easy to miss: glow it for the first captures
+    // and point at it once.
+    constexpr int TabGlowCaptures = 3;
+    if (OnboardingTips::count(OnboardingTips::TabGlowCount) < TabGlowCaptures) {
+        OnboardingTips::increment(OnboardingTips::TabGlowCount);
+        auto *tab = static_cast<SideTabButton *>(m_toolSettingsButton);
+        auto *glow = new QVariantAnimation(this);
+        glow->setDuration(1300);
+        glow->setKeyValueAt(0.0, 0.0);
+        glow->setKeyValueAt(0.5, 1.0);
+        glow->setKeyValueAt(1.0, 0.0);
+        glow->setLoopCount(2);
+        connect(glow, &QVariantAnimation::valueChanged, tab, [tab](const QVariant &value) {
+            tab->setGlow(value.toReal());
+        });
+        connect(glow, &QVariantAnimation::finished, tab, [tab]() { tab->setGlow(0.0); });
+        glow->start(QAbstractAnimation::DeleteWhenStopped);
+    }
+    if (!OnboardingTips::isSeen(OnboardingTips::QuickSettingsTip)) {
+        QPointer<CaptureOverlay> self(this);
+        QTimer::singleShot(700, this, [self]() {
+            if (!self || !self->m_selectionComplete || !self->m_toolSettingsButton
+                || !self->m_toolSettingsButton->isVisible()) {
+                return;
+            }
+            OnboardingTips::markSeen(OnboardingTips::QuickSettingsTip);
+            self->hintBubble()->showTip(TranslationManager::tr("tipQuickSettings"),
+                                        self->m_toolSettingsButton->geometry(),
+                                        HintBubble::Pointer::Left, self->rect());
+        });
+    }
+}
+
+void CaptureOverlay::showToolOnboarding(int toolId)
+{
+    if (!m_selectionComplete)
+        return;
+    if (toolId == AnnotationEngine::Text && !OnboardingTips::isSeen(OnboardingTips::TextToolTip)
+        && m_toolbar && m_toolbar->isVisible()) {
+        OnboardingTips::markSeen(OnboardingTips::TextToolTip);
+        const QRect toolbar = m_toolbar->geometry();
+        const bool toolbarBelow = toolbar.center().y() > normalizedSelectionRect().center().y();
+        hintBubble()->showTip(TranslationManager::tr("tipTextTool"), toolbar,
+                              toolbarBelow ? HintBubble::Pointer::Down : HintBubble::Pointer::Up,
+                              rect());
+        return;
+    }
+
+    // First use of a tool with options: open Quick Settings briefly so its
+    // sliders are seen once.
+    const bool hasOptions = toolId == AnnotationEngine::Pen || toolId == AnnotationEngine::Arrow
+        || toolId == AnnotationEngine::Line || toolId == AnnotationEngine::Rectangle
+        || toolId == AnnotationEngine::Circle || toolId == AnnotationEngine::Highlighter
+        || toolId == AnnotationEngine::Blur || toolId == AnnotationEngine::Pixelate;
+    if (hasOptions && !OnboardingTips::isSeen(OnboardingTips::DrawerPeek)
+        && m_toolSettingsDrawer && !m_toolSettingsDrawer->isVisible()) {
+        OnboardingTips::markSeen(OnboardingTips::DrawerPeek);
+        if (m_hintBubble)
+            m_hintBubble->dismiss();
+        setToolSettingsDrawerVisible(true);
+        QPointer<CaptureOverlay> self(this);
+        QTimer::singleShot(2600, this, [self]() {
+            if (self && self->m_toolSettingsDrawer && self->m_toolSettingsDrawer->isVisible()
+                && !self->m_toolSettingsDrawer->underMouse()) {
+                self->setToolSettingsDrawerVisible(false);
+            }
+        });
+    }
 }
 
 void CaptureOverlay::onCopyToClipboard()

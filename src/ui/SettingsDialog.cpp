@@ -1,5 +1,6 @@
 #include "SettingsDialog.h"
 #include "../core/ComponentPaths.h"
+#include "OnboardingTips.h"
 #include "SettingsHotkeyPolicy.h"
 #include "SettingsLayoutPolicy.h"
 #include "ApplicationTheme.h"
@@ -87,12 +88,12 @@ QString uiLabel(const char *tr, const char *en)
 
 QStringList defaultAnnotationTools()
 {
-    return {"Pen","Arrow","Line","Rectangle","Circle","Text","Highlighter","SemiRect","Blur","Counter","Eraser"};
+    return {"Pen","Arrow","Line","Rectangle","Circle","Text","Highlighter","SemiRect","Blur","Pixelate","Counter","Eraser"};
 }
 
 QStringList defaultToolbarControls()
 {
-    return {"Color","Eyedropper","Lock","BlurIntensity","Undo","Redo","Ocr","Upload","GoogleLens","Gif","Video"};
+    return {"Color","Eyedropper","Lock","Undo","Redo","Ocr","Upload","GoogleLens","Gif","Video"};
 }
 
 struct OverlayShortcutDef {
@@ -113,6 +114,7 @@ QVector<OverlayShortcutDef> overlayShortcutDefaults()
         {"toolHighlighter", TranslationManager::toolHighlighter(), "H"},
         {"toolSemiRect", TranslationManager::toolSemiRect(), "D"},
         {"toolBlur", TranslationManager::toolBlur(), "B"},
+        {"toolPixelate", TranslationManager::toolPixelate(), "M"},
         {"toolCounter", TranslationManager::toolCounter(), "N"},
         {"toolEraser", TranslationManager::toolEraser(), "X"},
         {"actionEyedropper", TranslationManager::toolEyedropper(), "I"},
@@ -837,6 +839,14 @@ QWidget* SettingsDialog::createAppearanceTab()
     m_captureHintsCheck = new QCheckBox(TranslationManager::showCaptureHints());
     m_captureHintsCheck->setToolTip(TranslationManager::showCaptureHintsTip());
     overlayLayout->addRow(m_captureHintsCheck);
+    auto *resetTipsButton = new QPushButton(TranslationManager::tr("tipsReset"));
+    resetTipsButton->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Fixed);
+    connect(resetTipsButton, &QPushButton::clicked, this, [resetTipsButton]() {
+        OnboardingTips::resetAll();
+        resetTipsButton->setText(TranslationManager::tr("tipsResetDone"));
+        resetTipsButton->setEnabled(false);
+    });
+    overlayLayout->addRow(resetTipsButton);
     layout->addWidget(overlayGroup);
 
     layout->addStretch();
@@ -1081,6 +1091,7 @@ QWidget* SettingsDialog::createInterfaceTab()
         {"Text",        TranslationManager::toolListText(),      ":/icons/text.svg"},
         {"Highlighter", TranslationManager::toolListHighlight(), ":/icons/highlighter.svg"},
         {"Blur",        TranslationManager::toolListBlur(),      ":/icons/blur.svg"},
+        {"Pixelate",    TranslationManager::toolListPixelate(),  ":/icons/pixelate.svg"},
         {"Counter",     TranslationManager::toolListCounter(),   ":/icons/counter.svg"},
         {"Eraser",      TranslationManager::toolListEraser(),    ":/icons/eraser.svg"},
     };
@@ -1089,7 +1100,6 @@ QWidget* SettingsDialog::createInterfaceTab()
         {"Color",         TranslationManager::toolColor(),                    ":/icons/color.svg"},
         {"Eyedropper",    TranslationManager::toolEyedropper(),               ":/icons/eyedropper.svg"},
         {"Lock",          TranslationManager::actionLock(),                   ":/icons/lock_open.svg"},
-        {"BlurIntensity", TranslationManager::toolBlurIntensity(),            ":/icons/blur.svg"},
         {"Undo",          TranslationManager::toolUndo(),                     ":/icons/undo.svg"},
         {"Redo",          TranslationManager::toolRedo(),                     ":/icons/redo.svg"},
         {"Ocr",           TranslationManager::actionOcr(),                    ":/icons/ocr.svg"},

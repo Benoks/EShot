@@ -108,10 +108,14 @@ HotkeyManager& HotkeyManager::instance()
 QString HotkeyManager::shortcutText(UINT modifiers, UINT virtualKey)
 {
     QString portable = LinuxPortalGlobalShortcuts::preferredTrigger(modifiers, virtualKey);
-    // QKeySequence knows "Meta" but not the portal-style "SUPER".
+    // QKeySequence knows "Meta" but not the portal-style "LOGO" (or the
+    // older "SUPER") for the Super key.
+    portable.replace(QStringLiteral("LOGO"), QStringLiteral("Meta"));
     portable.replace(QStringLiteral("SUPER"), QStringLiteral("Meta"));
+    // Portable names ("Ctrl", "Shift") match EShot's UI language; native
+    // text would follow the system locale instead.
     return QKeySequence::fromString(portable, QKeySequence::PortableText)
-        .toString(QKeySequence::NativeText);
+        .toString(QKeySequence::PortableText);
 }
 
 QString HotkeyManager::recordingPauseShortcutText() const

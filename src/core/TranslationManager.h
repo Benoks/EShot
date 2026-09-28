@@ -201,6 +201,7 @@ public:
     static QString toolText()         { return tr("toolText"); }
     static QString toolHighlighter()  { return tr("toolHighlighter"); }
     static QString toolBlur()         { return tr("toolBlur"); }
+    static QString toolPixelate()     { return tr("toolPixelate"); }
     static QString toolCounter()      { return tr("toolCounter"); }
     static QString toolEraser()       { return tr("toolEraser"); }
     static QString toolLine()         { return tr("toolLine"); }
@@ -212,7 +213,6 @@ public:
     static QString toolRedo()         { return tr("toolRedo"); }
     static QString toolEyedropper()   { return tr("toolEyedropper"); }
     static QString toolSemiRect()     { return tr("toolSemiRect"); }
-    static QString toolBlurIntensity(){ return tr("toolBlurIntensity"); }
     static QString actionPin()        { return tr("actionPin"); }
     static QString actionCopy()       { return tr("actionCopy"); }
     static QString actionSave()       { return tr("actionSave"); }
@@ -242,6 +242,7 @@ public:
     static QString toolListText()     { return tr("toolListText"); }
     static QString toolListHighlight(){ return tr("toolListHighlight"); }
     static QString toolListBlur()     { return tr("toolListBlur"); }
+    static QString toolListPixelate() { return tr("toolListPixelate"); }
     static QString toolListCounter()  { return tr("toolListCounter"); }
     static QString toolListEraser()   { return tr("toolListEraser"); }
     static QString toolListLine()     { return tr("toolListLine"); }
@@ -539,6 +540,65 @@ private:
         {"highlighterStraightTooltip", {"Shift: düz çizgi", "Shift: straight line", "Umschalt: gerade Linie", "Maj : ligne droite", "Mayús: línea recta", "Shift: 直線", "Shift：直线", "Shift: прямая линия"}},
         {"highlighterStraightHint", {"Shift basılıyken yatay veya dikey vurgula", "Hold Shift to highlight horizontally or vertically", "Mit Umschalt horizontal oder vertikal markieren", "Maintenez Maj pour surligner horizontalement ou verticalement", "Mantén Mayús para resaltar horizontal o verticalmente", "Shift を押しながら水平または垂直にマーク", "按住 Shift 可水平或垂直高亮", "Удерживайте Shift для горизонтального или вертикального выделения"}},
         {"toolBlur",       {"Bulanıklaştır (B)", "Blur (B)", "Unschärfe (B)", "Flou (B)", "Desenfocar (B)", "ぼかし (B)", "模糊 (B)", "Размытие (B)"}},
+        {"textBold",       {"Kalın", "Bold", "Fett", "Gras", "Negrita", "太字", "粗体", "Жирный"}},
+        {"textBackground", {"Metin arka planı", "Text background", "Texthintergrund", "Fond du texte", "Fondo del texto", "テキストの背景", "文字背景", "Фон текста"}},
+        {"textBackgroundBox", {"Kutu", "Box", "Kasten", "Encadré", "Cuadro", "ボックス", "底框", "Плашка"}},
+        {"textBackgroundPlain", {"Sade", "Plain", "Ohne", "Aucun", "Sin fondo", "なし", "无", "Без фона"}},
+        {"textBackgroundOutline", {"Kontur", "Outline", "Kontur", "Contour", "Contorno", "縁取り", "描边", "Обводка"}},
+        {"captureHintShortcuts", {"Kısayollar", "Shortcuts", "Tastenkürzel", "Raccourcis", "Atajos", "ショートカット", "快捷键", "Горячие клавиши"}},
+        {"sheetTitle", {"Kısayollar ve ipuçları", "Shortcuts and tips", "Tastenkürzel und Tipps", "Raccourcis et astuces", "Atajos y consejos", "ショートカットとヒント", "快捷键与提示", "Горячие клавиши и советы"}},
+        {"sheetClose", {"Kapatmak için ? veya Esc", "Press ? or Esc to close", "? oder Esc zum Schließen", "? ou Échap pour fermer", "Pulsa ? o Esc para cerrar", "? または Esc で閉じる", "按 ? 或 Esc 关闭", "? или Esc — закрыть"}},
+        {"sheetSectionSelection", {"Seçim", "Selection", "Auswahl", "Sélection", "Selección", "選択", "选区", "Выделение"}},
+        {"sheetSectionTools", {"Araçlar", "Tools", "Werkzeuge", "Outils", "Herramientas", "ツール", "工具", "Инструменты"}},
+        {"sheetSectionEditing", {"Düzenleme", "Editing", "Bearbeiten", "Édition", "Edición", "編集", "编辑", "Редактирование"}},
+        {"sheetSectionText", {"Metin yazarken", "While typing", "Beim Tippen", "Pendant la saisie", "Al escribir", "入力中", "输入文本时", "При вводе текста"}},
+        {"sheetSectionMore", {"Diğer", "More", "Weitere", "Plus", "Más", "その他", "更多", "Ещё"}},
+        {"keyDrag", {"Sürükle", "Drag", "Ziehen", "Glisser", "Arrastrar", "ドラッグ", "拖动", "Перетащить"}},
+        {"keyDoubleClick", {"Çift tık", "Double-click", "Doppelklick", "Double-clic", "Doble clic", "ダブルクリック", "双击", "Двойной щелчок"}},
+        {"keyCtrlClick", {"Ctrl+tık", "Ctrl+click", "Strg+Klick", "Ctrl+clic", "Ctrl+clic", "Ctrl+クリック", "Ctrl+单击", "Ctrl+щелчок"}},
+        {"keyShiftDrag", {"Shift+sürükle", "Shift+drag", "Umschalt+Ziehen", "Maj+glisser", "Mayús+arrastrar", "Shift+ドラッグ", "Shift+拖动", "Shift+перетащить"}},
+        {"sheetSelectArea", {"Alan seç", "Select an area", "Bereich auswählen", "Sélectionner une zone", "Seleccionar un área", "範囲を選択", "选择区域", "Выделить область"}},
+        {"sheetSelectScreen", {"Tüm ekranı seç", "Select a whole screen", "Ganzen Bildschirm wählen", "Sélectionner tout l'écran", "Seleccionar toda la pantalla", "画面全体を選択", "选择整个屏幕", "Выделить весь экран"}},
+        {"sheetCancel", {"Seçimi temizle / kapat", "Clear selection / close", "Auswahl löschen / schließen", "Effacer la sélection / fermer", "Borrar selección / cerrar", "選択を解除 / 閉じる", "清除选区 / 关闭", "Сбросить выделение / закрыть"}},
+        {"sheetMoveObject", {"Nesneyi seç ve taşı", "Select and move an object", "Objekt wählen und verschieben", "Sélectionner et déplacer un objet", "Seleccionar y mover un objeto", "オブジェクトを選択して移動", "选择并移动对象", "Выбрать и переместить объект"}},
+        {"sheetDeleteSelected", {"Seçili nesneyi sil", "Delete the selected object", "Ausgewähltes Objekt löschen", "Supprimer l'objet sélectionné", "Eliminar el objeto seleccionado", "選択したオブジェクトを削除", "删除所选对象", "Удалить выбранный объект"}},
+        {"sheetStraight", {"Düz çizgi, kare veya tam daire", "Straight line, square or circle", "Gerade, Quadrat oder Kreis", "Ligne droite, carré ou cercle", "Línea recta, cuadrado o círculo", "直線・正方形・正円", "直线、正方形或正圆", "Прямая, квадрат или круг"}},
+        {"sheetEditText", {"Metni düzenle", "Edit text", "Text bearbeiten", "Modifier le texte", "Editar texto", "テキストを編集", "编辑文本", "Изменить текст"}},
+        {"sheetTextSize", {"Yazı boyutu", "Text size", "Textgröße", "Taille du texte", "Tamaño del texto", "文字サイズ", "文字大小", "Размер текста"}},
+        {"sheetNewLine", {"Yeni satır", "New line", "Neue Zeile", "Nouvelle ligne", "Nueva línea", "改行", "换行", "Новая строка"}},
+        {"sheetConfirm", {"Onayla", "Confirm", "Bestätigen", "Valider", "Confirmar", "確定", "确认", "Подтвердить"}},
+        {"sheetQuickSettings", {"Kalınlık, blur gücü ve yazı tipi soldaki Hızlı Ayarlar sekmesinde.", "Width, blur strength and fonts are in the Quick Settings tab on the left.", "Linienstärke, Unschärfe und Schrift findest du links im Tab „Schnelleinstellungen“.", "Épaisseur, intensité du flou et police : onglet Réglages rapides à gauche.", "Grosor, intensidad del desenfoque y fuente: pestaña Ajustes rápidos a la izquierda.", "線の太さ・ぼかし強度・フォントは左のクイック設定タブにあります。", "线宽、模糊强度和字体在左侧的“快速设置”标签中。", "Толщина, сила размытия и шрифт — во вкладке «Быстрые настройки» слева."}},
+        {"tipQuickSettings", {"Kalem kalınlığı, blur gücü ve yazı tipi ayarları burada.", "Pen width, blur strength and font settings are here.", "Hier findest du Linienstärke, Unschärfe und Schrift.", "Épaisseur du trait, intensité du flou et police se règlent ici.", "Aquí están el grosor, la intensidad del desenfoque y la fuente.", "線の太さ、ぼかし強度、フォントはここで設定できます。", "画笔粗细、模糊强度和字体都在这里设置。", "Здесь настраиваются толщина, сила размытия и шрифт."}},
+        {"tipTextTool", {"Mevcut bir metni düzenlemek için üstüne tıklayın ya da F2'ye basın. Ctrl+B kalın, Ctrl+ +/− boyut.", "Click an existing label or press F2 to edit it. Ctrl+B bold, Ctrl+ +/− size.", "Klicke auf einen vorhandenen Text oder drücke F2 zum Bearbeiten. Strg+B fett, Strg+ +/− Größe.", "Cliquez sur un texte existant ou appuyez sur F2 pour le modifier. Ctrl+B gras, Ctrl+ +/− taille.", "Haz clic en un texto existente o pulsa F2 para editarlo. Ctrl+B negrita, Ctrl+ +/− tamaño.", "既存のテキストをクリックするか F2 で編集できます。Ctrl+B で太字、Ctrl+ +/− でサイズ。", "单击现有文本或按 F2 进行编辑。Ctrl+B 加粗，Ctrl+ +/− 调整大小。", "Щёлкните по тексту или нажмите F2, чтобы изменить его. Ctrl+B — жирный, Ctrl+ +/− — размер."}},
+        {"tipCtrlMove", {"Çizim araçları diğer nesnelerin üstüne de çizer. Bir nesneyi taşımak için Ctrl+tık.", "Drawing tools draw over other objects too. Ctrl+click an object to move it.", "Zeichenwerkzeuge zeichnen auch über andere Objekte. Strg+Klick verschiebt ein Objekt.", "Les outils de dessin dessinent aussi par-dessus les objets. Ctrl+clic pour en déplacer un.", "Las herramientas dibujan también sobre otros objetos. Ctrl+clic para mover uno.", "描画ツールは他のオブジェクトの上にも描けます。移動するには Ctrl+クリック。", "绘图工具也会在其他对象上绘制。按住 Ctrl 单击可移动对象。", "Инструменты рисуют и поверх объектов. Ctrl+щелчок — переместить объект."}},
+        {"tipGotIt", {"Anladım", "Got it", "Verstanden", "Compris", "Entendido", "了解", "知道了", "Понятно"}},
+        {"tipsReset", {"İpuçlarını tekrar göster", "Show tips again", "Tipps erneut anzeigen", "Réafficher les astuces", "Volver a mostrar consejos", "ヒントを再表示", "重新显示提示", "Снова показывать советы"}},
+        {"tipsResetDone", {"İpuçları bir sonraki yakalamada tekrar gösterilecek.", "Tips will show again on the next capture.", "Tipps werden bei der nächsten Aufnahme wieder angezeigt.", "Les astuces réapparaîtront à la prochaine capture.", "Los consejos se mostrarán en la próxima captura.", "次のキャプチャでヒントが再表示されます。", "下次截图时将重新显示提示。", "Советы снова появятся при следующем снимке."}},
+        {"trayWelcomeTitle", {"EShot çalışıyor", "EShot is running", "EShot läuft", "EShot est lancé", "EShot está en ejecución", "EShot は実行中です", "EShot 正在运行", "EShot запущен"}},
+        {"trayWelcomeBody", {"EShot sistem tepsisinde bekliyor. Ekran görüntüsü almak için %1 tuşuna basın.", "EShot is waiting in the system tray. Press %1 to take a screenshot.", "EShot wartet im Infobereich. Drücke %1 für einen Screenshot.", "EShot attend dans la zone de notification. Appuyez sur %1 pour faire une capture.", "EShot espera en la bandeja del sistema. Pulsa %1 para hacer una captura.", "EShot はシステムトレイで待機中です。%1 でスクリーンショットを撮れます。", "EShot 已在系统托盘中运行。按 %1 截图。", "EShot работает в системном трее. Нажмите %1, чтобы сделать снимок."}},
+        {"descPen", {"Serbest çizim", "Draw freehand", "Freihand zeichnen", "Dessin à main levée", "Dibujo a mano alzada", "フリーハンドで描く", "自由绘制", "Рисование от руки"}},
+        {"descArrow", {"Bir yeri işaret et", "Point at something", "Auf etwas zeigen", "Pointer un élément", "Señalar algo", "何かを指し示す", "指向某处", "Указать на что-то"}},
+        {"descLine", {"Düz çizgi çiz", "Draw a straight line", "Gerade Linie zeichnen", "Tracer une ligne droite", "Dibujar una línea recta", "直線を描く", "绘制直线", "Нарисовать прямую"}},
+        {"descRect", {"Bir alanı çerçevele (Shift: kare)", "Frame an area (Shift: square)", "Bereich umrahmen (Umschalt: Quadrat)", "Encadrer une zone (Maj : carré)", "Enmarcar un área (Mayús: cuadrado)", "範囲を囲む（Shift: 正方形）", "框选区域（Shift：正方形）", "Обвести область (Shift — квадрат)"}},
+        {"descCircle", {"Bir alanı daire içine al (Shift: tam daire)", "Circle an area (Shift: perfect circle)", "Bereich einkreisen (Umschalt: Kreis)", "Entourer une zone (Maj : cercle)", "Rodear un área (Mayús: círculo)", "範囲を丸で囲む（Shift: 正円）", "圈出区域（Shift：正圆）", "Обвести кругом (Shift — ровный круг)"}},
+        {"descText", {"Etiket ekle: tıkla ve yaz", "Add a label: click and type", "Beschriftung: klicken und tippen", "Ajouter un texte : cliquer puis taper", "Añadir texto: haz clic y escribe", "ラベルを追加：クリックして入力", "添加标签：单击后输入", "Добавить подпись: щёлкните и печатайте"}},
+        {"descHighlighter", {"Metni vurgula (Shift: düz)", "Highlight text (Shift: straight)", "Text markieren (Umschalt: gerade)", "Surligner du texte (Maj : droit)", "Resaltar texto (Mayús: recto)", "テキストを強調（Shift: 直線）", "高亮文本（Shift：直线）", "Выделить текст (Shift — прямо)"}},
+        {"descSemiRect", {"Bir alanı yarı saydam renkle kapla", "Cover an area with a see-through colour", "Bereich halbtransparent abdecken", "Couvrir une zone d'une couleur translucide", "Cubrir un área con color translúcido", "範囲を半透明の色で覆う", "用半透明颜色覆盖区域", "Закрыть область полупрозрачным цветом"}},
+        {"descBlur", {"Yumuşak bulanıklaştırma", "Soft blur", "Weiches Weichzeichnen", "Flou doux", "Desenfoque suave", "柔らかいぼかし", "柔和模糊", "Мягкое размытие"}},
+        {"descPixelate", {"Hassas bilgiyi gizle", "Hide sensitive information", "Vertrauliches verbergen", "Masquer des informations sensibles", "Ocultar información sensible", "機密情報を隠す", "隐藏敏感信息", "Скрыть конфиденциальные данные"}},
+        {"descCounter", {"Adımları numarala", "Number the steps", "Schritte nummerieren", "Numéroter les étapes", "Numerar los pasos", "手順に番号を付ける", "为步骤编号", "Пронумеровать шаги"}},
+        {"descEraser", {"Tıklanan nesneyi sil", "Remove the clicked object", "Angeklicktes Objekt entfernen", "Supprimer l'objet cliqué", "Quitar el objeto pulsado", "クリックしたオブジェクトを削除", "删除单击的对象", "Удалить объект по щелчку"}},
+        {"descUndo", {"Son değişikliği geri al", "Undo the last change", "Letzte Änderung rückgängig", "Annuler la dernière modification", "Deshacer el último cambio", "直前の変更を取り消す", "撤销上一次更改", "Отменить последнее изменение"}},
+        {"descRedo", {"Geri alınanı yeniden uygula", "Redo the undone change", "Rückgängig gemachte Änderung wiederholen", "Rétablir la modification annulée", "Rehacer el cambio deshecho", "取り消した変更をやり直す", "重做已撤销的更改", "Повторить отменённое действие"}},
+        {"descColor", {"Çizim rengi; seçili nesneyi de boyar", "Drawing colour; also recolours the selected object", "Zeichenfarbe; färbt auch das ausgewählte Objekt", "Couleur du dessin ; recolore aussi l'objet sélectionné", "Color de dibujo; también recolorea el objeto seleccionado", "描画色（選択中のオブジェクトの色も変更）", "绘图颜色；也会重新着色所选对象", "Цвет рисования; меняет и цвет выбранного объекта"}},
+        {"descEyedropper", {"Ekrandan renk al", "Pick a colour from the screen", "Farbe vom Bildschirm aufnehmen", "Prélever une couleur à l'écran", "Tomar un color de la pantalla", "画面から色を取得", "从屏幕取色", "Взять цвет с экрана"}},
+        {"descLock", {"Seçimin yanlışlıkla kaymasını engelle", "Keep the selection from moving by accident", "Auswahl gegen Verschieben sperren", "Empêcher la sélection de bouger", "Evitar que la selección se mueva", "選択範囲の移動を防ぐ", "防止选区被意外移动", "Защитить выделение от сдвига"}},
+        {"descOcr", {"Görüntüdeki metni kopyala", "Copy the text in the image", "Text im Bild kopieren", "Copier le texte de l'image", "Copiar el texto de la imagen", "画像内のテキストをコピー", "复制图像中的文字", "Скопировать текст с изображения"}},
+        {"descUpload", {"Görüntüyü yükle ve bağlantı al", "Upload the image and get a link", "Bild hochladen und Link erhalten", "Téléverser l'image et obtenir un lien", "Subir la imagen y obtener un enlace", "画像をアップロードしてリンクを取得", "上传图像并获取链接", "Загрузить изображение и получить ссылку"}},
+        {"descLens", {"Görüntüyle internette ara", "Search the web with the image", "Mit dem Bild im Web suchen", "Rechercher sur le web avec l'image", "Buscar en la web con la imagen", "画像でウェブ検索", "用图像进行网络搜索", "Искать в интернете по изображению"}},
+        {"descGif", {"Seçili alanı GIF olarak kaydet", "Record the area as a GIF", "Bereich als GIF aufnehmen", "Enregistrer la zone en GIF", "Grabar el área como GIF", "範囲を GIF として録画", "将区域录制为 GIF", "Записать область в GIF"}},
+        {"descVideo", {"Seçili alanı video olarak kaydet", "Record the area as a video", "Bereich als Video aufnehmen", "Enregistrer la zone en vidéo", "Grabar el área como vídeo", "範囲を動画として録画", "将区域录制为视频", "Записать область в видео"}},
+        {"toolPixelate",   {"Pikselleştir (M)", "Pixelate (M)", "Verpixeln (M)", "Pixeliser (M)", "Pixelar (M)", "モザイク (M)", "像素化 (M)", "Пикселизация (M)"}},
         {"toolCounter",    {"Numara (N)", "Counter (N)", "Zähler (N)", "Compteur (N)", "Contador (N)", "カウンター (N)", "计数器 (N)", "Счётчик (N)"}},
         {"toolEraser",     {"Silgi (X)", "Eraser (X)", "Radierer (X)", "Gomme (X)", "Borrador (X)", "消しゴム (X)", "橡皮 (X)", "Ластик (X)"}},
         {"toolLine",       {"Çizgi (L)", "Line (L)", "Linie (L)", "Ligne (L)", "Línea (L)", "線 (L)", "线条 (L)", "Линия (L)"}},
@@ -562,7 +622,6 @@ private:
         {"visualSearchYandexTooltip", {"Yandex Görseller ile ara", "Search with Yandex Images", "Mit Yandex Bilder suchen", "Rechercher avec Yandex Images", "Buscar con Yandex Imágenes", "Yandex Images で検索", "使用 Yandex 图片搜索", "Искать через Yandex Картинки"}},
         {"toolEyedropper", {"Renk Seçici", "Eyedropper", "Pipette", "Pipette", "Cuentagotas", "Eyedropper", "取色器", "Пипетка"}},
         {"toolSemiRect",   {"Saydam Kare", "Semi-Transparent", "Halbtransparent", "Semi-transparent", "Semi-transparente", "半透明", "半透明矩形", "Полупрозрачный"}},
-        {"toolBlurIntensity",{"Bulanıklık Şiddeti", "Blur Intensity", "Unschärfeintensität", "Intensité du flou", "Intensidad de desenfoque", "ぼかし強度", "模糊强度", "Сила размытия"}},
 
         // ─── Araç listesi ───
         {"toolListPen",    {"✏️ Kalem", "✏️ Pen", "✏️ Stift", "✏️ Stylo", "✏️ Lápiz", "✏️ ペン", "✏️ 画笔", "✏️ Карандаш"}},
@@ -571,7 +630,8 @@ private:
         {"toolListCircle", {"⭕ Çember", "⭕ Circle", "⭕ Kreis", "⭕ Cercle", "⭕ Círculo", "⭕ 円", "⭕ 圆形", "⭕ Круг"}},
         {"toolListText",   {"🔤 Metin", "🔤 Text", "🔤 Text", "🔤 Texte", "🔤 Texto", "🔤 テキスト", "🔤 文本", "🔤 Текст"}},
         {"toolListHighlight",{"🖍️ Vurgulayıcı", "🖍️ Highlighter", "🖍️ Textmarker", "🖍️ Surligneur", "🖍️ Resaltador", "🖍️ マーカー", "🖍️ 荧光笔", "🖍️ Маркер"}},
-        {"toolListBlur",   {"🔲 Bulanıklaştır", "🔲 Blur", "🔲 Unschärfe", "🔲 Flou", "🔲 Desenfocar", "🔲 ぼかし", "🔲 模糊", "🔲 Размытие"}},
+        {"toolListBlur",   {"💧 Bulanıklaştır", "💧 Blur", "💧 Unschärfe", "💧 Flou", "💧 Desenfocar", "💧 ぼかし", "💧 模糊", "💧 Размытие"}},
+        {"toolListPixelate", {"🔲 Pikselleştir", "🔲 Pixelate", "🔲 Verpixeln", "🔲 Pixeliser", "🔲 Pixelar", "🔲 モザイク", "🔲 像素化", "🔲 Пикселизация"}},
         {"toolListCounter",{"🔢 Numara", "🔢 Counter", "🔢 Zähler", "🔢 Compteur", "🔢 Contador", "🔢 カウンター", "🔢 计数器", "🔢 Счётчик"}},
         {"toolListEraser", {"🧹 Silgi", "🧹 Eraser", "🧹 Radierer", "🧹 Gomme", "🧹 Borrador", "🧹 消しゴム", "🧹 橡皮", "🧹 Ластик"}},
         {"toolListLine",   {"📏 Çizgi", "📏 Line", "📏 Linie", "📏 Ligne", "📏 Línea", "📏 線", "📏 线条", "📏 Линия"}},

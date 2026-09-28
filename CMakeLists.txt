@@ -51,6 +51,9 @@ set(SOURCES
     src/core/UpdatePolicy.cpp
     src/core/WindowsInstallPolicy.cpp
     src/core/ComponentPaths.cpp
+    src/ui/OnboardingTips.cpp
+    src/ui/HintBubble.cpp
+    src/capture/ShortcutSheet.cpp
     src/core/LinuxUpdateScript.cpp
     src/core/LinuxDependencySelection.cpp
     src/core/CatboxUploader.cpp
@@ -65,6 +68,7 @@ set(SOURCES
     src/capture/CaptureOverlay.cpp
     src/capture/PinnedWindow.cpp
     src/annotation/AnnotationEngine.cpp
+    src/annotation/ImageEffects.cpp
     src/annotation/AnnotationRotationGeometry.cpp
     src/ui/AnnotationToolbar.cpp
     src/ui/ApplicationTheme.cpp
@@ -115,6 +119,9 @@ set(HEADERS
     src/core/UpdatePolicy.h
     src/core/WindowsInstallPolicy.h
     src/core/ComponentPaths.h
+    src/ui/OnboardingTips.h
+    src/ui/HintBubble.h
+    src/capture/ShortcutSheet.h
     src/core/LinuxUpdateScript.h
     src/core/LinuxDependencySelection.h
     src/core/CatboxUploader.h
@@ -129,6 +136,7 @@ set(HEADERS
     src/capture/CaptureOverlay.h
     src/capture/PinnedWindow.h
     src/annotation/AnnotationEngine.h
+    src/annotation/ImageEffects.h
     src/annotation/AnnotationRotationGeometry.h
     src/ui/AnnotationToolbar.h
     src/ui/ApplicationTheme.h
@@ -284,6 +292,8 @@ if(BUILD_TESTING)
             tests/AnnotationEngineTests.cpp
             src/annotation/AnnotationEngine.cpp
             src/annotation/AnnotationEngine.h
+            src/annotation/ImageEffects.cpp
+            src/annotation/ImageEffects.h
         LIBS Qt6::Core Qt6::Gui
     )
 

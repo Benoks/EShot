@@ -6,6 +6,7 @@
 #include <QRect>
 #include <QColor>
 #include <QVector>
+#include <QHash>
 #include <QPixmap>
 #include <QString>
 #include <QFont>
@@ -26,9 +27,26 @@ public:
         Counter,
         Eraser,
         Line,
-        SemiRect
+        SemiRect,
+        // Appended so tool ids stored in settings keep their meaning.
+        Pixelate
     };
     Q_ENUM(Tool)
+
+    // How a text label is set off from the screenshot behind it.
+    enum TextBackground {
+        TextBox = 0,     // translucent dark box (original look)
+        TextPlain,       // text only
+        TextOutline      // text with a dark outline, readable on any colour
+    };
+
+    struct TextStyle {
+        QString fontFamily;
+        int fontSize = 18;
+        QColor color;
+        bool bold = true;
+        TextBackground background = TextBox;
+    };
 
     explicit AnnotationEngine(QObject *parent = nullptr);
     ~AnnotationEngine();
@@ -46,6 +64,12 @@ public:
     QString textFontFamily() const { return m_textFontFamily; }
     void setTextFontSize(int size);
     int textFontSize() const { return m_textFontSize; }
+    void setTextBold(bool bold) { m_textBold = bold; }
+    bool textBold() const { return m_textBold; }
+    void setTextBackground(TextBackground background) { m_textBackground = background; }
+    TextBackground textBackground() const { return m_textBackground; }
+    // Style used for new text labels.
+    TextStyle currentTextStyle() const;
 
     void setBlurIntensity(int intensity);
     int blurIntensity() const { return m_blurIntensity; }
@@ -67,6 +91,16 @@ public:
     void redo();
 
     void addTextAnnotation(const QPoint &pos, const QString &text);
+    // Editing an existing label; every change is one undo step.
+    QString textOf(int index) const;
+    TextStyle textStyleOf(int index) const;
+    QPoint textAnchorOf(int index) const;
+    bool updateTextAnnotation(int index, const QString &text, const TextStyle &style);
+    // Recolours a finished annotation (not blur/pixelate); one undo step.
+    bool setAnnotationColor(int index, const QColor &color);
+    bool removeAnnotation(int index);
+    // Hides one annotation while it is being edited in place.
+    void setHiddenIndex(int index) { m_hiddenIndex = index; }
     void addCounterAnnotation(const QPoint &pos);
     bool eraseAnnotationAt(const QPoint &pos);
 
@@ -114,9 +148,11 @@ private:
         qreal rotationDegrees = 0.0;
         qreal textScaleX = 1.0;
         qreal textScaleY = 1.0;
-        // Blur pixel size captured when the blur was drawn, so later slider
-        // changes only affect new blurs.
+        // Blur radius / pixelate block size captured when the region was
+        // drawn, so later slider changes only affect new regions.
         int blurIntensity = 16;
+        bool textBold = true;
+        TextBackground textBackground = TextBox;
     };
 
     struct HistoryAction {
@@ -129,7 +165,10 @@ private:
     };
 
     void drawAnnotation(QPainter *painter, const Annotation &ann, const QPoint &offset);
-    void drawBlurEffect(QPainter *painter, const QRect &rect, const QPoint &offset, int intensity);
+    void replaceAnnotation(int index, const Annotation &updated);
+    void drawRedaction(QPainter *painter, Tool tool, const QRect &rect, const QPoint &offset,
+                       int intensity);
+    QPixmap redactedSnapshotRegion(Tool tool, const QRect &physicalRect, int intensity) const;
     QRect textBaseBackgroundRect(const Annotation &ann) const;
     QRect textBackgroundRect(const Annotation &ann) const;
     QRect rawAnnotationBounds(const Annotation &ann, int padding = 10) const;
@@ -168,6 +207,12 @@ private:
     qsizetype m_moveHistorySize = -1;
     QPixmap m_screenSnapshot;
     qreal m_snapshotScale = 1.0;
+    bool m_textBold = true;
+    TextBackground m_textBackground = TextBox;
+    int m_hiddenIndex = -1;
+    // Blurring is expensive and paintEvent runs on every mouse move; reuse
+    // results until the snapshot changes.
+    mutable QHash<QString, QPixmap> m_redactionCache;
 };
 
 #endif

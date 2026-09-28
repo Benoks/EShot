@@ -24,7 +24,6 @@ public:
     void selectTool(int toolId);
     void setUndoEnabled(bool enabled);
     void setRedoEnabled(bool enabled);
-    void setBlurIntensity(int intensity);
     void setColor(const QColor &color);
     void setSelectionLocked(bool locked);
     bool hasVisibleTools() const;
@@ -36,7 +35,6 @@ signals:
     void colorChanged(const QColor &color);
     void modalDialogClosed();
     void penWidthChanged(int width);
-    void blurIntensityChanged(int intensity);
     void textFontFamilyChanged(const QString &family);
     void textFontSizeChanged(int size);
     void eyedropperRequested();
@@ -51,7 +49,6 @@ private slots:
     void onToolButtonClicked();
     void onActionButtonClicked();
     void onColorButtonClicked();
-    void onBlurIntensityChanged(int value);
     void onEyedropperClicked();
     void onLockClicked();
 
@@ -86,11 +83,6 @@ private:
     // New: Selection lock
     QPushButton *m_lockButton;
     bool m_selectionLocked;
-
-    // New: Blur strength
-    QSlider *m_blurIntensitySlider;
-    QLabel *m_blurIntensityLabel;
-    QWidget *m_blurIntensityWidget;
 
     // Text options
     QWidget *m_textOptionsWidget;

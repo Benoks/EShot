@@ -14,7 +14,7 @@ release_block="$(sed -n '/void CaptureOverlay::mouseReleaseEvent/,/void CaptureO
   echo 'annotation rotation does not begin an undo gesture' >&2
   exit 1
 }
-[[ "${press_block}" == *'m_annotationEngine->beginMove(idx);'* ]] || {
+[[ "${press_block}" == *'m_annotationEngine->beginMove('* ]] || {
   echo 'annotation move does not begin an undo gesture' >&2
   exit 1
 }

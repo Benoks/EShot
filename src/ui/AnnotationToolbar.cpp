@@ -1,4 +1,5 @@
 #include "AnnotationToolbar.h"
+#include "OnboardingTips.h"
 #include "annotation/AnnotationEngine.h"
 #include "../core/TranslationManager.h"
 #include "../core/VisualSearch.h"
@@ -10,6 +11,7 @@
 #include <QGraphicsDropShadowEffect>
 #include <QStyle>
 #include <QSettings>
+#include <QRegularExpression>
 #include <QHBoxLayout>
 #include <QFontComboBox>
 #include <QSpinBox>
@@ -17,12 +19,29 @@
 namespace {
 QStringList defaultAnnotationTools()
 {
-    return {"Pen","Arrow","Line","Rectangle","Circle","Text","Highlighter","SemiRect","Blur","Counter","Eraser"};
+    return {"Pen","Arrow","Line","Rectangle","Circle","Text","Highlighter","SemiRect","Blur","Pixelate","Counter","Eraser"};
 }
 
 QStringList defaultToolbarControls()
 {
-    return {"Color","Eyedropper","Lock","BlurIntensity","Undo","Redo","Ocr","Upload","GoogleLens","Gif","Video"};
+    return {"Color","Eyedropper","Lock","Undo","Redo","Ocr","Upload","GoogleLens","Gif","Video"};
+}
+
+QStringList normalizedAnnotationTools(QSettings &settings)
+{
+    QStringList tools = settings.value("visibleTools", defaultAnnotationTools()).toStringList();
+    // Pixelate became its own tool next to the smooth Blur; show it to users
+    // who customised the toolbar before it existed.
+    if (settings.contains("visibleTools")
+        && !settings.value("toolsMigratedPixelate", false).toBool()) {
+        if (!tools.contains(QStringLiteral("Pixelate"))) {
+            const int blurIndex = tools.indexOf(QStringLiteral("Blur"));
+            tools.insert(blurIndex >= 0 ? blurIndex + 1 : tools.size(), QStringLiteral("Pixelate"));
+        }
+        settings.setValue("toolsMigratedPixelate", true);
+        settings.setValue("visibleTools", tools);
+    }
+    return tools;
 }
 
 QStringList normalizedToolbarControls(QSettings &settings)
@@ -57,9 +76,6 @@ AnnotationToolbar::AnnotationToolbar(QWidget *parent)
     , m_eyedropperButton(nullptr)
     , m_lockButton(nullptr)
     , m_selectionLocked(false)
-    , m_blurIntensitySlider(nullptr)
-    , m_blurIntensityLabel(nullptr)
-    , m_blurIntensityWidget(nullptr)
     , m_textOptionsWidget(nullptr)
     , m_textFontCombo(nullptr)
     , m_textSizeSpin(nullptr)
@@ -80,11 +96,12 @@ AnnotationToolbar::AnnotationToolbar(QWidget *parent)
     setMinimumWidth(500);
 
     QSettings s("EShot", "EShot");
-    m_visibleTools = s.value("visibleTools", defaultAnnotationTools()).toStringList();
+    m_visibleTools = normalizedAnnotationTools(s);
     m_visibleControls = normalizedToolbarControls(s);
 
     setupUI();
     applyStyles();
+    refreshToolTips();
 }
 
 AnnotationToolbar::~AnnotationToolbar() {}
@@ -102,7 +119,7 @@ bool AnnotationToolbar::isControlVisible(const QString &key) const
 void AnnotationToolbar::refreshTools()
 {
     QSettings s("EShot", "EShot");
-    m_visibleTools = s.value("visibleTools", defaultAnnotationTools()).toStringList();
+    m_visibleTools = normalizedAnnotationTools(s);
     m_visibleControls = normalizedToolbarControls(s);
 
     setMinimumWidth(0);
@@ -141,10 +158,6 @@ bool AnnotationToolbar::hasVisibleTools() const
 
 void AnnotationToolbar::updateDynamicOptionVisibility()
 {
-    if (m_blurIntensityWidget) {
-        m_blurIntensityWidget->setVisible(
-            m_currentToolId == AnnotationEngine::Blur && isControlVisible("BlurIntensity"));
-    }
     if (m_textOptionsWidget) {
         m_textOptionsWidget->setVisible(false);
     }
@@ -222,18 +235,6 @@ void AnnotationToolbar::setRedoEnabled(bool enabled)
     }
 }
 
-void AnnotationToolbar::setBlurIntensity(int intensity)
-{
-    if (m_blurIntensitySlider) {
-        m_blurIntensitySlider->blockSignals(true);
-        m_blurIntensitySlider->setValue(intensity);
-        m_blurIntensitySlider->blockSignals(false);
-    }
-    if (m_blurIntensityLabel) {
-        m_blurIntensityLabel->setText(QString::number(intensity));
-    }
-}
-
 void AnnotationToolbar::setColor(const QColor &color)
 {
     m_currentColor = color;
@@ -274,6 +275,7 @@ void AnnotationToolbar::setupUI()
         AnnotationEngine::Highlighter, "Highlighter"));
     m_layout->addWidget(createToolButton(":/icons/semirect.svg", TranslationManager::toolSemiRect() + QStringLiteral(" (D)"), AnnotationEngine::SemiRect, "SemiRect"));
     m_layout->addWidget(createToolButton(":/icons/blur.svg", TranslationManager::toolBlur(), AnnotationEngine::Blur, "Blur"));
+    m_layout->addWidget(createToolButton(":/icons/pixelate.svg", TranslationManager::toolPixelate(), AnnotationEngine::Pixelate, "Pixelate"));
     m_layout->addWidget(createToolButton(":/icons/counter.svg", TranslationManager::toolCounter(), AnnotationEngine::Counter, "Counter"));
     m_layout->addWidget(createToolButton(":/icons/eraser.svg", TranslationManager::toolEraser(), AnnotationEngine::Eraser, "Eraser"));
 
@@ -367,43 +369,6 @@ void AnnotationToolbar::setupUI()
     m_textOptionsWidget->hide();
     m_optionalControls["TextOptions"] = m_textOptionsWidget;
     m_layout->addWidget(m_textOptionsWidget);
-
-    // Blur strength widget (hidden by default)
-    m_blurIntensityWidget = new QWidget(this);
-    QHBoxLayout *blurLayout = new QHBoxLayout(m_blurIntensityWidget);
-    blurLayout->setContentsMargins(0, 0, 0, 0);
-    blurLayout->setSpacing(4);
-    m_blurIntensityLabel = new QLabel("16", m_blurIntensityWidget);
-    m_blurIntensityLabel->setStyleSheet("color: #aaa; font-size: 11px;");
-    m_blurIntensityLabel->setFixedWidth(20);
-    m_blurIntensitySlider = new QSlider(Qt::Horizontal, m_blurIntensityWidget);
-    m_blurIntensitySlider->setRange(4, 64);
-    m_blurIntensitySlider->setValue(16);
-    m_blurIntensitySlider->setFixedWidth(80);
-    m_blurIntensitySlider->setToolTip(TranslationManager::toolBlurIntensity());
-    m_blurIntensitySlider->setStyleSheet(R"(
-        QSlider::groove:horizontal {
-            background: #404040;
-            height: 4px;
-            border-radius: 2px;
-        }
-        QSlider::handle:horizontal {
-            background: #ff6b6b;
-            width: 14px;
-            height: 14px;
-            margin: -5px 0;
-            border-radius: 7px;
-        }
-        QSlider::handle:horizontal:hover {
-            background: #ff8888;
-        }
-    )");
-    connect(m_blurIntensitySlider, &QSlider::valueChanged, this, &AnnotationToolbar::onBlurIntensityChanged);
-    blurLayout->addWidget(m_blurIntensitySlider);
-    blurLayout->addWidget(m_blurIntensityLabel);
-    m_blurIntensityWidget->hide();
-    m_optionalControls["BlurIntensity"] = m_blurIntensityWidget;
-    m_layout->addWidget(m_blurIntensityWidget);
 
     m_layout->addWidget(createSeparator());
 
@@ -711,13 +676,6 @@ void AnnotationToolbar::onColorButtonClicked()
     emit modalDialogClosed();
 }
 
-void AnnotationToolbar::onBlurIntensityChanged(int value)
-{
-    if (m_blurIntensityLabel)
-        m_blurIntensityLabel->setText(QString::number(value));
-    emit blurIntensityChanged(value);
-}
-
 void AnnotationToolbar::onEyedropperClicked()
 {
     emit eyedropperRequested();
@@ -738,42 +696,64 @@ void AnnotationToolbar::onLockClicked()
     emit lockToggled(m_selectionLocked);
 }
 
+namespace {
+// "Name  Key" on the first line and what the control does below it. The key
+// is the one configured in Settings, so the tooltip never shows a stale key.
+QString richToolTip(const QString &label, const char *shortcutId, const char *fallback,
+                    const char *descriptionKey)
+{
+    static const QRegularExpression keySuffix(QStringLiteral("\\s*\\([^)]*\\)\\s*$"));
+    const QString name = QString(label).remove(keySuffix);
+    const QString key = shortcutId
+        ? OnboardingTips::overlayShortcutText(QLatin1String(shortcutId), QLatin1String(fallback))
+        : QString();
+    QString html = QStringLiteral("<b>%1</b>").arg(name.toHtmlEscaped());
+    if (!key.isEmpty())
+        html += QStringLiteral("&nbsp;&nbsp;<span style='color:#a8a8a8'>%1</span>").arg(key.toHtmlEscaped());
+    html += QStringLiteral("<br><span style='color:#b8bec8'>%1</span>")
+                .arg(TranslationManager::tr(descriptionKey).toHtmlEscaped());
+    return html;
+}
+}
+
 void AnnotationToolbar::refreshToolTips()
 {
+    using TM = TranslationManager;
     for (auto it = m_toolButtons.begin(); it != m_toolButtons.end(); ++it) {
-        int id = it.key();
-        switch (id) {
-            case AnnotationEngine::Pen:        it.value()->setToolTip(TranslationManager::toolPen()); break;
-            case AnnotationEngine::Arrow:      it.value()->setToolTip(TranslationManager::toolArrow()); break;
-            case AnnotationEngine::Line:       it.value()->setToolTip(TranslationManager::toolLine()); break;
-            case AnnotationEngine::Rectangle:  it.value()->setToolTip(TranslationManager::toolRect()); break;
-            case AnnotationEngine::SemiRect:   it.value()->setToolTip(TranslationManager::toolSemiRect() + QStringLiteral(" (D)")); break;
-            case AnnotationEngine::Circle:     it.value()->setToolTip(TranslationManager::toolCircle()); break;
-            case AnnotationEngine::Text:       it.value()->setToolTip(TranslationManager::toolText()); break;
-            case AnnotationEngine::Highlighter:it.value()->setToolTip(TranslationManager::toolHighlighter()); break;
-            case AnnotationEngine::Blur:       it.value()->setToolTip(TranslationManager::toolBlur()); break;
-            case AnnotationEngine::Counter:    it.value()->setToolTip(TranslationManager::toolCounter()); break;
-            case AnnotationEngine::Eraser:     it.value()->setToolTip(TranslationManager::toolEraser()); break;
+        switch (it.key()) {
+            case AnnotationEngine::Pen:        it.value()->setToolTip(richToolTip(TM::toolPen(), "toolPen", "P", "descPen")); break;
+            case AnnotationEngine::Arrow:      it.value()->setToolTip(richToolTip(TM::toolArrow(), "toolArrow", "A", "descArrow")); break;
+            case AnnotationEngine::Line:       it.value()->setToolTip(richToolTip(TM::toolLine(), "toolLine", "L", "descLine")); break;
+            case AnnotationEngine::Rectangle:  it.value()->setToolTip(richToolTip(TM::toolRect(), "toolRectangle", "R", "descRect")); break;
+            case AnnotationEngine::SemiRect:   it.value()->setToolTip(richToolTip(TM::toolSemiRect(), "toolSemiRect", "D", "descSemiRect")); break;
+            case AnnotationEngine::Circle:     it.value()->setToolTip(richToolTip(TM::toolCircle(), "toolCircle", "C", "descCircle")); break;
+            case AnnotationEngine::Text:       it.value()->setToolTip(richToolTip(TM::toolText(), "toolText", "T", "descText")); break;
+            case AnnotationEngine::Highlighter:it.value()->setToolTip(richToolTip(TM::toolHighlighter(), "toolHighlighter", "H", "descHighlighter")); break;
+            case AnnotationEngine::Blur:       it.value()->setToolTip(richToolTip(TM::toolBlur(), "toolBlur", "B", "descBlur")); break;
+            case AnnotationEngine::Pixelate:   it.value()->setToolTip(richToolTip(TM::toolPixelate(), "toolPixelate", "M", "descPixelate")); break;
+            case AnnotationEngine::Counter:    it.value()->setToolTip(richToolTip(TM::toolCounter(), "toolCounter", "N", "descCounter")); break;
+            case AnnotationEngine::Eraser:     it.value()->setToolTip(richToolTip(TM::toolEraser(), "toolEraser", "X", "descEraser")); break;
         }
     }
-    if (m_actionButtons.contains("undo")) m_actionButtons["undo"]->setToolTip(TranslationManager::toolUndo());
-    if (m_actionButtons.contains("redo")) m_actionButtons["redo"]->setToolTip(TranslationManager::toolRedo() + QStringLiteral(" (Ctrl+Shift+Z)"));
-    if (m_colorButton) m_colorButton->setToolTip(TranslationManager::toolColor());
-    if (m_eyedropperButton) m_eyedropperButton->setToolTip(TranslationManager::toolEyedropper());
-    if (m_lockButton) m_lockButton->setToolTip(TranslationManager::actionLock());
-    if (m_textFontCombo) m_textFontCombo->setToolTip(TranslationManager::toolFont());
-    if (m_textSizeSpin) m_textSizeSpin->setToolTip(TranslationManager::toolFontSize());
-    if (m_ocrButton) m_ocrButton->setToolTip(TranslationManager::actionOcr());
-    if (m_uploadButton) m_uploadButton->setToolTip(TranslationManager::uploadToService());
+    if (m_actionButtons.contains("undo")) m_actionButtons["undo"]->setToolTip(richToolTip(TM::toolUndo(), "actionUndo", "Ctrl+Z", "descUndo"));
+    if (m_actionButtons.contains("redo")) m_actionButtons["redo"]->setToolTip(richToolTip(TM::toolRedo(), "actionRedo", "Ctrl+Shift+Z", "descRedo"));
+    if (m_colorButton) m_colorButton->setToolTip(richToolTip(TM::toolColor(), nullptr, nullptr, "descColor"));
+    if (m_eyedropperButton) m_eyedropperButton->setToolTip(richToolTip(TM::toolEyedropper(), "actionEyedropper", "I", "descEyedropper"));
+    if (m_lockButton) m_lockButton->setToolTip(richToolTip(TM::actionLock(), "actionLock", "K", "descLock"));
+    if (m_textFontCombo) m_textFontCombo->setToolTip(TM::toolFont());
+    if (m_textSizeSpin) m_textSizeSpin->setToolTip(TM::toolFontSize());
+    if (m_ocrButton) m_ocrButton->setToolTip(richToolTip(TM::actionOcr(), "actionOcr", "Ctrl+O", "descOcr"));
+    if (m_uploadButton) m_uploadButton->setToolTip(richToolTip(TM::uploadToService(), "actionUpload", "Ctrl+U", "descUpload"));
     if (m_lensButton) {
         QSettings settings(QStringLiteral("EShot"), QStringLiteral("EShot"));
         const VisualSearchProvider provider = visualSearchProviderFromSettings(
             settings.value("visualSearchProvider", QStringLiteral("google")).toString());
         m_lensButton->setIcon(QIcon(visualSearchIconPath(provider)));
-        m_lensButton->setToolTip(provider == VisualSearchProvider::YandexImages
-            ? TranslationManager::visualSearchYandexTooltip()
-            : TranslationManager::visualSearchGoogleTooltip());
+        m_lensButton->setToolTip(richToolTip(provider == VisualSearchProvider::YandexImages
+                                                 ? TM::visualSearchYandexTooltip()
+                                                 : TM::visualSearchGoogleTooltip(),
+                                             "actionGoogleLens", "Ctrl+L", "descLens"));
     }
-    if (m_gifButton) m_gifButton->setToolTip(TranslationManager::recordingStartTitle());
-    if (m_videoButton) m_videoButton->setToolTip(TranslationManager::videoRecordingTitle());
+    if (m_gifButton) m_gifButton->setToolTip(richToolTip(TM::recordingStartTitle(), "actionGif", "Ctrl+G", "descGif"));
+    if (m_videoButton) m_videoButton->setToolTip(richToolTip(TM::videoRecordingTitle(), "actionVideo", "Ctrl+Shift+V", "descVideo"));
 }

@@ -10,6 +10,8 @@
         <file alias="icons/circle.svg">../icons/circle.svg</file>
         <file alias="icons/highlighter.svg">../icons/highlighter.svg</file>
         <file alias="icons/blur.svg">../icons/blur.svg</file>
+        <file alias="icons/pixelate.svg">../icons/pixelate.svg</file>
+        <file alias="icons/help.svg">../icons/help.svg</file>
         <file alias="icons/copy.svg">../icons/copy.svg</file>
         <file alias="icons/save.svg">../icons/save.svg</file>
         <file alias="icons/close.svg">../icons/close.svg</file>
@@ -26,17 +28,13 @@
         <file alias="icons/lock.svg">../icons/lock.svg</file>
         <file alias="icons/lock_open.svg">../icons/lock_open.svg</file>
         <file alias="icons/semirect.svg">../icons/semirect.svg</file>
-        <file alias="icons/paste.svg">../icons/paste.svg</file>
         <file alias="icons/ocr.svg">../icons/ocr.svg</file>
         <file alias="icons/external_link.svg">../icons/external_link.svg</file>
         <file alias="icons/upload.svg">../icons/upload.svg</file>
         <file alias="icons/search.svg">../icons/search.svg</file>
         <file alias="icons/yandex_search.svg">../icons/yandex_search.svg</file>
-        <file alias="icons/record.svg">../icons/record.svg</file>
         <file alias="icons/gif.svg">../icons/gif.svg</file>
         <file alias="icons/video.svg">../icons/video.svg</file>
-        <file alias="icons/scroll.svg">../icons/scroll.svg</file>
-        <file alias="icons/menu.svg">../icons/menu.svg</file>
         <file alias="icons/drag.svg">../icons/drag.svg</file>
         <file alias="icons/chevron_down.svg">../icons/chevron_down.svg</file>
         <file alias="icons/chevron_up.svg">../icons/chevron_up.svg</file>

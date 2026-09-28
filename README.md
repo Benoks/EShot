@@ -33,7 +33,7 @@ EShot keeps the complete screenshot workflow in one compact tray application: se
 
 - Region and monitor capture with multi-monitor and high-DPI handling, plus window selection capture on Windows
 - Compact selection overlay with configurable actions and shortcuts
-- Pen, arrow, line, rectangle, ellipse, text, highlighter, blur, counter, eraser, and eyedropper tools
+- Pen, arrow, line, rectangle, ellipse, text, highlighter, smooth blur, pixelate, counter, eraser, and eyedropper tools
 - Resize and rotate selected text and shapes directly on the canvas
 - Hold `Shift` while drawing with the highlighter to lock it to the nearest axis
 - Undo/redo, selection locking, color controls, and configurable toolbar visibility

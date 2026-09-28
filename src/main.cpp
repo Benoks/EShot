@@ -59,6 +59,7 @@
 #include "ui/AboutDialog.h"
 #include "ui/ControlCenterDialog.h"
 #include "ui/FirstRunWizard.h"
+#include "ui/OnboardingTips.h"
 
 #ifdef Q_OS_WIN
 #include <windows.h>
@@ -255,6 +256,23 @@ public:
     }
 
 public slots:
+    // Fresh installs only: say where EShot went and how to start a capture.
+    void showTrayWelcome()
+    {
+        if (OnboardingTips::isSeen(OnboardingTips::TrayWelcome)
+            || !m_trayIcon || !m_trayIcon->isVisible()) {
+            return;
+        }
+        OnboardingTips::markSeen(OnboardingTips::TrayWelcome);
+        QSettings s("EShot", "EShot");
+        const QString key = HotkeyManager::shortcutText(
+            static_cast<UINT>(s.value("hotkeyModifiers", 0).toUInt()),
+            static_cast<UINT>(s.value("hotkeyVKey", VK_SNAPSHOT).toUInt()));
+        m_trayIcon->showMessage(TranslationManager::tr("trayWelcomeTitle"),
+                                TranslationManager::tr("trayWelcomeBody").arg(key),
+                                QSystemTrayIcon::Information, 8000);
+    }
+
     void prewarmOverlay()
     {
         ensureOverlay();
@@ -1611,6 +1629,7 @@ int main(int argc, char *argv[])
             wizard->exec();
             eshotApp.initializeHotkeyConnections();
             eshotApp.prewarmOverlay();
+            QTimer::singleShot(1500, &eshotApp, &EShotApp::showTrayWelcome);
             if (controlRequested) {
                 QMetaObject::invokeMethod(&eshotApp, "onControlRequested",
                                           Qt::QueuedConnection);

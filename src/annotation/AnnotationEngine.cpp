@@ -1,4 +1,5 @@
 #include "AnnotationEngine.h"
+#include "ImageEffects.h"
 #include <QPainter>
 #include <QPainterPath>
 #include <QImage>
@@ -163,8 +164,10 @@ void AnnotationEngine::render(QPainter *painter, const QPoint &offset)
 {
     painter->save();
     painter->setRenderHint(QPainter::Antialiasing, true);
-    for (const Annotation &a : m_annotations)
-        drawAnnotation(painter, a, offset);
+    for (int i = 0; i < m_annotations.size(); ++i) {
+        if (i != m_hiddenIndex)
+            drawAnnotation(painter, m_annotations[i], offset);
+    }
     if (m_isDrawing)
         drawAnnotation(painter, m_currentAnnotation, offset);
     painter->restore();
@@ -280,17 +283,18 @@ void AnnotationEngine::drawAnnotation(QPainter *painter, const Annotation &ann, 
         }
         break;
     }
-    case Blur: {
+    case Blur:
+    case Pixelate: {
         if (ann.points.size() < 2) break;
         QRect r = QRect(ann.points.first(), ann.points.last()).normalized();
-        drawBlurEffect(painter, r, offset, ann.blurIntensity);
+        drawRedaction(painter, ann.tool, r, offset, ann.blurIntensity);
         break;
     }
     case Text: {
         if (ann.text.isEmpty() || ann.points.isEmpty()) break;
         QFont font(ann.fontFamily.isEmpty() ? QStringLiteral("Segoe UI") : ann.fontFamily,
                    qBound(8, ann.fontSize, 72));
-        font.setBold(true);
+        font.setBold(ann.textBold);
         QPoint tp = ann.points.first() + offset;
 
         QTextDocument doc;
@@ -303,7 +307,6 @@ void AnnotationEngine::drawAnnotation(QPainter *painter, const Annotation &ann, 
         cursor.mergeCharFormat(fmt);
         QSizeF docSize = doc.size();
 
-        // Background
         const QRect bg = textBaseBackgroundRect(ann).translated(offset);
         painter->setPen(Qt::NoPen);
         painter->setBrush(QColor(0, 0, 0, 120));
@@ -311,8 +314,31 @@ void AnnotationEngine::drawAnnotation(QPainter *painter, const Annotation &ann, 
         painter->translate(tp);
         painter->scale(ann.textScaleX, ann.textScaleY);
         painter->translate(-tp);
-        painter->drawRoundedRect(bg, 3, 3);
+        if (ann.textBackground == TextBox)
+            painter->drawRoundedRect(bg, 3, 3);
         painter->translate(tp);
+        if (ann.textBackground == TextOutline) {
+            // A dark copy drawn around the text keeps it readable on light
+            // and dark screenshots without covering them with a box.
+            QTextDocument outline;
+            outline.setDefaultFont(font);
+            outline.setPlainText(ann.text);
+            QTextCursor outlineCursor(&outline);
+            outlineCursor.select(QTextCursor::Document);
+            QTextCharFormat outlineFormat;
+            outlineFormat.setForeground(QColor(0, 0, 0, 220));
+            outlineCursor.mergeCharFormat(outlineFormat);
+            const qreal w = qMax<qreal>(1.5, font.pointSizeF() / 12.0);
+            for (int dx = -1; dx <= 1; ++dx) {
+                for (int dy = -1; dy <= 1; ++dy) {
+                    if (dx == 0 && dy == 0)
+                        continue;
+                    painter->translate(dx * w, dy * w);
+                    outline.drawContents(painter);
+                    painter->translate(-dx * w, -dy * w);
+                }
+            }
+        }
         doc.drawContents(painter);
         painter->restore();
         break;
@@ -361,6 +387,7 @@ void AnnotationEngine::clear()
     m_isDrawing = false;
     m_currentAnnotation = Annotation();
     m_selectedIndex = -1;
+    m_hiddenIndex = -1;
     resetGestureState();
 
     m_annotations.clear();
@@ -428,10 +455,114 @@ void AnnotationEngine::addTextAnnotation(const QPoint &pos, const QString &text)
     a.tool = Text; a.color = m_color; a.penWidth = m_penWidth;
     a.fontFamily = m_textFontFamily;
     a.fontSize = m_textFontSize;
+    a.textBold = m_textBold;
+    a.textBackground = m_textBackground;
     a.points.append(pos); a.text = text;
     m_annotations.append(a);
     pushHistory(HistoryAction::Add, a, m_annotations.size() - 1);
     emit annotationAdded();
+}
+
+AnnotationEngine::TextStyle AnnotationEngine::currentTextStyle() const
+{
+    TextStyle style;
+    style.fontFamily = m_textFontFamily;
+    style.fontSize = m_textFontSize;
+    style.color = m_color;
+    style.bold = m_textBold;
+    style.background = m_textBackground;
+    return style;
+}
+
+QString AnnotationEngine::textOf(int index) const
+{
+    return isTextAnnotation(index) ? m_annotations[index].text : QString();
+}
+
+AnnotationEngine::TextStyle AnnotationEngine::textStyleOf(int index) const
+{
+    if (!isTextAnnotation(index))
+        return currentTextStyle();
+    const Annotation &ann = m_annotations[index];
+    TextStyle style;
+    style.fontFamily = ann.fontFamily;
+    style.fontSize = ann.fontSize;
+    style.color = ann.color;
+    style.bold = ann.textBold;
+    style.background = ann.textBackground;
+    return style;
+}
+
+QPoint AnnotationEngine::textAnchorOf(int index) const
+{
+    return isTextAnnotation(index) ? m_annotations[index].points.first() : QPoint();
+}
+
+void AnnotationEngine::replaceAnnotation(int index, const Annotation &updated)
+{
+    HistoryAction action;
+    action.type = HistoryAction::Resize;
+    action.index = index;
+    action.previousAnnotation = m_annotations[index];
+    action.annotation = updated;
+    m_annotations[index] = updated;
+    appendHistoryAction(action);
+    m_redoStack.clear();
+}
+
+bool AnnotationEngine::updateTextAnnotation(int index, const QString &text, const TextStyle &style)
+{
+    if (!isTextAnnotation(index))
+        return false;
+    if (text.isEmpty())
+        return removeAnnotation(index);
+
+    Annotation updated = m_annotations[index];
+    updated.text = text;
+    updated.fontFamily = style.fontFamily;
+    updated.fontSize = style.fontSize;
+    updated.color = style.color;
+    updated.textBold = style.bold;
+    updated.textBackground = style.background;
+    const Annotation &current = m_annotations[index];
+    if (updated.text == current.text && updated.fontFamily == current.fontFamily
+        && updated.fontSize == current.fontSize && updated.color == current.color
+        && updated.textBold == current.textBold
+        && updated.textBackground == current.textBackground) {
+        return false;
+    }
+    replaceAnnotation(index, updated);
+    return true;
+}
+
+bool AnnotationEngine::setAnnotationColor(int index, const QColor &color)
+{
+    if (index < 0 || index >= m_annotations.size() || !color.isValid())
+        return false;
+    const Tool tool = m_annotations[index].tool;
+    if (tool == Blur || tool == Pixelate || m_annotations[index].color == color)
+        return false;
+    Annotation updated = m_annotations[index];
+    updated.color = color;
+    replaceAnnotation(index, updated);
+    return true;
+}
+
+bool AnnotationEngine::removeAnnotation(int index)
+{
+    if (index < 0 || index >= m_annotations.size())
+        return false;
+    const Annotation removed = m_annotations[index];
+    m_annotations.removeAt(index);
+    if (m_selectedIndex == index)
+        m_selectedIndex = -1;
+    else if (m_selectedIndex > index)
+        --m_selectedIndex;
+    if (m_hiddenIndex == index)
+        m_hiddenIndex = -1;
+    pushHistory(HistoryAction::Remove, removed, index);
+    recalculateCounterValue();
+    return true;
 }
 
 void AnnotationEngine::addCounterAnnotation(const QPoint &pos)
@@ -714,7 +845,7 @@ QRect AnnotationEngine::rawAnnotationBounds(const Annotation &ann, int padding) 
     } else if (ann.tool == Counter) {
         const int radius = 14;
         bounds = QRect(ann.points.first() - QPoint(radius, radius), QSize(radius * 2, radius * 2));
-    } else if (ann.tool == Blur || ann.tool == SemiRect || ann.tool == Rectangle || ann.tool == Circle || ann.tool == Line || ann.tool == Arrow) {
+    } else if (ann.tool == Blur || ann.tool == Pixelate || ann.tool == SemiRect || ann.tool == Rectangle || ann.tool == Circle || ann.tool == Line || ann.tool == Arrow) {
         if (ann.points.size() < 2)
             bounds = QRect(ann.points.first(), QSize(1, 1));
         else {
@@ -748,7 +879,7 @@ QRect AnnotationEngine::textBaseBackgroundRect(const Annotation &ann) const
 
     QFont font(ann.fontFamily.isEmpty() ? QStringLiteral("Segoe UI") : ann.fontFamily,
                qBound(8, ann.fontSize, 72));
-    font.setBold(true);
+    font.setBold(ann.textBold);
     QTextDocument doc;
     doc.setDefaultFont(font);
     doc.setPlainText(ann.text);
@@ -878,6 +1009,7 @@ bool AnnotationEngine::annotationContainsPoint(const Annotation &ann, const QPoi
         return textBaseBackgroundRect(ann)
             .adjusted(-padding, -padding, padding, padding).contains(hitPos);
     case Blur:
+    case Pixelate:
     case SemiRect:
     case Counter:
         return rawAnnotationBounds(ann, padding).contains(hitPos);
@@ -947,70 +1079,127 @@ void AnnotationEngine::resetGestureState()
 void AnnotationEngine::setScreenSnapshot(const QPixmap &snapshot)
 {
     m_screenSnapshot = snapshot;
+    m_redactionCache.clear();
 }
 
 void AnnotationEngine::releaseScreenSnapshot()
 {
     m_screenSnapshot = QPixmap();
+    m_redactionCache.clear();
 }
 
-void AnnotationEngine::drawBlurEffect(QPainter *painter, const QRect &rect, const QPoint &offset,
-                                      int intensity)
+namespace {
+int redactionPixels(AnnotationEngine::Tool tool, int intensity, qreal scale)
 {
-    QRect target = rect.translated(offset);
+    // The slider is the pixelate block size; a smooth blur of half that
+    // radius hides text about as well. Both are logical pixels.
+    const qreal logical = tool == AnnotationEngine::Pixelate ? intensity : intensity / 2.0;
+    return qMax(1, qRound(logical * scale));
+}
+
+QImage applyRedaction(AnnotationEngine::Tool tool, const QImage &image, int pixels,
+                      const QPoint &gridOrigin)
+{
+    return tool == AnnotationEngine::Pixelate
+        ? ImageEffects::pixelate(image, pixels, gridOrigin)
+        : ImageEffects::smoothBlur(image, pixels);
+}
+
+// Area to read around a region so its edges are computed from real
+// neighbouring pixels: whole grid blocks for pixelate, the blur reach for blur.
+QRect redactionSampleRect(AnnotationEngine::Tool tool, const QRect &rect, int pixels)
+{
+    if (tool == AnnotationEngine::Pixelate) {
+        const auto down = [pixels](int v) {
+            return (v >= 0 ? v / pixels : -((-v + pixels - 1) / pixels)) * pixels;
+        };
+        const int left = down(rect.left());
+        const int top = down(rect.top());
+        const int right = down(rect.left() + rect.width() - 1) + pixels;
+        const int bottom = down(rect.top() + rect.height() - 1) + pixels;
+        return QRect(left, top, right - left, bottom - top);
+    }
+    const int margin = pixels * 3;
+    return rect.adjusted(-margin, -margin, margin, margin);
+}
+}
+
+QPixmap AnnotationEngine::redactedSnapshotRegion(Tool tool, const QRect &physicalRect,
+                                                 int intensity) const
+{
+    const int pixels = redactionPixels(tool, intensity, m_snapshotScale);
+    const QString key = QStringLiteral("%1:%2:%3:%4:%5:%6:%7")
+        .arg(m_screenSnapshot.cacheKey()).arg(int(tool)).arg(pixels)
+        .arg(physicalRect.x()).arg(physicalRect.y())
+        .arg(physicalRect.width()).arg(physicalRect.height());
+    const auto cached = m_redactionCache.constFind(key);
+    if (cached != m_redactionCache.constEnd())
+        return cached.value();
+
+    // Pixelate blocks follow a grid anchored to the screenshot, so they stay
+    // put while a region is drawn or resized.
+    const QRect sample = redactionSampleRect(tool, physicalRect, pixels)
+                             .intersected(m_screenSnapshot.rect());
+    const QImage processed = applyRedaction(tool, m_screenSnapshot.copy(sample).toImage(),
+                                            pixels, sample.topLeft());
+    const QPixmap result = QPixmap::fromImage(
+        processed.copy(physicalRect.translated(-sample.topLeft())));
+
+    if (m_redactionCache.size() > 64)
+        m_redactionCache.clear();
+    m_redactionCache.insert(key, result);
+    return result;
+}
+
+void AnnotationEngine::drawRedaction(QPainter *painter, Tool tool, const QRect &rect,
+                                     const QPoint &offset, int intensity)
+{
+    const QRect target = rect.translated(offset);
     if (target.isEmpty())
         return;
 
     painter->save();
-    const int ps = qMax(1, intensity);
-    const auto pixelate = [ps](const QPixmap &region) {
-        const QImage img = region.toImage();
-        const QImage scaled = img.scaled(qMax(1, img.width() / ps), qMax(1, img.height() / ps),
-                                         Qt::IgnoreAspectRatio, Qt::FastTransformation);
-        return QPixmap::fromImage(scaled.scaled(img.width(), img.height(),
-                                                Qt::IgnoreAspectRatio, Qt::FastTransformation));
-    };
 
     // Sample the untouched screenshot for both the live preview and the final
-    // capture, so earlier annotations never bleed into the mosaic. rect is in
+    // capture, so earlier annotations never bleed into the effect. rect is in
     // logical overlay coordinates (before offset); the snapshot is physical
     // pixels scaled by m_snapshotScale. The destination goes through the
     // painter transform (e.g. the high-DPI scale of the final capture).
     if (!m_screenSnapshot.isNull()) {
         const qreal s = m_snapshotScale;
-        QRect sourceRect(qRound(rect.x() * s), qRound(rect.y() * s),
-                         qRound(rect.width() * s), qRound(rect.height() * s));
-        QRect clamped = sourceRect.intersected(m_screenSnapshot.rect());
+        const QRect sourceRect(qRound(rect.x() * s), qRound(rect.y() * s),
+                               qRound(rect.width() * s), qRound(rect.height() * s));
+        const QRect clamped = sourceRect.intersected(m_screenSnapshot.rect());
         if (!clamped.isEmpty()) {
-            QPixmap region = m_screenSnapshot.copy(clamped);
+            const QPixmap region = redactedSnapshotRegion(tool, clamped, intensity);
             if (!region.isNull()) {
-                const QPixmap mosaic = pixelate(region);
                 // Map the clamped physical region back to its logical destination.
-                QRectF dst(clamped.x() / s + offset.x(), clamped.y() / s + offset.y(),
-                           clamped.width() / s, clamped.height() / s);
-                painter->drawPixmap(dst, mosaic, QRectF(mosaic.rect()));
+                const QRectF dst(clamped.x() / s + offset.x(), clamped.y() / s + offset.y(),
+                                 clamped.width() / s, clamped.height() / s);
+                painter->drawPixmap(dst, region, QRectF(region.rect()));
                 painter->restore();
                 return;
             }
         }
     }
 
-    // No snapshot: fall back to pixelating what the painter's QPixmap device
+    // No snapshot: fall back to processing what the painter's QPixmap device
     // already holds. The painter may carry a scale transform on high-DPI
-    // displays, so map the blur target into the device's physical pixels.
+    // displays, so map the target into the device's physical pixels.
     QPixmap *dev = dynamic_cast<QPixmap*>(painter->device());
     if (dev) {
-        QRect clamped = painter->transform().mapRect(target).intersected(dev->rect());
+        const QRect clamped = painter->transform().mapRect(target).intersected(dev->rect());
         if (!clamped.isEmpty()) {
-            QPixmap region = dev->copy(clamped);
-            if (!region.isNull()) {
-                const QPixmap mosaic = pixelate(region);
-                // clamped is in device pixels; draw it back bypassing the transform.
-                painter->resetTransform();
-                painter->drawPixmap(clamped.topLeft(), mosaic);
-                painter->restore();
-                return;
-            }
+            const int pixels = redactionPixels(tool, intensity, painter->transform().m11());
+            const QRect sample = redactionSampleRect(tool, clamped, pixels).intersected(dev->rect());
+            const QImage processed = applyRedaction(tool, dev->copy(sample).toImage(),
+                                                    pixels, sample.topLeft());
+            // clamped is in device pixels; draw it back bypassing the transform.
+            painter->resetTransform();
+            painter->drawImage(clamped.topLeft(),
+                               processed.copy(clamped.translated(-sample.topLeft())));
+            painter->restore();
+            return;
         }
     }
 

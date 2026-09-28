@@ -17,6 +17,12 @@
 #include <QPointer>
 
 #include "recording/RecordingDrawerPolicy.h"
+#include "annotation/AnnotationEngine.h"
+#include <QIcon>
+
+class HintBubble;
+class ShortcutSheetLayer;
+class QPainter;
 
 #include "CaptureGeometry.h"
 #include "WindowSnapPolicy.h"
@@ -29,7 +35,6 @@ using EShotNativeWindowHandle = void *;
 #endif
 
 class AnnotationToolbar;
-class AnnotationEngine;
 class QComboBox;
 class QFontComboBox;
 class QLineEdit;
@@ -96,6 +101,19 @@ private:
     void resetGestureState();
     void resetSelection();
     void hideForModalDialog();
+    void startAnnotationMove(int index, const QPoint &pos);
+    bool handleAnnotationPress(const QPoint &pos, Qt::KeyboardModifiers modifiers);
+    void beginEditExistingText(int index);
+    void finishExistingTextEdit();
+    void applyTextStyleToEngine(const AnnotationEngine::TextStyle &style);
+    void refreshTextStyleButtons();
+    QIcon textBackgroundIcon(int background) const;
+    void drawSelectionHint(QPainter &painter);
+    void showSelectionOnboarding();
+    void showToolOnboarding(int toolId);
+    HintBubble *hintBubble();
+    void toggleShortcutSheet();
+    bool isShortcutSheetOpen() const;
     QPixmap getSelectedPixmap();
 
     // Filename template parse
@@ -154,6 +172,15 @@ private:
     QWidget *m_textEditPanel = nullptr;
     QToolButton *m_textMoveHandle = nullptr;
     QToolButton *m_textCommitButton = nullptr;
+    QToolButton *m_textBoldButton = nullptr;
+    QToolButton *m_textBackgroundButton = nullptr;
+    // Index of the existing label open in the editor, or -1 for a new one.
+    int m_editingTextIndex = -1;
+    ShortcutSheetLayer *m_shortcutSheet = nullptr;
+    bool m_showSelectionHint = false;
+    HintBubble *m_hintBubble = nullptr;
+    QPushButton *m_helpButton = nullptr;
+    AnnotationEngine::TextStyle m_styleBeforeTextEdit;
     QToolButton *m_textCancelButton = nullptr;
     QFontComboBox *m_textInlineFontCombo = nullptr;
     QSpinBox *m_textInlineSizeSpin = nullptr;
@@ -305,7 +332,6 @@ private slots:
     void onPinToDesktop();
     void onEyedropperRequested();
     void onSelectionLockToggled(bool locked);
-    void onBlurIntensityChanged(int intensity);
     void onOcrRequested();
     void onUploadRequested();
     void onGoogleLensRequested();
