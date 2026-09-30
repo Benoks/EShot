@@ -65,7 +65,7 @@ Download the latest build from [GitHub Releases](https://github.com/Benoks/EShot
 2. Run the installer and choose the optional FFmpeg/OCR components you need.
 3. Launch EShot from the Start menu or system tray.
 
-The installer defaults to the current user and does not require administrator permission. An all-users install is optional and may require an administrator account; each account can enable auto-start from EShot Settings. Existing all-users installations stay in that mode when updated; uninstall the old installation first if you want to switch to a per-user install. For all-users installs, uninstall can remove per-user auto-start entries only from profiles loaded at that time. Windows may restrict capture or keyboard focus over elevated applications and the UAC secure desktop.
+The installer defaults to the current user and does not require administrator permission. An all-users install is optional and may require an administrator account; each account can enable auto-start from EShot Settings. Existing all-users installations stay in that mode when updated; uninstall the old installation first if you want to switch to a per-user install. For all-users installs, uninstall can remove per-user auto-start entries only from profiles loaded at that time. Windows may restrict capture or keyboard focus over applications running as administrator and the UAC secure desktop. To capture them, turn on **Start as administrator** in Settings: after one administrator prompt, EShot starts elevated without further prompts.
 
 Portable x64 and ARM64 ZIP archives are also attached to each release.
 

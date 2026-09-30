@@ -96,6 +96,8 @@ private:
     QLabel *m_patternPreviewLabel = nullptr;
     QCheckBox *m_autoStartCheck = nullptr;
     bool m_loadedAutoStart = false;
+    QCheckBox *m_runElevatedCheck = nullptr;
+    bool m_loadedRunElevated = false;
     QCheckBox *m_showNotificationsCheck = nullptr;
     QWidget *m_notificationOptionsWidget = nullptr;
     QCheckBox *m_notifyCopyCheck = nullptr;

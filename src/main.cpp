@@ -36,6 +36,7 @@
 #include <QLocalSocket>
 #include <QProcess>
 #include <QElapsedTimer>
+#include <QThread>
 
 #include "core/HotkeyManager.h"
 #include "core/TranslationManager.h"
@@ -60,6 +61,7 @@
 #include "ui/ControlCenterDialog.h"
 #include "ui/FirstRunWizard.h"
 #include "ui/OnboardingTips.h"
+#include "core/WindowsElevatedStartup.h"
 
 #ifdef Q_OS_WIN
 #include <windows.h>
@@ -72,20 +74,6 @@
 namespace {
 
 #ifdef Q_OS_WIN
-bool isProcessElevated()
-{
-    HANDLE token = nullptr;
-    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token))
-        return false;
-    TOKEN_ELEVATION elevation = {};
-    DWORD size = 0;
-    const bool elevated = GetTokenInformation(token, TokenElevation, &elevation,
-                                              sizeof(elevation), &size)
-        && elevation.TokenIsElevated != 0;
-    CloseHandle(token);
-    return elevated;
-}
-
 // Starts a program through the desktop shell, so it runs as the signed-in
 // user without the elevated token of the calling process.
 bool launchAsDesktopUser(const QString &program, const QString &arguments)
@@ -1450,6 +1438,10 @@ int main(int argc, char *argv[])
     QCommandLineOption relaunchedOption("relaunched-as-user");
     relaunchedOption.setFlags(QCommandLineOption::HiddenFromHelp);
     parser.addOption(relaunchedOption);
+    QCommandLineOption fromElevatedTaskOption(
+        QString::fromLatin1(WindowsElevatedStartup::TaskArgument).mid(2));
+    fromElevatedTaskOption.setFlags(QCommandLineOption::HiddenFromHelp);
+    parser.addOption(fromElevatedTaskOption);
     QCommandLineOption testGifOption("test-gif", "Run internal GIF encoder test and exit.");
     parser.addOption(testGifOption);
     QCommandLineOption testRecordGifOption("test-record-gif", "Run internal GIF recording test and exit.");
@@ -1486,8 +1478,11 @@ int main(int argc, char *argv[])
     // legacy autostart task start this build elevated. Settings would then
     // live under the elevated account; hand over to the signed-in user. The
     // marker stops a loop when the desktop shell itself is elevated (UAC off).
+    // Skipped when the user chose "Start as administrator" in Settings.
+    const bool elevatedStartupChosen = parser.isSet(fromElevatedTaskOption)
+        || settings.value("runElevated", false).toBool();
     if (parser.isSet(silentOption) && !parser.isSet(relaunchedOption)
-        && isProcessElevated()) {
+        && !elevatedStartupChosen && WindowsElevatedStartup::isProcessElevated()) {
         const HRESULT comInit = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
         const bool relaunched = launchAsDesktopUser(
             QCoreApplication::applicationFilePath(),
@@ -1535,8 +1530,40 @@ int main(int argc, char *argv[])
                  << wireCommand.trimmed();
         return true;
     };
+    // The elevated task replaces a normal instance that is still running
+    // (e.g. right after "Start as administrator" was switched on).
+    if (parser.isSet(fromElevatedTaskOption)) {
+        QLocalSocket running;
+        running.connectToServer(instanceName);
+        if (running.waitForConnected(150)) {
+            running.write(ApplicationInstanceCommand::toWire(ApplicationInstanceCommand::Quit));
+            running.waitForBytesWritten(500);
+            running.disconnectFromServer();
+            QElapsedTimer waited;
+            waited.start();
+            while (waited.elapsed() < 5000) {
+                QLocalSocket probe;
+                probe.connectToServer(instanceName);
+                if (!probe.waitForConnected(100))
+                    break;
+                probe.disconnectFromServer();
+                QThread::msleep(100);
+            }
+        }
+    }
+
     if (forwardToRunningInstance())
         return 0;
+
+#ifdef Q_OS_WIN
+    // "Start as administrator": a normal start hands over to the elevated
+    // task. The task marks its own start, so a standard user (whose highest
+    // run level is not elevated) cannot loop here.
+    if (settings.value("runElevated", false).toBool() && !parser.isSet(fromElevatedTaskOption)
+        && !WindowsElevatedStartup::isProcessElevated() && WindowsElevatedStartup::launchElevated()) {
+        return 0;
+    }
+#endif
 
     if (parser.isSet(quitOption))
         return 0;

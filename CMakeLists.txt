@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(EShot VERSION 4.5.0 LANGUAGES CXX)
+project(EShot VERSION 4.5.1 LANGUAGES CXX)
 
 include(CTest)
 
@@ -51,6 +51,7 @@ set(SOURCES
     src/core/UpdatePolicy.cpp
     src/core/WindowsInstallPolicy.cpp
     src/core/ComponentPaths.cpp
+    src/core/WindowsElevatedStartup.cpp
     src/ui/OnboardingTips.cpp
     src/ui/HintBubble.cpp
     src/capture/ShortcutSheet.cpp
@@ -119,6 +120,7 @@ set(HEADERS
     src/core/UpdatePolicy.h
     src/core/WindowsInstallPolicy.h
     src/core/ComponentPaths.h
+    src/core/WindowsElevatedStartup.h
     src/ui/OnboardingTips.h
     src/ui/HintBubble.h
     src/capture/ShortcutSheet.h

@@ -1,6 +1,7 @@
 #include "SettingsDialog.h"
 #include "../core/ComponentPaths.h"
 #include "OnboardingTips.h"
+#include "../core/WindowsElevatedStartup.h"
 #include "SettingsHotkeyPolicy.h"
 #include "SettingsLayoutPolicy.h"
 #include "ApplicationTheme.h"
@@ -563,6 +564,16 @@ QWidget* SettingsDialog::createGeneralTab()
     m_playSoundCheck->setToolTip(TranslationManager::tipPlaySound());
     m_copyPathAfterSaveCheck->setToolTip(TranslationManager::tipCopyPath());
     genLayout->addWidget(m_autoStartCheck);
+    if (WindowsElevatedStartup::isSupported()) {
+        // Opt-in: running as the signed-in user is the default since 4.4.0.
+        m_runElevatedCheck = new QCheckBox(TranslationManager::tr("runElevated"));
+        m_runElevatedCheck->setToolTip(TranslationManager::tr("runElevatedTip"));
+        genLayout->addWidget(m_runElevatedCheck);
+        auto *runElevatedNote = new QLabel(TranslationManager::tr("runElevatedNote"));
+        runElevatedNote->setWordWrap(true);
+        runElevatedNote->setStyleSheet(QStringLiteral("color: #888; font-size: 11px; margin-left: 22px;"));
+        genLayout->addWidget(runElevatedNote);
+    }
     genLayout->addWidget(m_showNotificationsCheck);
     m_notificationOptionsWidget = new QWidget(genGroup);
     m_notificationOptionsWidget->setStyleSheet(R"(
@@ -1832,9 +1843,15 @@ void SettingsDialog::loadSettings()
     m_filenamePatternEdit->setText(m_settings->value("filenamePattern", "Screenshot_%Y-%M-%D_%h-%m-%s").toString());
     onFilenamePatternChanged(m_filenamePatternEdit->text());
 
+    m_loadedRunElevated = m_runElevatedCheck && m_settings->value("runElevated", false).toBool();
+    if (m_runElevatedCheck)
+        m_runElevatedCheck->setChecked(m_loadedRunElevated);
     // Reflect the actual autostart entry for this executable instead of a
-    // stale QSettings flag or an entry left by another EShot copy.
-    m_autoStartCheck->setChecked(isAutoStartEnabled());
+    // stale QSettings flag or an entry left by another EShot copy. In the
+    // elevated mode the scheduled task starts EShot at logon instead.
+    m_autoStartCheck->setChecked(m_loadedRunElevated
+        ? m_settings->value("runElevatedAtLogon", true).toBool()
+        : isAutoStartEnabled());
     m_loadedAutoStart = m_autoStartCheck->isChecked();
     m_showNotificationsCheck->setChecked(m_settings->value("showNotifications", true).toBool());
     if (m_notifyCopyCheck) m_notifyCopyCheck->setChecked(m_settings->value("notifyCopy", false).toBool());
@@ -2256,15 +2273,35 @@ void SettingsDialog::onSave()
         settingsHotkeyChanged({windowMod, windowVKey},
                               {static_cast<quint32>(m_settings->value("windowCaptureHotkeyModifiers", defaultWindowCaptureModifiers()).toUInt()),
                                static_cast<quint32>(m_settings->value("windowCaptureHotkeyVKey", defaultWindowCaptureVirtualKey()).toUInt())});
-    // Apply the autostart change before persisting anything: if the Run key
-    // update fails, no partial settings are written (onSave partial
-    // success guard).
-    if (m_autoStartCheck->isChecked() != m_loadedAutoStart && !setAutoStartEnabled(m_autoStartCheck->isChecked())) {
+    // Apply startup changes before persisting anything: if they fail, no
+    // partial settings are written (onSave partial success guard).
+    const bool wantAutoStart = m_autoStartCheck->isChecked();
+    const bool wantElevated = m_runElevatedCheck && m_runElevatedCheck->isChecked();
+    if (wantElevated != m_loadedRunElevated
+        || (wantElevated && wantAutoStart != m_loadedAutoStart)) {
+        // One UAC prompt to create, update or remove the elevated task.
+        if (!WindowsElevatedStartup::configure(wantElevated, wantAutoStart)) {
+            QMessageBox::warning(this, TranslationManager::errTitle(),
+                                 TranslationManager::tr("runElevatedFailed"));
+            return;
+        }
+    }
+    // The Run key starts EShot only when the elevated task does not.
+    const bool wantRunKey = wantAutoStart && !wantElevated;
+    const bool hadRunKey = m_loadedAutoStart && !m_loadedRunElevated;
+    if (wantRunKey != hadRunKey && !setAutoStartEnabled(wantRunKey)) {
         QMessageBox::warning(this, TranslationManager::errTitle(),
                              TranslationManager::autoStartSaveFailed());
         return;
     }
-    m_loadedAutoStart = m_autoStartCheck->isChecked();
+    const bool offerElevatedRestart = wantElevated && !m_loadedRunElevated
+        && !WindowsElevatedStartup::isProcessElevated();
+    m_loadedAutoStart = wantAutoStart;
+    m_loadedRunElevated = wantElevated;
+    if (m_runElevatedCheck) {
+        m_settings->setValue("runElevated", wantElevated);
+        m_settings->setValue("runElevatedAtLogon", wantAutoStart);
+    }
     const UINT oldCaptureMod = m_settings->value("hotkeyModifiers", 0).toUInt();
     const UINT oldCaptureVKey = m_settings->value("hotkeyVKey", VK_SNAPSHOT).toUInt();
     const bool captureHotkeyChanged = settingsHotkeyChanged(
@@ -2475,6 +2512,14 @@ void SettingsDialog::onSave()
         : QStringLiteral("none"));
 
     m_settings->sync();
+    // The new elevated instance replaces this one when it starts.
+    if (offerElevatedRestart
+        && QMessageBox::question(this, TranslationManager::tr("runElevated"),
+                                 TranslationManager::tr("runElevatedRestart"),
+                                 QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes)
+               == QMessageBox::Yes) {
+        WindowsElevatedStartup::launchElevated();
+    }
     accept();
 }
 
@@ -2514,6 +2559,8 @@ void SettingsDialog::onExportSettings()
     obj["videoSavePath"] = m_videoPathEdit ? m_videoPathEdit->text() : QString();
     obj["filenamePattern"] = m_filenamePatternEdit->text();
     obj["autoStart"] = m_autoStartCheck->isChecked();
+    if (m_runElevatedCheck)
+        obj["runElevated"] = m_runElevatedCheck->isChecked();
     obj["showNotifications"] = m_showNotificationsCheck->isChecked();
     obj["notifyCopy"] = m_notifyCopyCheck ? m_notifyCopyCheck->isChecked() : false;
     obj["notifySave"] = m_notifySaveCheck ? m_notifySaveCheck->isChecked() : true;
@@ -2656,6 +2703,8 @@ void SettingsDialog::onImportSettings()
     if (m_videoPathEdit && obj.contains("videoSavePath")) m_videoPathEdit->setText(obj["videoSavePath"].toString());
     if (obj.contains("filenamePattern")) m_filenamePatternEdit->setText(obj["filenamePattern"].toString());
     if (obj.contains("autoStart")) m_autoStartCheck->setChecked(obj["autoStart"].toBool());
+    if (obj.contains("runElevated") && m_runElevatedCheck)
+        m_runElevatedCheck->setChecked(obj["runElevated"].toBool());
     if (obj.contains("showNotifications")) m_showNotificationsCheck->setChecked(obj["showNotifications"].toBool());
     if (m_notifyCopyCheck && obj.contains("notifyCopy")) m_notifyCopyCheck->setChecked(obj["notifyCopy"].toBool());
     if (m_notifySaveCheck && obj.contains("notifySave")) m_notifySaveCheck->setChecked(obj["notifySave"].toBool());
