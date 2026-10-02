@@ -69,10 +69,7 @@ if [[ "${1:-}" == "--integrate-only" ]]; then
   exit 0
 fi
 
-if [[ "$(eshot_xwayland_overlay_enabled)" == "1" ]]; then
-  export QT_QPA_PLATFORM='xcb;wayland'
-  export ESHOT_WAYLAND_XWAYLAND_OVERLAY=1
-fi
+eshot_configure_overlay_backend
 
 export ESHOT_APPDIR="${appdir}"
 exec "${appdir}/usr/bin/EShot" "$@"

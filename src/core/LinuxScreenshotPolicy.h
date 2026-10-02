@@ -12,7 +12,11 @@ bool isKdeWaylandSession(const QString &currentDesktop,
                          const QString &sessionType);
 bool isGnomeWaylandSession(const QString &currentDesktop,
                            const QString &sessionDesktop,
-                           const QString &sessionType);
+                            const QString &sessionType);
+bool useNativeScreenViews(const QString &currentDesktop,
+                          const QString &sessionDesktop,
+                          const QString &sessionType,
+                          const QString &platformName);
 bool shouldPrepareKWinPermission(const QString &currentDesktop,
                                  const QString &sessionDesktop,
                                  const QString &sessionType,

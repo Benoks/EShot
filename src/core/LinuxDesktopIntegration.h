@@ -20,6 +20,7 @@ LinuxDesktopEnvironment detect(const QString &currentDesktop,
                                const QString &sessionDesktop);
 bool isWayland(const QString &sessionType, const QString &platformName = QString());
 bool useXWaylandOverlay(LinuxDesktopEnvironment desktop, const QString &sessionType);
+bool useNativeWaylandOverlay(LinuxDesktopEnvironment desktop, const QString &sessionType);
 LinuxDesktopSupportLevel startupSupportLevel(LinuxDesktopEnvironment desktop,
                                              const QString &sessionType);
 bool deferFirstRunHotkeyRegistration(LinuxDesktopEnvironment desktop);

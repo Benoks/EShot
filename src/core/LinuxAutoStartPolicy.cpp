@@ -24,7 +24,10 @@ QString LinuxAutoStartPolicy::commandLine(const QString &executablePath,
     QString command = QStringLiteral("\"") + escapedPath + QStringLiteral("\" --silent");
     const LinuxDesktopEnvironment desktop = LinuxDesktopIntegration::detect(
         currentDesktop, sessionDesktop);
-    if (LinuxDesktopIntegration::useXWaylandOverlay(desktop, sessionType)) {
+    if (LinuxDesktopIntegration::useNativeWaylandOverlay(desktop, sessionType)) {
+        command.prepend(QStringLiteral(
+            "/usr/bin/env QT_QPA_PLATFORM=wayland ESHOT_WAYLAND_XWAYLAND_OVERLAY=0 "));
+    } else if (LinuxDesktopIntegration::useXWaylandOverlay(desktop, sessionType)) {
         command.prepend(QStringLiteral(
             "/usr/bin/env QT_QPA_PLATFORM=\"xcb;wayland\" ESHOT_WAYLAND_XWAYLAND_OVERLAY=1 "));
     }

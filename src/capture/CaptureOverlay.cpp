@@ -1,5 +1,6 @@
 #include "CaptureOverlay.h"
 #include "CaptureInteractionPolicy.h"
+#include "CaptureScreenViews.h"
 #include "WindowSnapPolicy.h"
 #include "WindowsWindowProvider.h"
 #include "PinnedWindow.h"
@@ -776,6 +777,8 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
 
 CaptureOverlay::~CaptureOverlay()
 {
+    delete m_screenViews;
+    m_screenViews = nullptr;
     delete m_textFocusProxy;
     m_textFocusProxy = nullptr;
     if (m_googleLensUploader) {
@@ -1632,7 +1635,13 @@ void CaptureOverlay::prewarm()
     // Force initial paint of overlay + toolbar + action panel at startup
     // so the first user-triggered capture does not stall on first-render
     // composition (~2-3 s on Windows for translucent frameless widgets).
-    if (!isVisible()) {
+    bool nativeScreenViews = false;
+#if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
+    nativeScreenViews = LinuxScreenshotPolicy::useNativeScreenViews(
+        qEnvironmentVariable("XDG_CURRENT_DESKTOP"), qEnvironmentVariable("XDG_SESSION_DESKTOP"),
+        qEnvironmentVariable("XDG_SESSION_TYPE"), QGuiApplication::platformName());
+#endif
+    if (!isVisible() && !nativeScreenViews) {
         setGeometry(-10000, -10000, 800, 220);
         show();
         if (m_toolbar) {
@@ -1696,7 +1705,7 @@ void CaptureOverlay::startCaptureInternal(CaptureSelectionMode selectionMode, bo
     m_pressedWindowRect = QRect();
     m_windowSnapClickPending = false;
     m_eyedropperActive = false;
-    m_crosshairPosition = mapFromGlobal(QCursor::pos());
+    m_crosshairPosition = capturePositionFromGlobal(QCursor::pos());
     m_hasCrosshairPosition = true;
 
     if (m_textEdit) m_textEdit->hide();
@@ -1783,10 +1792,55 @@ void CaptureOverlay::performCapture()
         m_annotationEngine->setSnapshotScale(m_dpr);
     }
 
+    presentCapture();
+
+#ifdef Q_OS_WIN
+    // Keep the overlay above ordinary windows. Windows may restrict focus or
+    // input over elevated windows because EShot runs under the signed-in user.
+    HWND hwnd = reinterpret_cast<HWND>(winId());
+    ::SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                   SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+    ::SetForegroundWindow(hwnd);
+    ::BringWindowToTop(hwnd);
+
+    if (m_selectionMode == CaptureSelectionMode::Window) {
+        m_windowSnapCandidates = windowsForCaptureOverlay(
+            reinterpret_cast<quintptr>(hwnd), m_captureMonitors, m_virtualDesktopRect);
+    }
+    setHoveredWindowRect(windowSnapTargetForMode(
+        m_selectionMode, m_windowSnapCandidates, mapFromGlobal(QCursor::pos()), rect()));
+#endif
+    // Native views activate their own output window. All other platforms keep
+    // the original focus order, including Win32's foreground-window handling.
+    if (!m_screenViews || !m_screenViews->isActive()) {
+        activateWindow();
+        setFocus(Qt::ActiveWindowFocusReason);
+        raise();
+    }
+}
+
+void CaptureOverlay::presentCapture()
+{
 #if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
     const bool isWayland = QGuiApplication::platformName().contains(
         QStringLiteral("wayland"), Qt::CaseInsensitive);
-    if (isWayland && m_captureScreen) {
+    const bool nativeScreenViews = LinuxScreenshotPolicy::useNativeScreenViews(
+        qEnvironmentVariable("XDG_CURRENT_DESKTOP"), qEnvironmentVariable("XDG_SESSION_DESKTOP"),
+        qEnvironmentVariable("XDG_SESSION_TYPE"), QGuiApplication::platformName());
+    if (nativeScreenViews && (!m_screenImages.isEmpty() || (m_screenViews && m_captureScreen))) {
+        if (!m_screenViews) {
+            m_screenViews = new CaptureScreenViews(this);
+            connect(m_screenViews, &CaptureScreenViews::closeRequested,
+                    this, &CaptureOverlay::cancelCapture);
+        }
+        QScreen *active = QGuiApplication::screenAt(QCursor::pos());
+        if (!active)
+            active = QGuiApplication::primaryScreen();
+        const QList<QScreen *> screens = m_screenImages.isEmpty()
+            ? QList<QScreen *>{m_captureScreen} : QGuiApplication::screens();
+        m_screenViews->present(m_virtualDesktopRect, screens, active);
+        return;
+    } else if (isWayland && m_captureScreen) {
         winId();
         if (QWindow *window = windowHandle())
             window->setScreen(m_captureScreen);
@@ -1801,33 +1855,13 @@ void CaptureOverlay::performCapture()
     show();
 #endif
 
-#ifdef Q_OS_WIN
-    // Keep the overlay above ordinary windows. Windows may restrict focus or
-    // input over elevated windows because EShot runs under the signed-in user.
-    HWND hwnd = reinterpret_cast<HWND>(winId());
-    ::SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
-                   SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
-    // Bring it to the very front and give it keyboard focus
-    ::SetForegroundWindow(hwnd);
-    ::BringWindowToTop(hwnd);
-
-    if (m_selectionMode == CaptureSelectionMode::Window) {
-        m_windowSnapCandidates = windowsForCaptureOverlay(
-            reinterpret_cast<quintptr>(hwnd), m_captureMonitors, m_virtualDesktopRect);
-    }
-    setHoveredWindowRect(windowSnapTargetForMode(
-        m_selectionMode, m_windowSnapCandidates, mapFromGlobal(QCursor::pos()), rect()));
-#endif
-
-    activateWindow();
-    setFocus(Qt::ActiveWindowFocusReason);
-    raise();
 }
 
 void CaptureOverlay::captureAllScreens()
 {
     m_captureScreen = nullptr;
     m_screenSnapshot = QPixmap();
+    m_screenImages.clear();
 #ifdef Q_OS_WIN
     int vx = GetSystemMetrics(SM_XVIRTUALSCREEN);
     int vy = GetSystemMetrics(SM_YVIRTUALSCREEN);
@@ -1949,6 +1983,15 @@ void CaptureOverlay::captureAllScreens()
             return;
         }
 
+        // CaptureWorkspace renders every output at the maximum desktop scale.
+        // That interpolates a 100% output when a 200% output is also connected.
+        // CaptureScreen preserves each output's native pixels and supplies its
+        // true scale, unlike QScreen's all-1 DPRs under XWayland.
+        if (kdeWaylandSession && captureNativeScreenImages(logicalRect, physicalRect))
+            return;
+
+        qWarning() << "[CaptureOverlay] native per-screen capture failed;"
+                      " falling back to workspace capture";
         QPixmap workspaceSnapshot = LinuxPortalScreenshot::grabWorkspace(this);
         if (!workspaceSnapshot.isNull()) {
             workspaceSnapshot.setDevicePixelRatio(1.0);
@@ -2020,6 +2063,21 @@ void CaptureOverlay::captureAllScreens()
 
     const bool isWayland = QGuiApplication::platformName().contains(QStringLiteral("wayland"), Qt::CaseInsensitive);
     if (isWayland) {
+        if (kdeWaylandSession) {
+            QRect logicalRect;
+            QRect physicalRect;
+            m_captureMonitors.clear();
+            for (QScreen *screen : QGuiApplication::screens()) {
+                const QRect logical = screen->geometry();
+                const qreal scale = screen->devicePixelRatio();
+                const QRect physical = physicalRectFromLogical(logical, scale);
+                logicalRect = logicalRect.united(logical);
+                physicalRect = physicalRect.united(physical);
+                m_captureMonitors.append({logical, physical, scale});
+            }
+            if (captureNativeScreenImages(logicalRect, physicalRect))
+                return;
+        }
         QScreen *screen = QGuiApplication::screenAt(QCursor::pos());
         if (!screen)
             screen = QGuiApplication::primaryScreen();
@@ -2144,15 +2202,53 @@ void CaptureOverlay::captureAllScreens()
 #endif
 }
 
+bool CaptureOverlay::captureNativeScreenImages(const QRect &logicalRect, const QRect &physicalRect)
+{
+    QVector<CaptureScreenImage> images;
+    for (QScreen *screen : QGuiApplication::screens()) {
+        const QPixmap grab = LinuxPortalScreenshot::grabScreen(screen, this);
+        if (grab.isNull())
+            return false;
+        QImage image = grab.toImage();
+        image.setDevicePixelRatio(1.0);
+        images.append({screen->geometry(), image, grab.devicePixelRatio()});
+    }
+    const QImage canvas = composeCaptureImages(images, logicalRect);
+    if (canvas.isNull())
+        return false;
+    m_screenImages = images;
+    m_screenSnapshot = QPixmap::fromImage(canvas);
+    m_virtualDesktopRect = logicalRect;
+    m_physicalVirtualDesktopTopLeft = physicalRect.topLeft();
+    m_dpr = captureSelectionScale(images, logicalRect);
+    qInfo() << "[CaptureOverlay] selected capture backend=kwin-per-screen"
+            << "canvas=" << canvas.size() << "scale=" << m_dpr;
+    return true;
+}
+
+QPoint CaptureOverlay::capturePositionFromGlobal(const QPoint &point) const
+{
+    if (m_screenViews)
+        return point - m_virtualDesktopRect.topLeft();
+    return mapFromGlobal(point);
+}
+
 void CaptureOverlay::paintEvent(QPaintEvent *event)
 {
     Q_UNUSED(event);
     QPainter painter(this);
+    const qreal paintScale = m_screenViews && m_screenViews->isActive()
+        ? qAbs(painter.deviceTransform().m11()) : painter.device()->devicePixelRatioF();
     const bool snapshotOneToOne =
-        m_screenSnapshot.size() == (QSizeF(width(), height()) * devicePixelRatioF()).toSize();
+        m_screenSnapshot.size() == (QSizeF(width(), height()) * paintScale).toSize();
     painter.setRenderHint(QPainter::SmoothPixmapTransform, !snapshotOneToOne);
 
-    painter.drawPixmap(0, 0, width(), height(), m_screenSnapshot);
+    if (m_screenImages.isEmpty())
+        painter.drawPixmap(0, 0, width(), height(), m_screenSnapshot);
+    else {
+        painter.fillRect(rect(), Qt::black);
+        paintCaptureImages(&painter, m_screenImages, m_virtualDesktopRect.topLeft());
+    }
     // Draw once beneath the dim layer so annotations outside the selection
     // remain visible with the same darkening as the desktop background.
     if (m_annotationEngine && m_selectionComplete)
@@ -2174,7 +2270,10 @@ void CaptureOverlay::paintEvent(QPaintEvent *event)
         // Keep the preview aligned to the full canvas. Cropping and rescaling
         // the selection itself causes subpixel shimmer at fractional DPI.
         painter.setRenderHint(QPainter::SmoothPixmapTransform, !snapshotOneToOne);
-        painter.drawPixmap(rect(), m_screenSnapshot, m_screenSnapshot.rect());
+        if (m_screenImages.isEmpty())
+            painter.drawPixmap(rect(), m_screenSnapshot, m_screenSnapshot.rect());
+        else
+            paintCaptureImages(&painter, m_screenImages, m_virtualDesktopRect.topLeft());
         painter.restore();
 
         // Annotation
@@ -2227,7 +2326,7 @@ void CaptureOverlay::paintEvent(QPaintEvent *event)
         }
 
     // Frame
-    const qreal devicePixelRatio = painter.device()->devicePixelRatioF();
+    const qreal devicePixelRatio = paintScale;
     const SelectionFrameSegments frameSegments = selectionFrameSegments(selRect, devicePixelRatio);
     painter.save();
     painter.setClipRegion(selectionFrameClipRegion(selRect, rect()));
@@ -2274,7 +2373,10 @@ void CaptureOverlay::paintEvent(QPaintEvent *event)
 
         // Size info — always visible (top-left of selection)
         if (m_isSelecting || m_selectionComplete) {
-            const QSize pixelSize = logicalToSnapshot(selRect).size();
+            const QSize pixelSize = m_screenImages.isEmpty()
+                ? logicalToSnapshot(selRect).size()
+                : captureSelectionSize(m_screenImages,
+                                       selRect.translated(m_virtualDesktopRect.topLeft()));
             QString dim = QString("%1 x %2").arg(pixelSize.width()).arg(pixelSize.height());
             QFont f = painter.font(); f.setPointSize(10); f.setBold(true);
             painter.setFont(f);
@@ -2302,7 +2404,7 @@ void CaptureOverlay::paintEvent(QPaintEvent *event)
     if (!m_isSelecting && !m_selectionComplete && m_hoveredWindowRect.isEmpty()
         && m_crosshairStyle != "none" && !m_eyedropperActive) {
         const QPoint cur = m_hasCrosshairPosition
-            ? m_crosshairPosition : mapFromGlobal(QCursor::pos());
+            ? m_crosshairPosition : capturePositionFromGlobal(QCursor::pos());
         QPen cp;
         cp.setColor(QColor(255,255,255,150));
         cp.setWidth(1);
@@ -2318,7 +2420,7 @@ void CaptureOverlay::paintEvent(QPaintEvent *event)
     if (!isShortcutSheetOpen()
         && shouldShowCaptureHints(m_showCaptureHints, m_isSelecting,
                                   m_selectionComplete, m_eyedropperActive)) {
-        const QPoint cursorPos = mapFromGlobal(QCursor::pos());
+        const QPoint cursorPos = capturePositionFromGlobal(QCursor::pos());
         drawCaptureHints(painter, monitorRectAt(cursorPos), m_captureMode == ModeRecording);
     }
 
@@ -2347,7 +2449,7 @@ void CaptureOverlay::paintEvent(QPaintEvent *event)
 
     // Eyedropper: color preview circle
     if (m_eyedropperActive) {
-        QPoint cur = mapFromGlobal(QCursor::pos());
+        QPoint cur = capturePositionFromGlobal(QCursor::pos());
         if (rect().contains(cur)) {
             QColor pixelColor;
             const QPoint curDev = logicalToSnapshot(cur);
@@ -2917,7 +3019,9 @@ void CaptureOverlay::mouseMoveEvent(QMouseEvent *event)
             resizeSingleEdge(SelectionResizeHandle::Left);
         }
 
-        if (m_selectionComplete && m_toolbar && m_toolbar->isVisible())
+        const bool nativeViews = m_screenViews && m_screenViews->isActive();
+        if (m_selectionComplete && ((m_toolbar && m_toolbar->isVisible())
+            || (nativeViews && m_recordingDrawerMode == RecordingDrawerMode::None)))
             showToolbar();
         includeVisibleUi(m_toolbar);
         includeVisibleUi(m_actionPanel);
@@ -3280,12 +3384,12 @@ bool CaptureOverlay::eventFilter(QObject *obj, QEvent *event)
             QMouseEvent *me = static_cast<QMouseEvent*>(event);
             if (me->button() == Qt::LeftButton) {
                 m_textPanelDragging = true;
-                m_textPanelDragOffset = mapFromGlobal(me->globalPosition().toPoint()) - m_textEditPosition;
+                m_textPanelDragOffset = capturePositionFromGlobal(me->globalPosition().toPoint()) - m_textEditPosition;
                 return true;
             }
         } else if (event->type() == QEvent::MouseMove && m_textPanelDragging) {
             QMouseEvent *me = static_cast<QMouseEvent*>(event);
-            moveTextEditorTo(mapFromGlobal(me->globalPosition().toPoint()) - m_textPanelDragOffset);
+            moveTextEditorTo(capturePositionFromGlobal(me->globalPosition().toPoint()) - m_textPanelDragOffset);
             return true;
         } else if (event->type() == QEvent::MouseButtonRelease && m_textPanelDragging) {
             m_textPanelDragging = false;
@@ -3367,13 +3471,20 @@ QPixmap CaptureOverlay::getSelectedPixmap()
     QRect selRect = normalizedSelectionRect();
     if (selRect.isEmpty()) return QPixmap();
     // Crop at full physical resolution (selRect is logical).
-    QPixmap result = m_screenSnapshot.copy(logicalToSnapshot(selRect));
+    const QRect globalSelection = selRect.translated(m_virtualDesktopRect.topLeft());
+    const qreal outputScale = m_screenImages.isEmpty()
+        ? m_dpr : captureSelectionScale(m_screenImages, globalSelection);
+    QPixmap result = m_screenImages.isEmpty()
+        ? m_screenSnapshot.copy(logicalToSnapshot(selRect))
+        : QPixmap::fromImage(composeCaptureImages(m_screenImages, globalSelection));
+    if (result.isNull())
+        return result;
     if (m_annotationEngine && m_annotationEngine->hasAnnotations()) {
         QPainter p(&result);
         p.setRenderHint(QPainter::Antialiasing, true);
         // Annotations are authored in logical coordinates; scale them up to the
         // physical-resolution result.
-        p.scale(m_dpr, m_dpr);
+        p.scale(outputScale, outputScale);
         m_annotationEngine->render(&p, -selRect.topLeft());
         p.end();
     }
@@ -3421,21 +3532,34 @@ void CaptureOverlay::showToolbar()
     if (!m_toolbar) return;
     QRect selRect = normalizedSelectionRect();
     int margin = 12;
+    const bool nativeViews = m_screenViews && m_screenViews->isActive();
     QRect toolbarBounds = m_selectionAnchorScreenRect.isValid()
-        ? m_selectionAnchorScreenRect
-        : monitorRectAt(selRect.center());
+        ? m_selectionAnchorScreenRect : monitorRectAt(selRect.center());
+#if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
+    if (nativeViews) {
+        QList<QRect> monitors;
+        for (QScreen *screen : QGuiApplication::screens()) {
+            monitors.append(screen->geometry().translated(-m_virtualDesktopRect.topLeft())
+                                .intersected(rect()));
+        }
+        toolbarBounds = selectionUiMonitorRect(selRect, monitors, m_selectionAnchorScreenRect);
+        if (toolbarBounds.isValid())
+            m_selectionAnchorScreenRect = toolbarBounds;
+    }
+#endif
     if (!toolbarBounds.isValid())
         toolbarBounds = rect();
     toolbarBounds = toolbarBounds.intersected(rect()).adjusted(5, 5, -5, -5);
     if (!toolbarBounds.isValid())
         toolbarBounds = rect().adjusted(5, 5, -5, -5);
 
-    m_toolbar->refreshTools();
-
+    if (!nativeViews)
+        m_toolbar->refreshTools();
     QRect toolbarRect;
     if (m_toolbar->hasVisibleTools()) {
         // --- Bottom toolbar: below the selection, centered ---
-        m_toolbar->adjustSize();
+        if (!nativeViews)
+            m_toolbar->adjustSize();
         int th = m_toolbar->height();
         int toolbarWidth = m_toolbar->width();
 
@@ -3462,7 +3586,8 @@ void CaptureOverlay::showToolbar()
         if (ty < toolbarBounds.top())
             ty = toolbarBounds.top();
 
-        m_toolbar->setFixedWidth(toolbarWidth);
+        if (!nativeViews)
+            m_toolbar->setFixedWidth(toolbarWidth);
         m_toolbar->move(tx, ty);
         m_toolbar->show();
         m_toolbar->raise();
@@ -3613,8 +3738,11 @@ void CaptureOverlay::cancelCapture()
 
 void CaptureOverlay::releaseCaptureBuffers()
 {
+    if (m_screenViews)
+        m_screenViews->hideViews();
     m_eyedropperImage = QImage();
     m_screenSnapshot = QPixmap();
+    m_screenImages.clear();
     if (m_annotationEngine)
         m_annotationEngine->releaseScreenSnapshot();
 }
@@ -4014,7 +4142,10 @@ void CaptureOverlay::hideForModalDialog()
 
 void CaptureOverlay::restoreAfterModalDialog()
 {
-    show();
+    if (m_screenViews)
+        presentCapture();
+    else
+        show();
     if (m_selectionComplete)
         showToolbar();
 
@@ -4172,6 +4303,10 @@ QRect CaptureOverlay::normalizedSelectionRect() const
 
 QRect CaptureOverlay::selectedCaptureRect() const
 {
+    if (!m_screenImages.isEmpty()) {
+        const QRect logical = normalizedSelectionRect().translated(m_virtualDesktopRect.topLeft());
+        return physicalRectFromLogical(logical, captureSelectionScale(m_screenImages, logical));
+    }
     QRect captureRect = logicalToSnapshot(normalizedSelectionRect());
     return captureRect.translated(m_physicalVirtualDesktopTopLeft);
 }
@@ -4456,7 +4591,7 @@ void CaptureOverlay::toggleShortcutSheet()
         }
         const QRect monitor = m_selectionComplete
             ? monitorRectAt(normalizedSelectionRect().center())
-            : monitorRectAt(mapFromGlobal(QCursor::pos()));
+            : monitorRectAt(capturePositionFromGlobal(QCursor::pos()));
         m_shortcutSheet->open(monitor);
     }
     update();

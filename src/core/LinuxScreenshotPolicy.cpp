@@ -25,6 +25,15 @@ bool isGnomeWaylandSession(const QString &currentDesktop,
         && LinuxDesktopIntegration::isWayland(sessionType);
 }
 
+bool useNativeScreenViews(const QString &currentDesktop,
+                          const QString &sessionDesktop,
+                          const QString &sessionType,
+                          const QString &platformName)
+{
+    return isKdeWaylandSession(currentDesktop, sessionDesktop, sessionType)
+        && platformName.contains(QStringLiteral("wayland"), Qt::CaseInsensitive);
+}
+
 bool shouldPrepareKWinPermission(const QString &currentDesktop,
                                  const QString &sessionDesktop,
                                  const QString &sessionType,

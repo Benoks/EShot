@@ -16,11 +16,12 @@ grep -F 'source "${repo_root}/scripts/linux/runtime-common.sh"' "${runner}" >/de
   echo 'local Linux runner must use the shared Wayland overlay policy' >&2
   exit 1
 }
-grep -F 'if [[ "$(eshot_xwayland_overlay_enabled)" == "1" ]]; then' "${runner}" >/dev/null || {
-  echo 'local Linux runner must enable the XWayland overlay when supported' >&2
-  exit 1
-}
-grep -F "export QT_QPA_PLATFORM='xcb;wayland'" "${runner}" >/dev/null
-grep -F 'export ESHOT_WAYLAND_XWAYLAND_OVERLAY=1' "${runner}" >/dev/null
+for launcher in "${runner}" "${repo_root}/scripts/linux/eshot-launcher" \
+                "${repo_root}/packaging/linux/AppRun"; do
+  grep -xF 'eshot_configure_overlay_backend' "${launcher}" >/dev/null || {
+    echo "${launcher} must use the shared per-desktop overlay policy" >&2
+    exit 1
+  }
+done
 
 printf 'local runner overlay contract tests passed\n'

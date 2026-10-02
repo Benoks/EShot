@@ -25,6 +25,7 @@ class ShortcutSheetLayer;
 class QPainter;
 
 #include "CaptureGeometry.h"
+#include "CaptureScreenImage.h"
 #include "WindowSnapPolicy.h"
 
 #ifdef Q_OS_WIN
@@ -49,6 +50,7 @@ class QLabel;
 class ImageUploader;
 class DebouncedSettingsWriter;
 class QScreen;
+class CaptureScreenViews;
 
 
 class CaptureOverlay : public QWidget {
@@ -84,6 +86,9 @@ protected:
 
 private:
     void captureAllScreens();
+    bool captureNativeScreenImages(const QRect &logicalRect, const QRect &physicalRect);
+    void presentCapture();
+    QPoint capturePositionFromGlobal(const QPoint &point) const;
     void startCaptureInternal(CaptureSelectionMode selectionMode, bool recordingMode);
     void showToolbar();
     void hideToolbar();
@@ -121,6 +126,8 @@ private:
     QString resolveWindowTitle() const;
 
     QPixmap m_screenSnapshot;
+    QVector<CaptureScreenImage> m_screenImages;
+    CaptureScreenViews *m_screenViews = nullptr;
     QImage m_eyedropperImage;
     QPoint m_selectionStart;
     QPoint m_selectionEnd;

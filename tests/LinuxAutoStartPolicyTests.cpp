@@ -13,7 +13,7 @@ private slots:
     void prefersExistingOuterAppImage();
     void fallsBackWhenAppImageIsEmpty();
     void fallsBackWhenAppImageDoesNotExist();
-    void usesXWaylandCompatibilityForGnomeAndKdeWayland();
+    void usesNativeKdeWithoutChangingGnomeOrX11();
 };
 
 void LinuxAutoStartPolicyTests::prefersExistingOuterAppImage()
@@ -44,7 +44,7 @@ void LinuxAutoStartPolicyTests::fallsBackWhenAppImageDoesNotExist()
              executable);
 }
 
-void LinuxAutoStartPolicyTests::usesXWaylandCompatibilityForGnomeAndKdeWayland()
+void LinuxAutoStartPolicyTests::usesNativeKdeWithoutChangingGnomeOrX11()
 {
     const QString executable = QStringLiteral("/opt/EShot AppImage");
     const QString kde = LinuxAutoStartPolicy::commandLine(
@@ -55,10 +55,19 @@ void LinuxAutoStartPolicyTests::usesXWaylandCompatibilityForGnomeAndKdeWayland()
         executable, QStringLiteral("GNOME"), QString(), QStringLiteral("x11"));
 
     QVERIFY(kde.startsWith(QStringLiteral(
-        "/usr/bin/env QT_QPA_PLATFORM=\"xcb;wayland\" ESHOT_WAYLAND_XWAYLAND_OVERLAY=1 ")));
+        "/usr/bin/env QT_QPA_PLATFORM=wayland ESHOT_WAYLAND_XWAYLAND_OVERLAY=0 ")));
     QVERIFY(gnome.startsWith(QStringLiteral(
         "/usr/bin/env QT_QPA_PLATFORM=\"xcb;wayland\" ESHOT_WAYLAND_XWAYLAND_OVERLAY=1 ")));
     QCOMPARE(gnomeX11, QStringLiteral("\"/opt/EShot AppImage\" --silent"));
+    QCOMPARE(LinuxAutoStartPolicy::commandLine(
+                 executable, QStringLiteral("KDE"), QString(), QStringLiteral("x11")),
+             gnomeX11);
+    QCOMPARE(LinuxAutoStartPolicy::commandLine(
+                 executable, QStringLiteral("sway"), QString(), QStringLiteral("wayland")),
+             gnomeX11);
+    QVERIFY(LinuxAutoStartPolicy::commandLine(
+                executable, QString(), QStringLiteral("plasma"), QStringLiteral("Wayland"))
+                .startsWith(QStringLiteral("/usr/bin/env QT_QPA_PLATFORM=wayland ")));
 }
 
 QTEST_MAIN(LinuxAutoStartPolicyTests)
