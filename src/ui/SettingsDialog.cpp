@@ -354,7 +354,8 @@ static bool setAutoStartEnabled(bool enabled)
     const QString desktopName = qEnvironmentVariable("XDG_CURRENT_DESKTOP",
                                                        qEnvironmentVariable("XDG_SESSION_DESKTOP"));
     const QString execLine = LinuxAutoStartPolicy::commandLine(
-        appPath, desktopName, QString(), sessionType);
+        appPath, desktopName, QString(), sessionType,
+        qEnvironmentVariable("ESHOT_CAPTURE_BACKEND"));
     const QString desktop = QStringLiteral(
         "[Desktop Entry]\n"
         "Type=Application\n"

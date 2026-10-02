@@ -13,7 +13,7 @@ private slots:
     void prefersExistingOuterAppImage();
     void fallsBackWhenAppImageIsEmpty();
     void fallsBackWhenAppImageDoesNotExist();
-    void usesNativeKdeWithoutChangingGnomeOrX11();
+    void usesXWaylandForKdeAndGnomeWithOptInNativeKde();
 };
 
 void LinuxAutoStartPolicyTests::prefersExistingOuterAppImage()
@@ -44,7 +44,7 @@ void LinuxAutoStartPolicyTests::fallsBackWhenAppImageDoesNotExist()
              executable);
 }
 
-void LinuxAutoStartPolicyTests::usesNativeKdeWithoutChangingGnomeOrX11()
+void LinuxAutoStartPolicyTests::usesXWaylandForKdeAndGnomeWithOptInNativeKde()
 {
     const QString executable = QStringLiteral("/opt/EShot AppImage");
     const QString kde = LinuxAutoStartPolicy::commandLine(
@@ -55,7 +55,13 @@ void LinuxAutoStartPolicyTests::usesNativeKdeWithoutChangingGnomeOrX11()
         executable, QStringLiteral("GNOME"), QString(), QStringLiteral("x11"));
 
     QVERIFY(kde.startsWith(QStringLiteral(
-        "/usr/bin/env QT_QPA_PLATFORM=wayland ESHOT_WAYLAND_XWAYLAND_OVERLAY=0 ")));
+        "/usr/bin/env QT_QPA_PLATFORM=\"xcb;wayland\" ESHOT_WAYLAND_XWAYLAND_OVERLAY=1 ")));
+    QVERIFY(LinuxAutoStartPolicy::commandLine(
+                executable, QStringLiteral("KDE"), QString(), QStringLiteral("wayland"),
+                QStringLiteral("wayland"))
+                .startsWith(QStringLiteral(
+                    "/usr/bin/env QT_QPA_PLATFORM=wayland ESHOT_WAYLAND_XWAYLAND_OVERLAY=0 "
+                    "ESHOT_CAPTURE_BACKEND=wayland ")));
     QVERIFY(gnome.startsWith(QStringLiteral(
         "/usr/bin/env QT_QPA_PLATFORM=\"xcb;wayland\" ESHOT_WAYLAND_XWAYLAND_OVERLAY=1 ")));
     QCOMPARE(gnomeX11, QStringLiteral("\"/opt/EShot AppImage\" --silent"));
@@ -67,7 +73,7 @@ void LinuxAutoStartPolicyTests::usesNativeKdeWithoutChangingGnomeOrX11()
              gnomeX11);
     QVERIFY(LinuxAutoStartPolicy::commandLine(
                 executable, QString(), QStringLiteral("plasma"), QStringLiteral("Wayland"))
-                .startsWith(QStringLiteral("/usr/bin/env QT_QPA_PLATFORM=wayland ")));
+                .startsWith(QStringLiteral("/usr/bin/env QT_QPA_PLATFORM=\"xcb;wayland\" ")));
 }
 
 QTEST_MAIN(LinuxAutoStartPolicyTests)

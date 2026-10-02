@@ -16,7 +16,8 @@ QString LinuxAutoStartPolicy::executablePath(const QString &appImagePath,
 QString LinuxAutoStartPolicy::commandLine(const QString &executablePath,
                                           const QString &currentDesktop,
                                           const QString &sessionDesktop,
-                                          const QString &sessionType)
+                                          const QString &sessionType,
+                                          const QString &captureBackend)
 {
     QString escapedPath = executablePath;
     escapedPath.replace(QStringLiteral("\\"), QStringLiteral("\\\\"));
@@ -24,10 +25,11 @@ QString LinuxAutoStartPolicy::commandLine(const QString &executablePath,
     QString command = QStringLiteral("\"") + escapedPath + QStringLiteral("\" --silent");
     const LinuxDesktopEnvironment desktop = LinuxDesktopIntegration::detect(
         currentDesktop, sessionDesktop);
-    if (LinuxDesktopIntegration::useNativeWaylandOverlay(desktop, sessionType)) {
+    if (LinuxDesktopIntegration::useNativeWaylandOverlay(desktop, sessionType, captureBackend)) {
         command.prepend(QStringLiteral(
-            "/usr/bin/env QT_QPA_PLATFORM=wayland ESHOT_WAYLAND_XWAYLAND_OVERLAY=0 "));
-    } else if (LinuxDesktopIntegration::useXWaylandOverlay(desktop, sessionType)) {
+            "/usr/bin/env QT_QPA_PLATFORM=wayland ESHOT_WAYLAND_XWAYLAND_OVERLAY=0 "
+            "ESHOT_CAPTURE_BACKEND=wayland "));
+    } else if (LinuxDesktopIntegration::useXWaylandOverlay(desktop, sessionType, captureBackend)) {
         command.prepend(QStringLiteral(
             "/usr/bin/env QT_QPA_PLATFORM=\"xcb;wayland\" ESHOT_WAYLAND_XWAYLAND_OVERLAY=1 "));
     }

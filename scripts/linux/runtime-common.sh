@@ -10,11 +10,17 @@ eshot_desktop_backend() {
   esac
 }
 
+# KDE and GNOME Wayland use one XWayland canvas across every output. Native
+# Wayland cannot place top-level windows, so pinned images and the recording
+# frame would open at compositor-chosen positions. KDE's per-output native
+# surfaces (sharper previews on mixed-DPI setups) are therefore opt-in with
+# ESHOT_CAPTURE_BACKEND=wayland.
 eshot_xwayland_overlay_enabled() {
   local backend session="${XDG_SESSION_TYPE:-}"
   backend="$(eshot_desktop_backend)"
   if [[ "${session,,}" == "wayland" ]] \
-      && [[ "${backend}" == "gnome" ]]; then
+     && [[ "${backend}" == "gnome" \
+           || ( "${backend}" == "kde" && "${ESHOT_CAPTURE_BACKEND:-}" != "wayland" ) ]]; then
     printf '1\n'
   else
     printf '0\n'
@@ -24,7 +30,8 @@ eshot_xwayland_overlay_enabled() {
 eshot_native_wayland_overlay_enabled() {
   local session="${XDG_SESSION_TYPE:-}"
   if [[ "${session,,}" == "wayland" ]] \
-     && [[ "$(eshot_desktop_backend)" == "kde" ]]; then
+     && [[ "$(eshot_desktop_backend)" == "kde" ]] \
+     && [[ "${ESHOT_CAPTURE_BACKEND:-}" == "wayland" ]]; then
     printf '1\n'
   else
     printf '0\n'
@@ -32,13 +39,10 @@ eshot_native_wayland_overlay_enabled() {
 }
 
 eshot_configure_overlay_backend() {
-  if [[ "$(eshot_native_wayland_overlay_enabled)" == "1" \
-        && "${ESHOT_CAPTURE_BACKEND:-wayland}" != "xcb" ]]; then
+  if [[ "$(eshot_native_wayland_overlay_enabled)" == "1" ]]; then
     export QT_QPA_PLATFORM=wayland
     export ESHOT_WAYLAND_XWAYLAND_OVERLAY=0
-  elif [[ "$(eshot_xwayland_overlay_enabled)" == "1" \
-          || ( "$(eshot_native_wayland_overlay_enabled)" == "1" \
-               && "${ESHOT_CAPTURE_BACKEND:-}" == "xcb" ) ]]; then
+  elif [[ "$(eshot_xwayland_overlay_enabled)" == "1" ]]; then
     export QT_QPA_PLATFORM='xcb;wayland'
     export ESHOT_WAYLAND_XWAYLAND_OVERLAY=1
   fi

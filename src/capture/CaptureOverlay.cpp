@@ -1827,7 +1827,9 @@ void CaptureOverlay::presentCapture()
     const bool nativeScreenViews = LinuxScreenshotPolicy::useNativeScreenViews(
         qEnvironmentVariable("XDG_CURRENT_DESKTOP"), qEnvironmentVariable("XDG_SESSION_DESKTOP"),
         qEnvironmentVariable("XDG_SESSION_TYPE"), QGuiApplication::platformName());
-    if (nativeScreenViews && (!m_screenImages.isEmpty() || (m_screenViews && m_captureScreen))) {
+    // Once the canvas is embedded in the views it cannot be shown as its own
+    // window again, so a single-output fallback capture also uses the views.
+    if (nativeScreenViews && (!m_screenImages.isEmpty() || m_captureScreen)) {
         if (!m_screenViews) {
             m_screenViews = new CaptureScreenViews(this);
             connect(m_screenViews, &CaptureScreenViews::closeRequested,

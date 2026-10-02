@@ -40,8 +40,9 @@ assert_eq "kde" "$(XDG_CURRENT_DESKTOP=KDE XDG_SESSION_DESKTOP= eshot_desktop_ba
 assert_eq "gnome" "$(XDG_CURRENT_DESKTOP=GNOME XDG_SESSION_DESKTOP= eshot_desktop_backend)" "GNOME backend"
 assert_eq "kde" "$(XDG_CURRENT_DESKTOP= XDG_SESSION_DESKTOP=plasma eshot_desktop_backend)" "Plasma session backend"
 assert_eq "gtk" "$(XDG_CURRENT_DESKTOP=sway XDG_SESSION_DESKTOP=sway eshot_desktop_backend)" "fallback backend"
-assert_eq "0" "$(XDG_CURRENT_DESKTOP=KDE XDG_SESSION_TYPE=wayland eshot_xwayland_overlay_enabled)" "KDE is not XWayland"
-assert_eq "1" "$(XDG_CURRENT_DESKTOP=KDE XDG_SESSION_TYPE=wayland eshot_native_wayland_overlay_enabled)" "KDE native overlay"
+assert_eq "1" "$(XDG_CURRENT_DESKTOP=KDE XDG_SESSION_TYPE=wayland ESHOT_CAPTURE_BACKEND= eshot_xwayland_overlay_enabled)" "KDE Wayland overlay"
+assert_eq "0" "$(XDG_CURRENT_DESKTOP=KDE XDG_SESSION_TYPE=wayland ESHOT_CAPTURE_BACKEND= eshot_native_wayland_overlay_enabled)" "KDE native overlay is opt-in"
+assert_eq "1" "$(XDG_CURRENT_DESKTOP=KDE XDG_SESSION_TYPE=wayland ESHOT_CAPTURE_BACKEND=wayland eshot_native_wayland_overlay_enabled)" "KDE native overlay opted in"
 assert_eq "1" "$(XDG_CURRENT_DESKTOP=GNOME XDG_SESSION_TYPE=wayland eshot_xwayland_overlay_enabled)" "GNOME Wayland overlay"
 assert_eq "0" "$(XDG_CURRENT_DESKTOP=GNOME XDG_SESSION_TYPE=x11 eshot_xwayland_overlay_enabled)" "GNOME X11 native"
 assert_eq "0" "$(XDG_CURRENT_DESKTOP=Hyprland XDG_SESSION_TYPE=wayland eshot_xwayland_overlay_enabled)" "generic Wayland native"
@@ -55,10 +56,12 @@ overlay_env() {
     printf '%s/%s\n' "${QT_QPA_PLATFORM}" "${ESHOT_WAYLAND_XWAYLAND_OVERLAY}"
   )
 }
-assert_eq 'wayland/0' "$(overlay_env KDE wayland)" 'KDE packaged native backend'
+assert_eq 'xcb;wayland/1' "$(overlay_env KDE wayland)" 'KDE packaged XWayland backend'
+assert_eq 'wayland/0' "$(overlay_env KDE wayland wayland)" 'KDE opt-in native backend'
 assert_eq 'xcb;wayland/1' "$(overlay_env GNOME wayland)" 'GNOME retains XWayland'
 assert_eq 'xcb;wayland/1' "$(overlay_env Ubuntu wayland)" 'Ubuntu GNOME matches C++ policy'
-assert_eq 'xcb;wayland/1' "$(overlay_env KDE wayland xcb)" 'Explicit KDE compatibility fallback'
+assert_eq 'xcb;wayland/1' "$(overlay_env KDE wayland xcb)" 'Explicit KDE XWayland backend'
+assert_eq 'xcb;wayland/1' "$(overlay_env GNOME wayland wayland)" 'GNOME ignores native opt-in'
 assert_eq 'existing/9' "$(overlay_env KDE x11)" 'KDE X11 environment unchanged'
 assert_eq 'existing/9' "$(overlay_env GNOME x11)" 'GNOME X11 environment unchanged'
 assert_eq 'existing/9' "$(overlay_env sway wayland)" 'Unsupported desktop environment unchanged'

@@ -113,7 +113,7 @@ cat >"${appdir}/usr/bin/EShot" <<'SH'
 printf '%s/%s\n' "${QT_QPA_PLATFORM:-}" "${ESHOT_WAYLAND_XWAYLAND_OVERLAY:-}" >"${ESHOT_BACKEND_LOG}"
 SH
 chmod +x "${appdir}/usr/bin/EShot"
-for row in 'KDE wayland wayland/0' 'GNOME wayland xcb;wayland/1' \
+for row in 'KDE wayland xcb;wayland/1' 'GNOME wayland xcb;wayland/1' \
            'KDE x11 existing/9' 'GNOME x11 existing/9' 'sway wayland existing/9'; do
   read -r desktop_name session_type expected <<<"${row}"
   HOME="${home_dir}" XDG_DATA_HOME="${data_home}" APPDIR="${appdir}" \

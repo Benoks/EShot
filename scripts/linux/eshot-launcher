@@ -4,8 +4,8 @@ set -euo pipefail
 bindir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${bindir}/../lib/eshot/runtime-common.sh"
 
-# KDE uses per-output native surfaces; GNOME retains the portal/XWayland
-# compatibility canvas. X11 and unsupported desktops keep their own backend.
+# KDE and GNOME Wayland use the XWayland canvas (KDE can opt into native
+# per-output surfaces). X11 and unsupported desktops keep their own backend.
 eshot_configure_overlay_backend
 
 if [[ "${ESHOT_SYSTEMD_CHILD:-0}" != "1" ]] && command -v systemd-run >/dev/null 2>&1; then

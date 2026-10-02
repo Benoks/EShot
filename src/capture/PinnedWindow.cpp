@@ -12,6 +12,7 @@
 #include <QClipboard>
 #include <QGuiApplication>
 #include <QScreen>
+#include <QWindow>
 #include <QFileDialog>
 #include <QDebug>
 #include "../core/TranslationManager.h"
@@ -190,6 +191,11 @@ void PinnedWindow::mousePressEvent(QMouseEvent *event)
             return;
         }
 
+        // Native Wayland ignores move(); let the compositor drag the window.
+        if (QGuiApplication::platformName().startsWith(QStringLiteral("wayland"))
+            && windowHandle() && windowHandle()->startSystemMove()) {
+            return;
+        }
         m_dragging = true;
         m_dragOffset = event->pos();
     }

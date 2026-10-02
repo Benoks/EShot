@@ -32,14 +32,20 @@ bool isWayland(const QString &sessionType, const QString &platformName)
         || platformName.contains(QStringLiteral("wayland"), Qt::CaseInsensitive);
 }
 
-bool useXWaylandOverlay(LinuxDesktopEnvironment desktop, const QString &sessionType)
+bool useXWaylandOverlay(LinuxDesktopEnvironment desktop, const QString &sessionType,
+                        const QString &captureBackend)
 {
-    return isWayland(sessionType) && desktop == LinuxDesktopEnvironment::Gnome;
+    return isWayland(sessionType)
+        && (desktop == LinuxDesktopEnvironment::Gnome
+            || (desktop == LinuxDesktopEnvironment::Kde
+                && !useNativeWaylandOverlay(desktop, sessionType, captureBackend)));
 }
 
-bool useNativeWaylandOverlay(LinuxDesktopEnvironment desktop, const QString &sessionType)
+bool useNativeWaylandOverlay(LinuxDesktopEnvironment desktop, const QString &sessionType,
+                             const QString &captureBackend)
 {
-    return isWayland(sessionType) && desktop == LinuxDesktopEnvironment::Kde;
+    return isWayland(sessionType) && desktop == LinuxDesktopEnvironment::Kde
+        && captureBackend == QStringLiteral("wayland");
 }
 
 LinuxDesktopSupportLevel startupSupportLevel(LinuxDesktopEnvironment desktop,

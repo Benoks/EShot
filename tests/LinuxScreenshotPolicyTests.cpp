@@ -26,12 +26,18 @@ private slots:
                  LinuxDesktopEnvironment::Other);
     }
 
-    void selectsNativeKdeAndKeepsGnomeCompatibilityOverlay()
+    void selectsXWaylandOverlayAndOptInNativeKde()
     {
-        QVERIFY(!LinuxDesktopIntegration::useXWaylandOverlay(
+        QVERIFY(LinuxDesktopIntegration::useXWaylandOverlay(
+            LinuxDesktopEnvironment::Kde, QStringLiteral("wayland")));
+        QVERIFY(!LinuxDesktopIntegration::useNativeWaylandOverlay(
             LinuxDesktopEnvironment::Kde, QStringLiteral("wayland")));
         QVERIFY(LinuxDesktopIntegration::useNativeWaylandOverlay(
-            LinuxDesktopEnvironment::Kde, QStringLiteral("wayland")));
+            LinuxDesktopEnvironment::Kde, QStringLiteral("wayland"), QStringLiteral("wayland")));
+        QVERIFY(!LinuxDesktopIntegration::useXWaylandOverlay(
+            LinuxDesktopEnvironment::Kde, QStringLiteral("wayland"), QStringLiteral("wayland")));
+        QVERIFY(!LinuxDesktopIntegration::useNativeWaylandOverlay(
+            LinuxDesktopEnvironment::Gnome, QStringLiteral("wayland"), QStringLiteral("wayland")));
         QVERIFY(LinuxDesktopIntegration::useXWaylandOverlay(
             LinuxDesktopEnvironment::Gnome, QStringLiteral("Wayland")));
         QVERIFY(!LinuxDesktopIntegration::useXWaylandOverlay(
