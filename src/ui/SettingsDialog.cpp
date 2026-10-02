@@ -1218,6 +1218,7 @@ QWidget* SettingsDialog::createHotkeyTab()
             color: #ffffff;
         }
         QKeySequenceEdit:focus { border-color: #1a8cff; }
+        QKeySequenceEdit[hotkeyConflict="true"] { border-color: #ff9800; }
     )");
     connect(m_hotkeyEdit, &QKeySequenceEdit::keySequenceChanged,
             this, &SettingsDialog::onHotkeyChanged);
@@ -1226,6 +1227,35 @@ QWidget* SettingsDialog::createHotkeyTab()
     m_hotkeyStatusLabel = new QLabel(TranslationManager::hotkeyValid());
     m_hotkeyStatusLabel->setStyleSheet("color: #4caf50; font-size: 12px;");
     gl->addWidget(m_hotkeyStatusLabel);
+
+    // Inline duplicate warnings, shown under the field that repeats a key.
+    m_globalHotkeyFields.clear();
+    auto makeConflictLabel = []() {
+        auto *label = new QLabel();
+        label->setWordWrap(true);
+        label->setStyleSheet("color: #ff9800; font-size: 12px;");
+        label->hide();
+        return label;
+    };
+    auto withConflictLabel = [](QKeySequenceEdit *edit, QLabel *label) {
+        auto *field = new QWidget();
+        auto *fieldLayout = new QVBoxLayout(field);
+        fieldLayout->setContentsMargins(0, 0, 0, 0);
+        fieldLayout->setSpacing(2);
+        fieldLayout->addWidget(edit);
+        fieldLayout->addWidget(label);
+        return field;
+    };
+    auto addGlobalHotkeyField = [this](int id, QKeySequenceEdit *edit, const QString &name,
+                                       QLabel *label) {
+        m_globalHotkeyFields.append(GlobalHotkeyField{id, edit, name, label});
+        connect(edit, &QKeySequenceEdit::keySequenceChanged,
+                this, [this]() { updateHotkeyConflictUi(); });
+    };
+    QLabel *captureConflictLabel = makeConflictLabel();
+    gl->addWidget(captureConflictLabel);
+    addGlobalHotkeyField(HotkeyManager::HOTKEY_CAPTURE, m_hotkeyEdit,
+                         TranslationManager::hotkeyTitle(), captureConflictLabel);
 
     m_printScreenConflictLabel = new QLabel(printScreenConflictMessage());
     m_printScreenConflictLabel->setWordWrap(true);
@@ -1276,6 +1306,7 @@ QWidget* SettingsDialog::createHotkeyTab()
                 color: #ffffff;
             }
             QKeySequenceEdit:focus { border-color: #1a8cff; }
+            QKeySequenceEdit[hotkeyConflict="true"] { border-color: #ff9800; }
         )");
         return edit;
     };
@@ -1288,13 +1319,23 @@ QWidget* SettingsDialog::createHotkeyTab()
     m_instantCaptureHotkeyEdit->setToolTip(uiLabel("Bos birakilirsa kapali kalir. Alan secimi bitince otomatik kopyalar.", "Leave empty to disable. Copies automatically when region selection finishes."));
     m_gifCaptureHotkeyEdit->setToolTip(uiLabel("Bos birakilirsa kapali kalir. Dogrudan GIF alan secimini acar.", "Leave empty to disable. Opens GIF area selection directly."));
     m_videoCaptureHotkeyEdit->setToolTip(uiLabel("Bos birakilirsa kapali kalir. Dogrudan video alan secimini acar.", "Leave empty to disable. Opens video area selection directly."));
+    auto addActionHotkeyRow = [&](int id, const QString &label, const QString &name,
+                                  QKeySequenceEdit *edit) {
+        QLabel *conflictLabel = makeConflictLabel();
+        actionHotkeyLayout->addRow(label, withConflictLabel(edit, conflictLabel));
+        addGlobalHotkeyField(id, edit, name, conflictLabel);
+    };
 #ifdef Q_OS_WIN
     m_windowCaptureHotkeyEdit->setToolTip(uiLabel("Bos birakilirsa kapali kalir. Fareyle pencere secme modunu acar.", "Leave empty to disable. Opens window selection mode."));
-    actionHotkeyLayout->addRow(uiLabel("Pencere:", "Window:"), m_windowCaptureHotkeyEdit);
+    addActionHotkeyRow(HotkeyManager::HOTKEY_WINDOW_CAPTURE, uiLabel("Pencere:", "Window:"),
+                       TranslationManager::trayWindowCapture(), m_windowCaptureHotkeyEdit);
 #endif
-    actionHotkeyLayout->addRow(uiLabel("Instant bolge:", "Instant region:"), m_instantCaptureHotkeyEdit);
-    actionHotkeyLayout->addRow(QStringLiteral("GIF:"), m_gifCaptureHotkeyEdit);
-    actionHotkeyLayout->addRow(uiLabel("Video:", "Video:"), m_videoCaptureHotkeyEdit);
+    addActionHotkeyRow(HotkeyManager::HOTKEY_INSTANT_CAPTURE, uiLabel("Instant bolge:", "Instant region:"),
+                       uiLabel("Instant bolge", "Instant region"), m_instantCaptureHotkeyEdit);
+    addActionHotkeyRow(HotkeyManager::HOTKEY_GIF_CAPTURE, QStringLiteral("GIF:"),
+                       QStringLiteral("GIF"), m_gifCaptureHotkeyEdit);
+    addActionHotkeyRow(HotkeyManager::HOTKEY_VIDEO_CAPTURE, uiLabel("Video:", "Video:"),
+                       uiLabel("Video", "Video"), m_videoCaptureHotkeyEdit);
     gl->addWidget(actionGroup);
 
     QGroupBox *recordingGroup = new QGroupBox(TranslationManager::videoRecordingTitle());
@@ -1302,9 +1343,19 @@ QWidget* SettingsDialog::createHotkeyTab()
     m_recordingPauseHotkeyEdit = makeRecordingHotkeyEdit();
     m_recordingStopHotkeyEdit = makeRecordingHotkeyEdit();
     m_recordingCancelHotkeyEdit = makeRecordingHotkeyEdit();
-    recordingHotkeyLayout->addRow(TranslationManager::recordingPauseResume(), m_recordingPauseHotkeyEdit);
-    recordingHotkeyLayout->addRow(TranslationManager::recordingStop(), m_recordingStopHotkeyEdit);
-    recordingHotkeyLayout->addRow(TranslationManager::recordingCancel(), m_recordingCancelHotkeyEdit);
+    auto addRecordingHotkeyRow = [&](int id, const QString &label, QKeySequenceEdit *edit) {
+        QLabel *conflictLabel = makeConflictLabel();
+        recordingHotkeyLayout->addRow(label, withConflictLabel(edit, conflictLabel));
+        addGlobalHotkeyField(id, edit,
+                             QStringLiteral("%1 / %2").arg(TranslationManager::videoRecordingTitle(), label),
+                             conflictLabel);
+    };
+    addRecordingHotkeyRow(HotkeyManager::HOTKEY_RECORDING_PAUSE,
+                          TranslationManager::recordingPauseResume(), m_recordingPauseHotkeyEdit);
+    addRecordingHotkeyRow(HotkeyManager::HOTKEY_RECORDING_STOP,
+                          TranslationManager::recordingStop(), m_recordingStopHotkeyEdit);
+    addRecordingHotkeyRow(HotkeyManager::HOTKEY_RECORDING_CANCEL,
+                          TranslationManager::recordingCancel(), m_recordingCancelHotkeyEdit);
     gl->addWidget(recordingGroup);
 
     QGroupBox *overlayGroup = new QGroupBox(uiLabel("SS ekrani kisayollari", "Screenshot screen shortcuts"));
@@ -2041,6 +2092,7 @@ void SettingsDialog::loadSettings()
     m_hotkeyStatusLabel->setText(TranslationManager::hotkeyValid());
     m_hotkeyStatusLabel->setStyleSheet("color: #4caf50; font-size: 12px;");
     updatePrintScreenConflictUi();
+    updateHotkeyConflictUi();
 
     const QSize restoredSize = settingsDialogRestoredSize(
         m_rememberSettingsWindowSizeEnabled,
@@ -2091,6 +2143,45 @@ void SettingsDialog::updatePrintScreenConflictUi()
 
     m_printScreenConflictLabel->setVisible(showWarning);
     m_printScreenFixButton->setVisible(showWarning);
+}
+
+bool SettingsDialog::updateHotkeyConflictUi()
+{
+    QList<SettingsHotkeyEntry> entries;
+    for (const GlobalHotkeyField &field : m_globalHotkeyFields) {
+        UINT mod = 0, vk = 0;
+        const QKeySequence seq = field.edit->keySequence();
+        if (seq.isEmpty()) {
+            // An empty capture field is saved as PrtSc (see onSave).
+            if (field.id == HotkeyManager::HOTKEY_CAPTURE)
+                vk = VK_SNAPSHOT;
+        } else if (!keySequenceToWin32(seq, mod, vk)) {
+            mod = 0;
+            vk = 0;
+        }
+        entries.append(SettingsHotkeyEntry{field.id, {mod, vk}});
+    }
+
+    const QHash<int, int> conflicts = settingsHotkeyConflicts(entries);
+    for (const GlobalHotkeyField &field : m_globalHotkeyFields) {
+        const bool conflicting = conflicts.contains(field.id);
+        if (conflicting) {
+            const int otherId = conflicts.value(field.id);
+            QString otherName;
+            for (const GlobalHotkeyField &other : m_globalHotkeyFields) {
+                if (other.id == otherId)
+                    otherName = other.name;
+            }
+            field.conflictLabel->setText(TranslationManager::hotkeyConflictWith().arg(otherName));
+        }
+        field.conflictLabel->setVisible(conflicting);
+        if (field.edit->property("hotkeyConflict").toBool() != conflicting) {
+            field.edit->setProperty("hotkeyConflict", conflicting);
+            field.edit->style()->unpolish(field.edit);
+            field.edit->style()->polish(field.edit);
+        }
+    }
+    return !conflicts.isEmpty();
 }
 
 void SettingsDialog::onDisableWindowsPrintScreenSnipping()
@@ -2274,6 +2365,13 @@ void SettingsDialog::onSave()
         QMessageBox::warning(this, TranslationManager::errInvalidHotkeyTitle(), TranslationManager::errInvalidHotkey());
         return;
     }
+    // Two EShot actions on one key would fail (Windows) or silently drop one
+    // grab (X11); the fields already show which ones collide.
+    if (updateHotkeyConflictUi()) {
+        QMessageBox::warning(this, TranslationManager::errInvalidHotkeyTitle(),
+                             TranslationManager::hotkeyConflictSave());
+        return;
+    }
     const bool actionHotkeysChanged =
         settingsHotkeyChanged({instantMod, instantVKey},
                               {static_cast<quint32>(m_settings->value("instantCaptureHotkeyModifiers", 0).toUInt()),
@@ -2349,10 +2447,11 @@ void SettingsDialog::onSave()
 #endif
     }
     if (captureHotkeyChanged && !HotkeyManager::instance().reRegisterCaptureHotkey(newMod, newVKey)) {
+        // Name the refused key; "invalid hotkey" would be misleading here.
         QMessageBox::warning(
             this,
             TranslationManager::errInvalidHotkeyTitle(),
-            TranslationManager::errInvalidHotkey() + QStringLiteral("\n\n") + TranslationManager::hotkeyMayBeInUse());
+            HotkeyManager::shortcutText(newMod, newVKey) + QStringLiteral("\n\n") + TranslationManager::hotkeyMayBeInUse());
         m_hotkeyEdit->setKeySequence(win32ToKeySequence(
             HotkeyManager::instance().captureModifiers(),
             HotkeyManager::instance().captureVirtualKey()));

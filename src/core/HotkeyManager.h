@@ -11,6 +11,12 @@
 class LinuxPortalGlobalShortcuts;
 class LinuxKGlobalAccelShortcuts;
 
+struct HotkeyBinding {
+    int id = 0;
+    UINT modifiers = 0;
+    UINT virtualKey = 0;
+};
+
 class HotkeyManager : public QObject, public QAbstractNativeEventFilter {
     Q_OBJECT
 
@@ -34,6 +40,12 @@ public:
     QString recordingPauseShortcutText() const;
     QString recordingStopShortcutText() const;
     QString recordingCancelShortcutText() const;
+    // Configured hotkeys that are not active, e.g. because another app owns
+    // the key. Keys rejected by reRegister*() are reported by its return value.
+    QList<HotkeyBinding> failedHotkeys() const;
+    bool isHotkeyActive(int id) const;
+    // Text of the key that is actually registered for id; empty when none.
+    QString activeShortcutText(int id) const;
     static QString shortcutText(UINT modifiers, UINT virtualKey);
     static bool isPlainPrintScreen(UINT modifiers, UINT virtualKey);
     static bool isWindowsPrintScreenSnippingEnabled();
@@ -49,6 +61,9 @@ signals:
     void gifCaptureRequested();
     void videoCaptureRequested();
     void windowCaptureRequested();
+    // Emitted when configured hotkeys stop being or could not become active
+    // outside a reRegister*() request; see failedHotkeys().
+    void hotkeyRegistrationFailed(const QList<int> &ids);
 
 private:
     explicit HotkeyManager(QObject *parent = nullptr);
@@ -58,6 +73,7 @@ private:
 
     QList<int> m_registeredHotkeys;
     QHash<int, QPair<UINT, UINT>> m_registeredHotkeyDefs;
+    QHash<int, QPair<UINT, UINT>> m_failedHotkeys;
     UINT m_captureModifiers = 0;
     UINT m_captureVirtualKey = VK_SNAPSHOT;
     UINT m_recordingPauseModifiers = MOD_CONTROL | MOD_ALT;
@@ -81,6 +97,10 @@ private:
     bool m_usePortalShortcuts = false;
     bool m_useGnomeShortcutFallback = false;
 
+    bool registerPlatformHotkey(int id, UINT modifiers, UINT virtualKey);
+    void recordFailure(int id, UINT modifiers, UINT virtualKey);
+    void restoreHotkeys(const QList<HotkeyBinding> &previous);
+    void onPortalShortcutsFailed();
     void emitHotkey(int id);
     void refreshPortalShortcuts();
     bool activateGnomeShortcutFallback();

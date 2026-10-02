@@ -12,6 +12,7 @@
 #include <QGuiApplication>
 #include <QKeySequence>
 #include <QTimer>
+#include <algorithm>
 
 #if defined(ESHOT_HAVE_X11)
 #include <X11/Xlib.h>
@@ -163,7 +164,7 @@ HotkeyManager::HotkeyManager(QObject *parent) : QObject(parent)
             this, &HotkeyManager::emitHotkey, Qt::UniqueConnection);
     connect(m_portalShortcuts, &LinuxPortalGlobalShortcuts::portalFailed,
             this, [this](const QString &, const QString &) {
-                activateGnomeShortcutFallback();
+                onPortalShortcutsFailed();
             });
     m_usePortalShortcuts = !kdeAvailable && portalAvailable;
     m_useGnomeShortcutFallback = LinuxDesktopIntegration::useGnomeShortcutFallback(
@@ -231,12 +232,15 @@ HotkeyManager::HotkeyManager(QObject *parent) : QObject(parent)
     } else {
         qWarning() << "[HotkeyManager] Failed to register hotkey (mod=" << modifiers << " vk=" << vkey << "). Trying default...";
         // Try default PrtSc as well
-        if (!registerHotkey(HOTKEY_CAPTURE, 0, VK_SNAPSHOT)) {
-            qWarning() << "[HotkeyManager] Default hotkey also failed. User must change hotkey in settings.";
-        } else {
+        if (!isPlainPrintScreen(modifiers, vkey) && registerHotkey(HOTKEY_CAPTURE, 0, VK_SNAPSHOT)) {
             m_captureModifiers = 0;
             m_captureVirtualKey = VK_SNAPSHOT;
+        } else {
+            qWarning() << "[HotkeyManager] Default hotkey also failed. User must change hotkey in settings.";
         }
+        // Record after the fallback attempt: the configured key stays failed
+        // even when PrtSc took over.
+        recordFailure(HOTKEY_CAPTURE, modifiers, vkey);
     }
 
     m_recordingPauseModifiers = static_cast<UINT>(s.value("recordingPauseHotkeyModifiers", MOD_CONTROL | MOD_ALT).toUInt());
@@ -245,9 +249,12 @@ HotkeyManager::HotkeyManager(QObject *parent) : QObject(parent)
     m_recordingStopVirtualKey = static_cast<UINT>(s.value("recordingStopHotkeyVKey", 'S').toUInt());
     m_recordingCancelModifiers = static_cast<UINT>(s.value("recordingCancelHotkeyModifiers", MOD_CONTROL | MOD_ALT).toUInt());
     m_recordingCancelVirtualKey = static_cast<UINT>(s.value("recordingCancelHotkeyVKey", 'X').toUInt());
-    registerHotkey(HOTKEY_RECORDING_PAUSE, m_recordingPauseModifiers, m_recordingPauseVirtualKey);
-    registerHotkey(HOTKEY_RECORDING_STOP, m_recordingStopModifiers, m_recordingStopVirtualKey);
-    registerHotkey(HOTKEY_RECORDING_CANCEL, m_recordingCancelModifiers, m_recordingCancelVirtualKey);
+    if (!registerHotkey(HOTKEY_RECORDING_PAUSE, m_recordingPauseModifiers, m_recordingPauseVirtualKey))
+        recordFailure(HOTKEY_RECORDING_PAUSE, m_recordingPauseModifiers, m_recordingPauseVirtualKey);
+    if (!registerHotkey(HOTKEY_RECORDING_STOP, m_recordingStopModifiers, m_recordingStopVirtualKey))
+        recordFailure(HOTKEY_RECORDING_STOP, m_recordingStopModifiers, m_recordingStopVirtualKey);
+    if (!registerHotkey(HOTKEY_RECORDING_CANCEL, m_recordingCancelModifiers, m_recordingCancelVirtualKey))
+        recordFailure(HOTKEY_RECORDING_CANCEL, m_recordingCancelModifiers, m_recordingCancelVirtualKey);
 
     m_instantCaptureModifiers = static_cast<UINT>(s.value("instantCaptureHotkeyModifiers", 0).toUInt());
     m_instantCaptureVirtualKey = static_cast<UINT>(s.value("instantCaptureHotkeyVKey", 0).toUInt());
@@ -259,11 +266,70 @@ HotkeyManager::HotkeyManager(QObject *parent) : QObject(parent)
     m_windowCaptureModifiers = static_cast<UINT>(s.value("windowCaptureHotkeyModifiers", MOD_SHIFT).toUInt());
     m_windowCaptureVirtualKey = static_cast<UINT>(s.value("windowCaptureHotkeyVKey", VK_SNAPSHOT).toUInt());
 #endif
-    registerHotkey(HOTKEY_INSTANT_CAPTURE, m_instantCaptureModifiers, m_instantCaptureVirtualKey);
-    registerHotkey(HOTKEY_GIF_CAPTURE, m_gifCaptureModifiers, m_gifCaptureVirtualKey);
-    registerHotkey(HOTKEY_VIDEO_CAPTURE, m_videoCaptureModifiers, m_videoCaptureVirtualKey);
-    if (!registerHotkey(HOTKEY_WINDOW_CAPTURE, m_windowCaptureModifiers, m_windowCaptureVirtualKey))
+    if (!registerHotkey(HOTKEY_INSTANT_CAPTURE, m_instantCaptureModifiers, m_instantCaptureVirtualKey))
+        recordFailure(HOTKEY_INSTANT_CAPTURE, m_instantCaptureModifiers, m_instantCaptureVirtualKey);
+    if (!registerHotkey(HOTKEY_GIF_CAPTURE, m_gifCaptureModifiers, m_gifCaptureVirtualKey))
+        recordFailure(HOTKEY_GIF_CAPTURE, m_gifCaptureModifiers, m_gifCaptureVirtualKey);
+    if (!registerHotkey(HOTKEY_VIDEO_CAPTURE, m_videoCaptureModifiers, m_videoCaptureVirtualKey))
+        recordFailure(HOTKEY_VIDEO_CAPTURE, m_videoCaptureModifiers, m_videoCaptureVirtualKey);
+    if (!registerHotkey(HOTKEY_WINDOW_CAPTURE, m_windowCaptureModifiers, m_windowCaptureVirtualKey)) {
         qWarning() << "[HotkeyManager] Window capture hotkey could not be registered";
+        recordFailure(HOTKEY_WINDOW_CAPTURE, m_windowCaptureModifiers, m_windowCaptureVirtualKey);
+    }
+}
+
+QList<HotkeyBinding> HotkeyManager::failedHotkeys() const
+{
+    QList<HotkeyBinding> failures;
+    for (auto it = m_failedHotkeys.constBegin(); it != m_failedHotkeys.constEnd(); ++it)
+        failures.append({it.key(), it.value().first, it.value().second});
+    std::sort(failures.begin(), failures.end(),
+              [](const HotkeyBinding &a, const HotkeyBinding &b) { return a.id < b.id; });
+    return failures;
+}
+
+bool HotkeyManager::isHotkeyActive(int id) const
+{
+    if (!m_registeredHotkeyDefs.contains(id))
+        return false;
+    // The GNOME gsettings fallback binds only the capture command.
+    return !m_useGnomeShortcutFallback || id == HOTKEY_CAPTURE;
+}
+
+QString HotkeyManager::activeShortcutText(int id) const
+{
+    if (!isHotkeyActive(id))
+        return QString();
+    const auto def = m_registeredHotkeyDefs.value(id);
+    return shortcutText(def.first, def.second);
+}
+
+void HotkeyManager::recordFailure(int id, UINT modifiers, UINT virtualKey)
+{
+    if (virtualKey == 0)
+        return;
+    qWarning() << "[HotkeyManager] Hotkey" << id << "is not active:"
+               << shortcutText(modifiers, virtualKey);
+    m_failedHotkeys.insert(id, qMakePair(modifiers, virtualKey));
+}
+
+void HotkeyManager::onPortalShortcutsFailed()
+{
+    // The gsettings fallback keeps the capture key working on GNOME; the
+    // other hotkeys stay inactive there by design (see registerHotkey).
+    if (activateGnomeShortcutFallback())
+        return;
+    if (m_registeredHotkeyDefs.isEmpty())
+        return;
+    QList<int> ids;
+    for (auto it = m_registeredHotkeyDefs.constBegin(); it != m_registeredHotkeyDefs.constEnd(); ++it) {
+        recordFailure(it.key(), it.value().first, it.value().second);
+        ids.append(it.key());
+    }
+    std::sort(ids.begin(), ids.end());
+    m_registeredHotkeys.clear();
+    m_registeredHotkeyDefs.clear();
+    emit hotkeyRegistrationFailed(ids);
 }
 
 bool HotkeyManager::requestLinuxPortalShortcutRebind()
@@ -299,6 +365,24 @@ HotkeyManager::~HotkeyManager()
 }
 
 bool HotkeyManager::registerHotkey(int id, UINT modifiers, UINT virtualKey)
+{
+    if (virtualKey != 0) {
+        // One key cannot drive two EShot actions: X11 would silently keep
+        // only one grab and Windows refuses the second registration.
+        for (auto it = m_registeredHotkeyDefs.constBegin(); it != m_registeredHotkeyDefs.constEnd(); ++it) {
+            if (it.key() != id && it.value() == qMakePair(modifiers, virtualKey)) {
+                qWarning() << "[HotkeyManager] Hotkey" << id << "duplicates hotkey" << it.key();
+                return false;
+            }
+        }
+    }
+    if (!registerPlatformHotkey(id, modifiers, virtualKey))
+        return false;
+    m_failedHotkeys.remove(id);
+    return true;
+}
+
+bool HotkeyManager::registerPlatformHotkey(int id, UINT modifiers, UINT virtualKey)
 {
     if (virtualKey == 0)
         return true;
@@ -338,7 +422,7 @@ bool HotkeyManager::registerHotkey(int id, UINT modifiers, UINT virtualKey)
                           " falling back to the GlobalShortcuts portal.";
             m_usePortalShortcuts = true;
             refreshPortalShortcuts();
-            return true;
+            return m_registeredHotkeyDefs.contains(id);
         }
         m_registeredHotkeyDefs = previous;
         m_registeredHotkeys.removeAll(id);
@@ -357,7 +441,7 @@ bool HotkeyManager::registerHotkey(int id, UINT modifiers, UINT virtualKey)
                 m_registeredHotkeys.append(id);
             m_registeredHotkeyDefs.insert(id, qMakePair(modifiers, virtualKey));
             refreshPortalShortcuts();
-            return true;
+            return m_registeredHotkeyDefs.contains(id);
         }
         return false;
     }
@@ -420,7 +504,7 @@ bool HotkeyManager::registerHotkey(int id, UINT modifiers, UINT virtualKey)
                           " falling back to the GlobalShortcuts portal.";
             m_usePortalShortcuts = true;
             refreshPortalShortcuts();
-            return true;
+            return m_registeredHotkeyDefs.contains(id);
         }
         m_registeredHotkeyDefs = previous;
         m_registeredHotkeys.removeAll(id);
@@ -438,7 +522,10 @@ bool HotkeyManager::registerHotkey(int id, UINT modifiers, UINT virtualKey)
         m_registeredHotkeys.append(id);
     m_registeredHotkeyDefs.insert(id, qMakePair(modifiers, virtualKey));
     refreshPortalShortcuts();
-    return true;
+    // A synchronous portal error drops every definition unless the GNOME
+    // fallback took over (onPortalShortcutsFailed). Binding replies arrive
+    // later and are reported through hotkeyRegistrationFailed instead.
+    return m_registeredHotkeyDefs.contains(id);
 #else
     Q_UNUSED(modifiers);
     if (!m_registeredHotkeys.contains(id))
@@ -549,13 +636,19 @@ bool HotkeyManager::reRegisterCaptureHotkey(UINT modifiers, UINT virtualKey)
         return true;
     }
 
-    bool restored = registerHotkey(HOTKEY_CAPTURE, m_captureModifiers, m_captureVirtualKey);
+    const UINT previousModifiers = m_captureModifiers;
+    const UINT previousVirtualKey = m_captureVirtualKey;
+    bool restored = registerHotkey(HOTKEY_CAPTURE, previousModifiers, previousVirtualKey);
     if (!restored) {
         qWarning() << "[HotkeyManager] Failed to restore previous hotkey. Trying default...";
-        if (registerHotkey(HOTKEY_CAPTURE, 0, VK_SNAPSHOT)) {
+        if (!isPlainPrintScreen(previousModifiers, previousVirtualKey)
+            && registerHotkey(HOTKEY_CAPTURE, 0, VK_SNAPSHOT)) {
             m_captureModifiers = 0;
             m_captureVirtualKey = VK_SNAPSHOT;
         }
+        // The caller reports the rejected key; the lost previous key is new.
+        recordFailure(HOTKEY_CAPTURE, previousModifiers, previousVirtualKey);
+        emit hotkeyRegistrationFailed({HOTKEY_CAPTURE});
     }
     return false;
 }
@@ -591,9 +684,9 @@ bool HotkeyManager::reRegisterRecordingHotkeys(UINT pauseModifiers, UINT pauseVi
         unregisterHotkey(HOTKEY_RECORDING_PAUSE);
         unregisterHotkey(HOTKEY_RECORDING_STOP);
         unregisterHotkey(HOTKEY_RECORDING_CANCEL);
-        registerHotkey(HOTKEY_RECORDING_PAUSE, oldPauseModifiers, oldPauseVirtualKey);
-        registerHotkey(HOTKEY_RECORDING_STOP, oldStopModifiers, oldStopVirtualKey);
-        registerHotkey(HOTKEY_RECORDING_CANCEL, oldCancelModifiers, oldCancelVirtualKey);
+        restoreHotkeys({{HOTKEY_RECORDING_PAUSE, oldPauseModifiers, oldPauseVirtualKey},
+                        {HOTKEY_RECORDING_STOP, oldStopModifiers, oldStopVirtualKey},
+                        {HOTKEY_RECORDING_CANCEL, oldCancelModifiers, oldCancelVirtualKey}});
     }
     return ok;
 }
@@ -637,12 +730,27 @@ bool HotkeyManager::reRegisterActionHotkeys(UINT instantModifiers, UINT instantV
         unregisterHotkey(HOTKEY_GIF_CAPTURE);
         unregisterHotkey(HOTKEY_VIDEO_CAPTURE);
         unregisterHotkey(HOTKEY_WINDOW_CAPTURE);
-        registerHotkey(HOTKEY_INSTANT_CAPTURE, oldInstantModifiers, oldInstantVirtualKey);
-        registerHotkey(HOTKEY_GIF_CAPTURE, oldGifModifiers, oldGifVirtualKey);
-        registerHotkey(HOTKEY_VIDEO_CAPTURE, oldVideoModifiers, oldVideoVirtualKey);
-        registerHotkey(HOTKEY_WINDOW_CAPTURE, oldWindowModifiers, oldWindowVirtualKey);
+        restoreHotkeys({{HOTKEY_INSTANT_CAPTURE, oldInstantModifiers, oldInstantVirtualKey},
+                        {HOTKEY_GIF_CAPTURE, oldGifModifiers, oldGifVirtualKey},
+                        {HOTKEY_VIDEO_CAPTURE, oldVideoModifiers, oldVideoVirtualKey},
+                        {HOTKEY_WINDOW_CAPTURE, oldWindowModifiers, oldWindowVirtualKey}});
     }
     return ok;
+}
+
+void HotkeyManager::restoreHotkeys(const QList<HotkeyBinding> &previous)
+{
+    // Called after a refused reRegister*(): the caller reports the rejected
+    // keys, but previously working keys that cannot come back are new.
+    QList<int> lost;
+    for (const HotkeyBinding &hotkey : previous) {
+        if (!registerHotkey(hotkey.id, hotkey.modifiers, hotkey.virtualKey)) {
+            recordFailure(hotkey.id, hotkey.modifiers, hotkey.virtualKey);
+            lost.append(hotkey.id);
+        }
+    }
+    if (!lost.isEmpty())
+        emit hotkeyRegistrationFailed(lost);
 }
 
 bool HotkeyManager::nativeEventFilter(const QByteArray &eventType, void *message, qintptr *result)

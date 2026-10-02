@@ -71,6 +71,7 @@ private:
 
     QString resolvePatternPreview(const QString &pattern) const;
     void updatePrintScreenConflictUi();
+    bool updateHotkeyConflictUi();
     void refreshPackageStatus();
     void downloadOcrLanguage(const QString &code);
     void deleteOcrLanguage(const QString &code);
@@ -170,6 +171,14 @@ private:
     QKeySequenceEdit *m_videoCaptureHotkeyEdit = nullptr;
     QKeySequenceEdit *m_windowCaptureHotkeyEdit = nullptr;
     QMap<QString, QKeySequenceEdit*> m_overlayHotkeyEdits;
+    // Global hotkeys cross-checked for duplicates (HotkeyManager ids).
+    struct GlobalHotkeyField {
+        int id = 0;
+        QKeySequenceEdit *edit = nullptr;
+        QString name;
+        QLabel *conflictLabel = nullptr;
+    };
+    QList<GlobalHotkeyField> m_globalHotkeyFields;
     QLabel *m_hotkeyStatusLabel = nullptr;
     QLabel *m_printScreenConflictLabel = nullptr;
     QPushButton *m_printScreenFixButton = nullptr;

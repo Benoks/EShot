@@ -276,17 +276,51 @@ public slots:
     void showTrayWelcome()
     {
         if (OnboardingTips::isSeen(OnboardingTips::TrayWelcome)
-            || !m_trayIcon || !m_trayIcon->isVisible()) {
+            || !m_trayIcon || !m_trayIcon->isVisible() || !m_hotkeysInitialized) {
             return;
         }
+        // The hotkey failure notification takes precedence; welcome next time.
+        if (!HotkeyManager::instance().failedHotkeys().isEmpty())
+            return;
         OnboardingTips::markSeen(OnboardingTips::TrayWelcome);
-        QSettings s("EShot", "EShot");
-        const QString key = HotkeyManager::shortcutText(
-            static_cast<UINT>(s.value("hotkeyModifiers", 0).toUInt()),
-            static_cast<UINT>(s.value("hotkeyVKey", VK_SNAPSHOT).toUInt()));
+        // Name the key that is actually registered, not the saved one.
+        const QString key = HotkeyManager::instance().activeShortcutText(
+            HotkeyManager::HOTKEY_CAPTURE);
         m_trayIcon->showMessage(TranslationManager::tr("trayWelcomeTitle"),
-                                TranslationManager::tr("trayWelcomeBody").arg(key),
+                                key.isEmpty()
+                                    ? TranslationManager::tr("trayWelcomeBodyNoHotkey")
+                                    : TranslationManager::tr("trayWelcomeBody").arg(key),
                                 QSystemTrayIcon::Information, 8000);
+    }
+
+    void showHotkeyFailureNotification(const QList<int> &ids)
+    {
+        QStringList keys;
+        const QList<HotkeyBinding> failures = HotkeyManager::instance().failedHotkeys();
+        for (const HotkeyBinding &failure : failures) {
+            if (ids.contains(failure.id))
+                keys.append(HotkeyManager::shortcutText(failure.modifiers, failure.virtualKey));
+        }
+        keys.removeDuplicates();
+        if (keys.isEmpty())
+            return;
+        QString message = TranslationManager::hotkeyNotActiveBody().arg(
+            keys.join(QStringLiteral(", ")), TranslationManager::tabHotkey());
+        const QString activeCapture = HotkeyManager::instance().activeShortcutText(
+            HotkeyManager::HOTKEY_CAPTURE);
+        if (ids.contains(HotkeyManager::HOTKEY_CAPTURE) && !activeCapture.isEmpty())
+            message += QLatin1Char(' ') + TranslationManager::hotkeyCaptureFallback().arg(activeCapture);
+#if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
+        if (m_linuxNotification
+            && m_linuxNotification->show(TranslationManager::hotkeyNotActiveTitle(), message,
+                                         QString(), QString(), 10000)) {
+            return;
+        }
+#endif
+        if (m_trayIcon) {
+            m_trayIcon->showMessage(TranslationManager::hotkeyNotActiveTitle(), message,
+                                    QSystemTrayIcon::Warning, 10000);
+        }
     }
 
     void prewarmOverlay()
@@ -1079,20 +1113,28 @@ private:
 
         QAction *captureAction = m_trayMenu->addAction(trayIcon(":/icons/copy.svg"), TranslationManager::trayCapture());
         QSettings hotkeySettings("EShot", "EShot");
-        const UINT captureModifiers = static_cast<UINT>(hotkeySettings.value("hotkeyModifiers", 0).toUInt());
-        const UINT captureVirtualKey = static_cast<UINT>(hotkeySettings.value("hotkeyVKey", VK_SNAPSHOT).toUInt());
+        // Show the key that is actually registered. Before hotkeys are set up
+        // (first-run wizard) only the saved key is known.
+        auto hotkeyText = [this](int id, UINT savedModifiers, UINT savedVirtualKey) {
+            if (!m_hotkeysInitialized)
+                return HotkeyManager::shortcutText(savedModifiers, savedVirtualKey);
+            const QString active = HotkeyManager::instance().activeShortcutText(id);
+            return active.isEmpty() ? TranslationManager::hotkeyNoneActive() : active;
+        };
         captureAction->setToolTip(QStringLiteral("%1 (%2)").arg(
             TranslationManager::trayCapture(),
-            HotkeyManager::shortcutText(captureModifiers, captureVirtualKey)));
+            hotkeyText(HotkeyManager::HOTKEY_CAPTURE,
+                       static_cast<UINT>(hotkeySettings.value("hotkeyModifiers", 0).toUInt()),
+                       static_cast<UINT>(hotkeySettings.value("hotkeyVKey", VK_SNAPSHOT).toUInt()))));
         connect(captureAction, &QAction::triggered, this, &EShotApp::onCaptureRequested);
 #ifdef Q_OS_WIN
         QAction *windowCaptureAction = m_trayMenu->addAction(
             trayIcon(":/icons/rectangle.svg"), TranslationManager::trayWindowCapture());
         windowCaptureAction->setToolTip(QStringLiteral("%1 (%2)").arg(
             TranslationManager::trayWindowCapture(),
-            HotkeyManager::shortcutText(
-                static_cast<UINT>(hotkeySettings.value("windowCaptureHotkeyModifiers", MOD_SHIFT).toUInt()),
-                static_cast<UINT>(hotkeySettings.value("windowCaptureHotkeyVKey", VK_SNAPSHOT).toUInt()))));
+            hotkeyText(HotkeyManager::HOTKEY_WINDOW_CAPTURE,
+                       static_cast<UINT>(hotkeySettings.value("windowCaptureHotkeyModifiers", MOD_SHIFT).toUInt()),
+                       static_cast<UINT>(hotkeySettings.value("windowCaptureHotkeyVKey", VK_SNAPSHOT).toUInt()))));
         connect(windowCaptureAction, &QAction::triggered,
                 this, &EShotApp::onWindowCaptureRequested);
 #endif
@@ -1249,6 +1291,21 @@ private:
             }
             QTimer::singleShot(0, this, &EShotApp::rebuildTrayMenu);
         });
+        connect(&HotkeyManager::instance(), &HotkeyManager::hotkeyRegistrationFailed,
+                this, [this](const QList<int> &ids) {
+            rebuildTrayMenu();
+            showHotkeyFailureNotification(ids);
+        });
+        // Keys refused while the manager started up; give the tray a moment
+        // to appear so the notification is not dropped.
+        QList<int> startupFailures;
+        for (const HotkeyBinding &failure : HotkeyManager::instance().failedHotkeys())
+            startupFailures.append(failure.id);
+        if (!startupFailures.isEmpty()) {
+            QTimer::singleShot(1000, this, [this, startupFailures]() {
+                showHotkeyFailureNotification(startupFailures);
+            });
+        }
     }
 
     bool closeBlockingDialogs()
