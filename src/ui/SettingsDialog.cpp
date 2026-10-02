@@ -10,6 +10,9 @@
 #include "../core/LinuxAutoStartPolicy.h"
 #include "../core/LinuxDesktopIntegration.h"
 #include "../core/LinuxGnomeShortcutInstaller.h"
+#ifdef Q_OS_LINUX
+#include "../core/LinuxUninstaller.h"
+#endif
 #include "../core/OcrEngine.h"
 #include "../core/TranslationManager.h"
 #include "../recording/AudioDevices.h"
@@ -648,6 +651,18 @@ QWidget* SettingsDialog::createGeneralTab()
     impExpLayout->addWidget(importBtn);
     impExpLayout->addStretch();
     layout->addWidget(impExpGroup);
+
+#ifdef Q_OS_LINUX
+    // Restores Print Screen and removes the per-user integration, then quits.
+    QGroupBox *removeGroup = new QGroupBox(TranslationManager::removeFromSystemTitle());
+    QHBoxLayout *removeLayout = new QHBoxLayout(removeGroup);
+    QPushButton *removeBtn = new QPushButton(TranslationManager::removeFromSystem());
+    removeBtn->setStyleSheet("color: #ff6b6b;");
+    connect(removeBtn, &QPushButton::clicked, this, &SettingsDialog::onRemoveFromSystem);
+    removeLayout->addWidget(removeBtn);
+    removeLayout->addStretch();
+    layout->addWidget(removeGroup);
+#endif
 
     layout->addStretch();
     scroll->setWidget(content);
@@ -2970,6 +2985,37 @@ void SettingsDialog::onImportSettings()
 
     QMessageBox::information(this, TranslationManager::importSettings(), TranslationManager::importSuccess());
 }
+
+#ifdef Q_OS_LINUX
+void SettingsDialog::onRemoveFromSystem()
+{
+    const bool package = LinuxUninstaller::currentInstallKind()
+        == LinuxUninstallPolicy::InstallKind::Package;
+    const auto answer = QMessageBox::question(
+        this, TranslationManager::removeFromSystemTitle(),
+        package ? TranslationManager::removeFromSystemConfirmPackage()
+                : TranslationManager::removeFromSystemConfirm(),
+        QMessageBox::Yes | QMessageBox::Cancel, QMessageBox::Cancel);
+    if (answer != QMessageBox::Yes)
+        return;
+
+    const LinuxUninstaller::Report report = LinuxUninstaller::run();
+    QString message = package ? TranslationManager::removeFromSystemDonePackage()
+                              : TranslationManager::removeFromSystemDone();
+    if (report.errors.isEmpty()) {
+        QMessageBox::information(this, TranslationManager::removeFromSystemTitle(), message);
+    } else {
+        message += QStringLiteral("\n\n") + TranslationManager::removeFromSystemErrors()
+            + QLatin1Char('\n') + report.errors.join(QLatin1Char('\n'));
+        QMessageBox::warning(this, TranslationManager::removeFromSystemTitle(), message);
+    }
+
+    // Removing the running AppImage is fine on Linux; the mounted image stays
+    // readable until this process exits.
+    reject();
+    QTimer::singleShot(0, qApp, &QCoreApplication::quit);
+}
+#endif
 
 void SettingsDialog::onThemeChanged()
 {

@@ -127,4 +127,15 @@ for row in 'KDE wayland xcb;wayland/1' 'GNOME wayland xcb;wayland/1' \
   }
 done
 
+# --uninstall must reach the application unchanged; AppRun itself must not
+# integrate or remove anything on the way.
+uninstall_log="${temp_root}/uninstall.log"
+printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$*" >"${ESHOT_UNINSTALL_LOG}"\n' >"${appdir}/usr/bin/EShot"
+chmod +x "${appdir}/usr/bin/EShot"
+HOME="${home_dir}" XDG_DATA_HOME="${data_home}" APPDIR="${appdir}" \
+APPIMAGE="${installed}" ESHOT_SYSTEMD_CHILD=1 \
+ESHOT_UNINSTALL_LOG="${uninstall_log}" bash "${repo_root}/packaging/linux/AppRun" --uninstall
+[[ "$(cat "${uninstall_log}")" == "--uninstall" ]] || { echo "AppRun did not forward --uninstall" >&2; exit 1; }
+[[ -f "${installed}" && -f "${desktop}" ]] || { echo "AppRun removed files itself" >&2; exit 1; }
+
 printf 'AppRun integration tests passed\n'

@@ -10,6 +10,7 @@ private slots:
     void issue15SettingsTextExistsInEveryLanguage();
     void v416TextExistsInEveryLanguage();
     void hotkeyFailureTextExistsInEveryLanguage();
+    void linuxRemovalTextExistsInEveryLanguage();
 };
 
 void SettingsTranslationTests::issue15SettingsTextExistsInEveryLanguage()
@@ -123,6 +124,29 @@ void SettingsTranslationTests::hotkeyFailureTextExistsInEveryLanguage()
         QVERIFY(TranslationManager::hotkeyNotActiveBody().contains(QStringLiteral("%2")));
         QVERIFY(TranslationManager::hotkeyCaptureFallback().contains(QStringLiteral("%1")));
         QVERIFY(TranslationManager::hotkeyConflictWith().contains(QStringLiteral("%1")));
+    }
+}
+
+void SettingsTranslationTests::linuxRemovalTextExistsInEveryLanguage()
+{
+    const QStringList keys = {
+        QStringLiteral("removeFromSystemTitle"),
+        QStringLiteral("removeFromSystem"),
+        QStringLiteral("removeFromSystemConfirm"),
+        QStringLiteral("removeFromSystemConfirmPackage"),
+        QStringLiteral("removeFromSystemDone"),
+        QStringLiteral("removeFromSystemDonePackage"),
+        QStringLiteral("removeFromSystemErrors"),
+    };
+
+    for (int language = 0; language < TranslationManager::LangCount; ++language) {
+        TranslationManager::setLanguage(static_cast<TranslationManager::Language>(language), false);
+        for (const QString &key : keys) {
+            const QString translated = TranslationManager::tr(key.toUtf8().constData());
+            QVERIFY2(!translated.isEmpty() && translated != key,
+                     qPrintable(QStringLiteral("Missing translation for %1 in language %2")
+                                    .arg(key).arg(language)));
+        }
     }
 }
 

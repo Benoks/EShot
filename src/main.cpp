@@ -50,6 +50,7 @@
 #if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
 #include "core/LinuxDesktopNotification.h"
 #include "core/LinuxPortalHostRegistry.h"
+#include "core/LinuxUninstaller.h"
 #endif
 #include "capture/CaptureOverlay.h"
 #include "recording/ScreenRecorder.h"
@@ -1661,6 +1662,11 @@ int main(int argc, char *argv[])
     parser.addOption(testRecordGifOption);
     QCommandLineOption testOcrOption("test-ocr", "Run internal OCR test and exit. Requires a PNG path.", "path");
     parser.addOption(testOcrOption);
+#if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
+    QCommandLineOption uninstallOption(
+        "uninstall", "Restore Print Screen and remove EShot's desktop integration for this user.");
+    parser.addOption(uninstallOption);
+#endif
     parser.process(app);
 
     if (parser.isSet(testGifOption)) {
@@ -1743,27 +1749,53 @@ int main(int argc, char *argv[])
                  << wireCommand.trimmed();
         return true;
     };
-    // The elevated task replaces a normal instance that is still running
-    // (e.g. right after "Start as administrator" was switched on).
-    if (parser.isSet(fromElevatedTaskOption)) {
+    // Asks a running instance to quit and waits briefly until it is gone.
+    auto quitRunningInstance = [&instanceName]() {
         QLocalSocket running;
         running.connectToServer(instanceName);
-        if (running.waitForConnected(150)) {
-            running.write(ApplicationInstanceCommand::toWire(ApplicationInstanceCommand::Quit));
-            running.waitForBytesWritten(500);
-            running.disconnectFromServer();
-            QElapsedTimer waited;
-            waited.start();
-            while (waited.elapsed() < 5000) {
-                QLocalSocket probe;
-                probe.connectToServer(instanceName);
-                if (!probe.waitForConnected(100))
-                    break;
-                probe.disconnectFromServer();
-                QThread::msleep(100);
-            }
+        if (!running.waitForConnected(150))
+            return;
+        running.write(ApplicationInstanceCommand::toWire(ApplicationInstanceCommand::Quit));
+        running.waitForBytesWritten(500);
+        running.disconnectFromServer();
+        QElapsedTimer waited;
+        waited.start();
+        while (waited.elapsed() < 5000) {
+            QLocalSocket probe;
+            probe.connectToServer(instanceName);
+            if (!probe.waitForConnected(100))
+                break;
+            probe.disconnectFromServer();
+            QThread::msleep(100);
         }
+    };
+    // The elevated task replaces a normal instance that is still running
+    // (e.g. right after "Start as administrator" was switched on).
+    if (parser.isSet(fromElevatedTaskOption))
+        quitRunningInstance();
+
+#if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
+    // Terminal counterpart of Settings > Remove EShot. The running instance
+    // must exit first so it cannot re-register its shortcuts afterwards.
+    if (parser.isSet(uninstallOption)) {
+        quitRunningInstance();
+        const LinuxUninstaller::Report report = LinuxUninstaller::run();
+        QTextStream out(stdout);
+        for (const QString &path : report.removed)
+            out << "Removed " << path << '\n';
+        for (const QString &error : report.errors)
+            out << "Error: " << error << '\n';
+        if (report.kind == LinuxUninstallPolicy::InstallKind::Package) {
+            out << "Desktop integration removed. Remove the EShot package with your package"
+                   " manager, for example: sudo pacman -R eshot-bin\n";
+        } else {
+            out << "EShot was removed for this user. Screenshots and settings"
+                   " (~/.config/EShot) were kept.\n";
+        }
+        out.flush();
+        return report.errors.isEmpty() ? 0 : 1;
     }
+#endif
 
     if (forwardToRunningInstance())
         return 0;

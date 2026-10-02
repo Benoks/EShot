@@ -306,4 +306,59 @@ Result uninstallCaptureShortcut(bool restoreBuiltInPrintScreen)
     return result;
 }
 
+bool isEmptyBindingList(const QString &value)
+{
+    QString compact = value.trimmed();
+    if (compact.startsWith(QStringLiteral("@as")))
+        compact = compact.mid(3).trimmed();
+    return compact == QStringLiteral("[]");
+}
+
+Result restoreDesktopScreenshotShortcut()
+{
+    Result result;
+    if (QStandardPaths::findExecutable(QStringLiteral("gsettings")).isEmpty()) {
+        result.success = true;
+        return result;
+    }
+
+    // Outside GNOME the media-keys schema is usually not installed; there is
+    // nothing EShot could have changed there.
+    QString pathsValue;
+    if (!runGSettings({QStringLiteral("get"), QString::fromLatin1(MediaKeysSchema),
+                       QStringLiteral("custom-keybindings")}, &pathsValue, nullptr)) {
+        result.success = true;
+        return result;
+    }
+
+    const QString previousKey = QStringLiteral("linux/gnomePreviousScreenshotBinding");
+    const bool hadStoredBinding = QSettings(QStringLiteral("EShot"), QStringLiteral("EShot"))
+                                      .contains(previousKey);
+    const bool hadShortcut = parseStringArray(pathsValue).contains(QString::fromLatin1(CustomPath));
+    if (!hadShortcut && !hadStoredBinding) {
+        result.success = true;
+        return result;
+    }
+
+    result = uninstallCaptureShortcut(true);
+    if (!result.success)
+        return result;
+
+    // Older releases cleared show-screenshot-ui without remembering it, and
+    // the stored value is lost when settings are reset. An empty list after
+    // EShot's shortcut is gone means Print would do nothing, so fall back to
+    // GNOME's default instead.
+    const QString shellSchema = QStringLiteral("org.gnome.shell.keybindings");
+    const QString shellKey = QStringLiteral("show-screenshot-ui");
+    QString current;
+    QString error;
+    if (schemaHasKey(shellSchema, shellKey)
+        && runGSettings({QStringLiteral("get"), shellSchema, shellKey}, &current, nullptr)
+        && isEmptyBindingList(current) && !resetValue(shellSchema, shellKey, &error)) {
+        result.success = false;
+        result.error = error;
+    }
+    return result;
+}
+
 }

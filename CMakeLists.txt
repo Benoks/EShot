@@ -184,6 +184,8 @@ if(UNIX AND NOT APPLE)
     list(APPEND HEADERS src/core/LinuxKGlobalAccelShortcuts.h)
     list(APPEND SOURCES src/core/LinuxDesktopNotification.cpp)
     list(APPEND HEADERS src/core/LinuxDesktopNotification.h)
+    list(APPEND SOURCES src/core/LinuxUninstallPolicy.cpp src/core/LinuxUninstaller.cpp)
+    list(APPEND HEADERS src/core/LinuxUninstallPolicy.h src/core/LinuxUninstaller.h)
 endif()
 
 # Embed the application manifest into the executable (MSVC auto-embeds .manifest files
@@ -558,6 +560,14 @@ if(BUILD_TESTING)
                 tests/LinuxGnomeShortcutInstallerTests.cpp
                 src/core/LinuxGnomeShortcutInstaller.cpp
                 src/core/LinuxGnomeShortcutInstaller.h
+            LIBS Qt6::Core
+        )
+
+        eshot_add_test(eshot_linux_uninstall_policy_tests linux_uninstall_policy
+            SOURCES
+                tests/LinuxUninstallPolicyTests.cpp
+                src/core/LinuxUninstallPolicy.cpp
+                src/core/LinuxUninstallPolicy.h
             LIBS Qt6::Core
         )
 

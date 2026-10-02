@@ -119,6 +119,25 @@ yay -S eshot-bin
 
 The package installs the release AppImage and its desktop entry through pacman. Update it with your normal AUR helper rather than EShot's AppImage updater.
 
+### Uninstall on Linux
+
+Use **Settings → General → Remove EShot from this system**, or run `--uninstall` from a terminal in your desktop session. Either way EShot asks a running instance to quit, then:
+
+- gives Print Screen back to the desktop: GNOME gets its screenshot UI shortcut back and EShot's custom keybinding is removed; on KDE, EShot's global shortcuts are removed and Spectacle gets plain Print back if EShot had taken it;
+- removes the autostart entry and the KWin screenshot permission entry;
+- for AppImage installs, also removes the integrated copy (`~/.local/opt/EShot`), the application menu entry and EShot's icons.
+
+```bash
+# AppImage
+~/.local/opt/EShot/EShot.AppImage --uninstall
+
+# AUR: clean up first, then remove the package
+eshot --uninstall
+sudo pacman -R eshot-bin
+```
+
+For the AUR package and the `.tar.gz` archive, files owned by the package manager or the extracted folder are left alone. Settings in `~/.config/EShot` and your saved screenshots and recordings are kept; delete them yourself if you no longer need them.
+
 ### Linux runtime notes
 
 - Wayland screenshots and recordings use XDG Desktop Portal and PipeWire.
@@ -202,6 +221,7 @@ EShot --capture
 EShot --save "$HOME/Pictures/capture.png"
 EShot --silent
 EShot --quit
+EShot --uninstall  # restore Print Screen and remove desktop integration
 
 # Native packages also install the lowercase launcher:
 eshot --capture

@@ -55,6 +55,7 @@ private slots:
     void onFfmpegComponentAction();
 #ifdef Q_OS_LINUX
     void onOpenLinuxDependencySetup();
+    void onRemoveFromSystem();
 #endif
 
 private:

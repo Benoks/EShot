@@ -19,5 +19,11 @@ QString preferredExecutable(const QString &appImagePath,
 Result installCaptureShortcut(const QString &captureCommand, const QString &binding);
 Result installPrintScreen(const QString &captureCommand);
 Result uninstallCaptureShortcut(bool restoreBuiltInPrintScreen = true);
+// True for a gsettings string array without entries ("[]" or "@as []").
+bool isEmptyBindingList(const QString &value);
+// Used when EShot is removed from the system: drops EShot's custom
+// keybinding and gives Print back to GNOME's screenshot UI. Succeeds without
+// changes when gsettings or the GNOME schemas are missing.
+Result restoreDesktopScreenshotShortcut();
 
 }

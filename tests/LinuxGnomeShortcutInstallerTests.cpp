@@ -167,6 +167,95 @@ private slots:
         qputenv("PATH", previousPath);
         qunsetenv("ESHOT_GSETTINGS_LOG");
     }
+
+    void recognizesEmptyGSettingsArrays()
+    {
+        QVERIFY(LinuxGnomeShortcutInstaller::isEmptyBindingList(QStringLiteral("@as []")));
+        QVERIFY(LinuxGnomeShortcutInstaller::isEmptyBindingList(QStringLiteral(" [] ")));
+        QVERIFY(!LinuxGnomeShortcutInstaller::isEmptyBindingList(QStringLiteral("['Print']")));
+        QVERIFY(!LinuxGnomeShortcutInstaller::isEmptyBindingList(QString()));
+    }
+
+    void removalResetsAnEmptyScreenshotShortcutWithoutStoredValue()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+
+        const QString logPath = temporary.filePath(QStringLiteral("gsettings.log"));
+        QFile fake(temporary.filePath(QStringLiteral("gsettings")));
+        QVERIFY(fake.open(QIODevice::WriteOnly | QIODevice::Text));
+        fake.write(
+            "#!/bin/sh\n"
+            "printf '%s\\n' \"$*\" >> \"$ESHOT_GSETTINGS_LOG\"\n"
+            "case \"$*\" in\n"
+            "  'get org.gnome.settings-daemon.plugins.media-keys custom-keybindings')\n"
+            "    printf \"['/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/eshot/']\\n\" ;;\n"
+            "  'list-keys org.gnome.shell.keybindings') printf 'show-screenshot-ui\\n' ;;\n"
+            "  'get org.gnome.shell.keybindings show-screenshot-ui') printf '@as []\\n' ;;\n"
+            "esac\n");
+        fake.close();
+        QVERIFY(fake.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner
+                                    | QFileDevice::ExeOwner));
+
+        const QByteArray previousPath = qgetenv("PATH");
+        qputenv("PATH", temporary.path().toUtf8() + ':' + previousPath);
+        qputenv("ESHOT_GSETTINGS_LOG", logPath.toUtf8());
+        QSettings::setDefaultFormat(QSettings::IniFormat);
+        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope,
+                           temporary.filePath(QStringLiteral("settings")));
+
+        const auto result = LinuxGnomeShortcutInstaller::restoreDesktopScreenshotShortcut();
+        QVERIFY2(result.success, qPrintable(result.error));
+
+        QFile log(logPath);
+        QVERIFY(log.open(QIODevice::ReadOnly | QIODevice::Text));
+        const QString calls = QString::fromUtf8(log.readAll());
+        QVERIFY(calls.contains(QStringLiteral(
+            "set org.gnome.settings-daemon.plugins.media-keys custom-keybindings []")));
+        QVERIFY(calls.contains(QStringLiteral(
+            "reset org.gnome.shell.keybindings show-screenshot-ui")));
+        qputenv("PATH", previousPath);
+        qunsetenv("ESHOT_GSETTINGS_LOG");
+    }
+
+    void removalLeavesGnomeAloneWhenEshotNeverChangedIt()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+
+        const QString logPath = temporary.filePath(QStringLiteral("gsettings.log"));
+        QFile fake(temporary.filePath(QStringLiteral("gsettings")));
+        QVERIFY(fake.open(QIODevice::WriteOnly | QIODevice::Text));
+        fake.write(
+            "#!/bin/sh\n"
+            "printf '%s\\n' \"$*\" >> \"$ESHOT_GSETTINGS_LOG\"\n"
+            "case \"$*\" in\n"
+            "  'get org.gnome.settings-daemon.plugins.media-keys custom-keybindings')\n"
+            "    printf \"['/other/']\\n\" ;;\n"
+            "  'get org.gnome.shell.keybindings show-screenshot-ui') printf '@as []\\n' ;;\n"
+            "esac\n");
+        fake.close();
+        QVERIFY(fake.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner
+                                    | QFileDevice::ExeOwner));
+
+        const QByteArray previousPath = qgetenv("PATH");
+        qputenv("PATH", temporary.path().toUtf8() + ':' + previousPath);
+        qputenv("ESHOT_GSETTINGS_LOG", logPath.toUtf8());
+        QSettings::setDefaultFormat(QSettings::IniFormat);
+        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope,
+                           temporary.filePath(QStringLiteral("settings")));
+
+        const auto result = LinuxGnomeShortcutInstaller::restoreDesktopScreenshotShortcut();
+        QVERIFY2(result.success, qPrintable(result.error));
+
+        QFile log(logPath);
+        QVERIFY(log.open(QIODevice::ReadOnly | QIODevice::Text));
+        const QString calls = QString::fromUtf8(log.readAll());
+        QVERIFY(!calls.contains(QStringLiteral("set ")));
+        QVERIFY(!calls.contains(QStringLiteral("reset ")));
+        qputenv("PATH", previousPath);
+        qunsetenv("ESHOT_GSETTINGS_LOG");
+    }
 };
 
 QTEST_APPLESS_MAIN(LinuxGnomeShortcutInstallerTests)
