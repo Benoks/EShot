@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Question or help
+    url: https://github.com/Benoks/EShot/discussions/categories/q-a
+    about: Ask how something works or get help with setup.
+  - name: Idea or feature request
+    url: https://github.com/Benoks/EShot/discussions/categories/ideas
+    about: Suggest a feature; others can vote on it.

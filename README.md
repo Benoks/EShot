@@ -227,6 +227,13 @@ EShot --uninstall  # restore Print Screen and remove desktop integration
 eshot --capture
 ```
 
+## Questions, ideas and bug reports
+
+- **Questions and help:** ask in [Discussions → Q&A](https://github.com/Benoks/EShot/discussions/categories/q-a).
+- **Ideas and feature requests:** post them in [Discussions → Ideas](https://github.com/Benoks/EShot/discussions/categories/ideas), where others can vote on them.
+- **Bugs:** open an [issue](https://github.com/Benoks/EShot/issues/new). Include your EShot version, OS and, on Linux, your desktop (KDE/GNOME) and session (Wayland/X11).
+
+
 ## Build from source
 
 Core requirements:
