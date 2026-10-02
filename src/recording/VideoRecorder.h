@@ -1,6 +1,8 @@
 #ifndef VIDEORECORDER_H
 #define VIDEORECORDER_H
 
+#include "core/LinuxPortalScreenCast.h"
+
 #include <QObject>
 #include <QElapsedTimer>
 #include <QProcess>
@@ -30,6 +32,11 @@ public:
                const QString &microphoneDevice,
                const QString &outputPath = QString(),
                const QRect &displayRect = QRect());
+    // Opens the Wayland portal source picker before start() so a start delay
+    // runs after the user picked the source; start() then reuses that stream.
+    // Other platforms have nothing to prepare. On failure recordingFailed()
+    // has been emitted.
+    bool prepareSource(const QRect &captureRect, const QRect &displayRect = QRect());
     void stop();
     void cancel();
     void pause();
@@ -60,6 +67,7 @@ private:
     void cleanupMuxProcess();
     bool startWaylandPortalRecording(const QRect &captureRect);
     QString gstLaunchPath() const;
+    void discardPreparedSource();
 
     QProcess *m_process = nullptr;
     QProcess *m_muxProcess = nullptr;
@@ -86,6 +94,7 @@ private:
     int m_microphoneVolume = 80;
     QString m_microphoneDevice;
     QString m_portalSessionHandle;
+    LinuxPortalScreenCast::Stream m_preparedStream;
     int m_lastElapsedSeconds = -1;
     bool m_recording = false;
     bool m_paused = false;

@@ -38,6 +38,8 @@
 #include <QElapsedTimer>
 #include <QThread>
 
+#include <functional>
+
 #include "core/HotkeyManager.h"
 #include "core/TranslationManager.h"
 #include "core/UpdateManager.h"
@@ -54,6 +56,8 @@
 #include "recording/VideoRecorder.h"
 #include "recording/RecordingIndicator.h"
 #include "recording/RecordingSettingsPolicy.h"
+#include "recording/RecordingStartCountdown.h"
+#include "recording/RecordingStartCountdownPolicy.h"
 #include "ui/SettingsDialog.h"
 #include "ui/SettingsLayoutPolicy.h"
 #include "ui/ApplicationTheme.h"
@@ -655,6 +659,7 @@ public slots:
             m_screenRecorder->stop();
             return;
         }
+        if (cancelPendingRecordingStart()) return;
         if (recordingBusy()) return;
         if (m_overlay && m_overlay->isVisible()) return;
         m_pendingMode = 2;
@@ -668,6 +673,7 @@ public slots:
             m_videoRecorder->stop();
             return;
         }
+        if (cancelPendingRecordingStart()) return;
         if (recordingBusy()) return;
         if (m_overlay && m_overlay->isVisible()) return;
         m_pendingMode = 3;
@@ -729,7 +735,7 @@ public slots:
         const bool microphoneAudio = loadRecordingAudioEnabled(s, RecordingAudioSource::Microphone);
         const int microphoneVolume = s.value("videoMicrophoneVolume", 80).toInt();
         const QString microphoneDevice = s.value("videoMicrophoneDevice", "default").toString();
-        const int startDelayMs = qBound(0, s.value("recordingStartDelaySeconds", 0).toInt(), 10) * 1000;
+        const int startDelayMs = recordingStartDelayMs(s.value("recordingStartDelaySeconds", 0).toInt());
         auto startVideo = [rec = QPointer<VideoRecorder>(m_videoRecorder), rect, fps, maxSec, crf,
                            desktopAudio, desktopVolume, desktopDevice,
                            microphoneAudio, microphoneVolume, microphoneDevice, displayRect]() {
@@ -742,10 +748,16 @@ public slots:
                        QString(),
                        displayRect);
         };
-        if (startDelayMs > 0)
-            QTimer::singleShot(startDelayMs, this, startVideo);
-        else
+        if (startDelayMs > 0) {
+            beginDelayedRecordingStart(
+                displayRect.isValid() ? displayRect : rect, startDelayMs,
+                [rec = QPointer<VideoRecorder>(m_videoRecorder), rect, displayRect]() {
+                    return rec && rec->prepareSource(rect, displayRect);
+                },
+                startVideo);
+        } else {
             startVideo();
+        }
     }
 
     void onRecordGifSelected(QRect rect, QRect displayRect = QRect())
@@ -777,15 +789,21 @@ public slots:
         int fps = s.value("recordingFps", 10).toInt();
         int maxSec = s.value("recordingMaxSeconds", 30).toInt();
         int loop = s.value("recordingLoop", 0).toInt();
-        const int startDelayMs = qBound(0, s.value("recordingStartDelaySeconds", 0).toInt(), 10) * 1000;
+        const int startDelayMs = recordingStartDelayMs(s.value("recordingStartDelaySeconds", 0).toInt());
         auto startGif = [rec = QPointer<ScreenRecorder>(m_screenRecorder), rect, fps, maxSec, loop, displayRect]() {
             if (rec)
                 rec->start(rect, fps, maxSec, loop, QString(), displayRect);
         };
-        if (startDelayMs > 0)
-            QTimer::singleShot(startDelayMs, this, startGif);
-        else
+        if (startDelayMs > 0) {
+            beginDelayedRecordingStart(
+                displayRect.isValid() ? displayRect : rect, startDelayMs,
+                [rec = QPointer<ScreenRecorder>(m_screenRecorder), rect, displayRect]() {
+                    return rec && rec->prepareSource(rect, displayRect);
+                },
+                startGif);
+        } else {
             startGif();
+        }
     }
 
     void onRecordingStarted()
@@ -929,6 +947,62 @@ public slots:
     }
 
 private:
+    // Runs the configured start delay behind a visible, cancellable countdown.
+    // On Wayland the portal source picker opens first, so the delay ends right
+    // before frames are captured instead of before the picker.
+    void beginDelayedRecordingStart(const QRect &indicatorRect, int delayMs,
+                                    const std::function<bool()> &prepare,
+                                    const std::function<void()> &start)
+    {
+        // A failed prepare has already reported recordingFailed(), which
+        // clears the pending start.
+        if (!prepare() || !m_recordingStartPending)
+            return;
+        // The portal picker may have taken a while; the busy timeout covers
+        // the countdown from here.
+        m_recordingStartTimer.start();
+        m_recordingStartCountdown = new RecordingStartCountdown(
+            indicatorRect, delayMs, HotkeyManager::instance().recordingCancelShortcutText());
+        connect(m_recordingStartCountdown, &RecordingStartCountdown::cancelRequested, this, [this]() {
+            cancelPendingRecordingStart();
+        });
+        connect(m_recordingStartCountdown, &RecordingStartCountdown::finished, this, [this, start]() {
+            dismissRecordingStartCountdown();
+            start();
+        });
+        rebuildTrayMenu();
+    }
+
+    void dismissRecordingStartCountdown()
+    {
+        if (!m_recordingStartCountdown)
+            return;
+        m_recordingStartCountdown->hide();
+        m_recordingStartCountdown->deleteLater();
+        m_recordingStartCountdown = nullptr;
+    }
+
+    // Aborts a start that is still counting down and drops its recorder
+    // (closing a prepared portal session). Returns false when no countdown is
+    // running so callers fall through to their normal recording handling.
+    bool cancelPendingRecordingStart()
+    {
+        if (!m_recordingStartCountdown)
+            return false;
+        dismissRecordingStartCountdown();
+        m_recordingStartPending = false;
+        if (m_videoRecorder && !m_videoRecorder->isRecording()) {
+            m_videoRecorder->deleteLater();
+            m_videoRecorder = nullptr;
+        }
+        if (m_screenRecorder && !m_screenRecorder->isRecording()) {
+            m_screenRecorder->deleteLater();
+            m_screenRecorder = nullptr;
+        }
+        rebuildTrayMenu();
+        return true;
+    }
+
     void loadSettings()
     {
         QSettings s("EShot", "EShot");
@@ -1025,10 +1099,16 @@ private:
 
         const bool videoRecording = m_videoRecorder && m_videoRecorder->isRecording();
         const bool gifRecording = m_screenRecorder && m_screenRecorder->isRecording();
-        if (videoRecording || gifRecording) {
+        if (videoRecording || gifRecording || m_recordingStartCountdown) {
             QAction *cancelRecordingAction = m_trayMenu->addAction(
                 trayIcon(":/icons/close.svg"), TranslationManager::trayCancelRecording());
             connect(cancelRecordingAction, &QAction::triggered, this, [this]() {
+                if (m_recordingStartCountdown) {
+                    // Rebuilding the tray menu deletes this action; leave its
+                    // triggered() handler first.
+                    QTimer::singleShot(0, this, [this]() { cancelPendingRecordingStart(); });
+                    return;
+                }
                 if (m_videoRecorder && m_videoRecorder->isRecording())
                     m_videoRecorder->cancel();
                 else if (m_screenRecorder && m_screenRecorder->isRecording())
@@ -1154,10 +1234,12 @@ private:
             }
         });
         connect(&HotkeyManager::instance(), &HotkeyManager::recordingStopRequested, this, [this]() {
+            if (cancelPendingRecordingStart()) return;
             if (m_videoRecorder && m_videoRecorder->isRecording()) m_videoRecorder->stop();
             else if (m_screenRecorder && m_screenRecorder->isRecording()) m_screenRecorder->stop();
         });
         connect(&HotkeyManager::instance(), &HotkeyManager::recordingCancelRequested, this, [this]() {
+            if (cancelPendingRecordingStart()) return;
             if (m_videoRecorder && m_videoRecorder->isRecording()) {
                 m_videoRecorder->cancel();
                 if (m_recordingIndicator) { m_recordingIndicator->stop(); m_recordingIndicator->deleteLater(); m_recordingIndicator = nullptr; }
@@ -1270,6 +1352,7 @@ private:
     QPointer<SettingsDialog> m_settingsDialog;
     QElapsedTimer m_recordingStartTimer;
     RecordingIndicator *m_recordingIndicator = nullptr;
+    QPointer<RecordingStartCountdown> m_recordingStartCountdown;
     int m_pendingMode = 0;
 };
 

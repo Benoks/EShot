@@ -96,6 +96,9 @@ set(SOURCES
     src/recording/AudioDevices.cpp
     src/recording/VideoRecorder.cpp
     src/recording/RecordingIndicator.cpp
+    src/recording/RecordingStartCountdown.cpp
+    src/recording/RecordingStartCountdownPolicy.cpp
+    src/recording/PortalRecordingSource.cpp
 )
 
 set(HEADERS
@@ -167,6 +170,9 @@ set(HEADERS
     src/recording/AudioDevices.h
     src/recording/VideoRecorder.h
     src/recording/RecordingIndicator.h
+    src/recording/RecordingStartCountdown.h
+    src/recording/RecordingStartCountdownPolicy.h
+    src/recording/PortalRecordingSource.h
 )
 
 set(RESOURCES
@@ -691,6 +697,25 @@ if(BUILD_TESTING)
         LIBS Qt6::Core Qt6::Gui Qt6::Widgets
     )
     set_tests_properties(recording_indicator PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+    eshot_add_test(eshot_recording_start_countdown_policy_tests recording_start_countdown_policy
+        SOURCES
+            tests/RecordingStartCountdownPolicyTests.cpp
+            src/recording/RecordingStartCountdownPolicy.cpp
+            src/recording/RecordingStartCountdownPolicy.h
+        LIBS Qt6::Core
+    )
+
+    eshot_add_test(eshot_recording_start_countdown_tests recording_start_countdown
+        SOURCES
+            tests/RecordingStartCountdownTests.cpp
+            src/recording/RecordingStartCountdown.cpp
+            src/recording/RecordingStartCountdown.h
+            src/recording/RecordingStartCountdownPolicy.cpp
+            src/recording/RecordingStartCountdownPolicy.h
+        LIBS Qt6::Core Qt6::Gui Qt6::Widgets
+    )
+    set_tests_properties(recording_start_countdown PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
     eshot_add_test(eshot_recording_timeline_tests recording_timeline
         SOURCES

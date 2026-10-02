@@ -2,6 +2,7 @@
 #include "AudioDevices.h"
 #include "core/ComponentPaths.h"
 #include "core/LinuxPortalScreenCast.h"
+#include "PortalRecordingSource.h"
 #include "LinuxRecordingSupport.h"
 #include "RecordingSettingsPolicy.h"
 #include "VideoRecordingCompletionPolicy.h"
@@ -20,6 +21,8 @@
 #include <QRegularExpression>
 #include <QStringList>
 #include <QVector>
+
+#include <utility>
 
 #ifdef Q_OS_WIN
 #include <windows.h>
@@ -216,6 +219,7 @@ VideoRecorder::VideoRecorder(QObject *parent)
 
 VideoRecorder::~VideoRecorder()
 {
+    discardPreparedSource();
     if (isRecording())
         cancel();
     // cancel() is asynchronous (the encoder exits via the event loop), so make
@@ -744,6 +748,36 @@ void VideoRecorder::cleanupMuxProcess()
     }
 }
 
+bool VideoRecorder::prepareSource(const QRect &captureRect, const QRect &displayRect)
+{
+    discardPreparedSource();
+#if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
+    if (isRecording() || !LinuxPortalScreenCast::isWaylandSession())
+        return true;
+    if (gstLaunchPath().isEmpty()) {
+        emit recordingFailed(QStringLiteral("gstreamer not found"));
+        return false;
+    }
+    QString error;
+    m_preparedStream = selectPortalRecordingStream(captureRect, displayRect, &error);
+    if (!m_preparedStream.isValid()) {
+        emit recordingFailed(error);
+        return false;
+    }
+#else
+    Q_UNUSED(captureRect);
+    Q_UNUSED(displayRect);
+#endif
+    return true;
+}
+
+void VideoRecorder::discardPreparedSource()
+{
+    if (!m_preparedStream.sessionHandle.isEmpty())
+        LinuxPortalScreenCast::closeSession(m_preparedStream.sessionHandle);
+    m_preparedStream = {};
+}
+
 bool VideoRecorder::startWaylandPortalRecording(const QRect &captureRect)
 {
 #if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
@@ -762,8 +796,10 @@ bool VideoRecorder::startWaylandPortalRecording(const QRect &captureRect)
         if (QScreen *screen = QGuiApplication::screenAt(m_displayRect.center()))
             persistenceId = screen->name();
     }
-    LinuxPortalScreenCast::Stream stream = LinuxPortalScreenCast::selectStream(
-        nullptr, 120000, persistenceId);
+    // A stream picked by prepareSource() already covers the region.
+    LinuxPortalScreenCast::Stream stream = m_preparedStream.isValid()
+        ? std::exchange(m_preparedStream, {})
+        : LinuxPortalScreenCast::selectStream(nullptr, 120000, persistenceId);
     if (!stream.isValid()) {
         emit recordingFailed(QStringLiteral("Wayland screen recording permission was not granted"));
         return false;

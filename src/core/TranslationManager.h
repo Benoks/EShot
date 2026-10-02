@@ -364,6 +364,7 @@ public:
     static QString videoPipeWireRemoteFailed() { return tr("videoPipeWireRemoteFailed"); }
     static QString gifSettings() { return tr("gifSettings"); }
     static QString recordingCancel() { return tr("recordingCancel"); }
+    static QString recordingStartsIn() { return tr("recordingStartsIn"); }
     static QString videoQualityCrf() { return tr("videoQualityCrf"); }
     static QString videoCrfHint() { return tr("videoCrfHint"); }
     static QString audioMode() { return tr("audioMode"); }
@@ -759,6 +760,7 @@ private:
         {"videoPipeWireRemoteFailed",{"Wayland PipeWire bağlantısı açılamadı. Portal iznini tekrar verin ve PipeWire/xdg-desktop-portal servislerini kontrol edin.", "Could not open the Wayland PipeWire connection. Grant the portal permission again and check PipeWire/xdg-desktop-portal services.", "Die Wayland-PipeWire-Verbindung konnte nicht geöffnet werden. Erteilen Sie die Portalberechtigung erneut und prüfen Sie PipeWire/xdg-desktop-portal.", "Impossible d'ouvrir la connexion PipeWire Wayland. Accordez de nouveau l'autorisation du portail et vérifiez PipeWire/xdg-desktop-portal.", "No se pudo abrir la conexión PipeWire de Wayland. Vuelva a conceder el permiso del portal y revise PipeWire/xdg-desktop-portal.", "Wayland PipeWire 接続を開けませんでした。ポータル権限を再度許可し、PipeWire/xdg-desktop-portal を確認してください。", "无法打开 Wayland PipeWire 连接。请重新授予门户权限，并检查 PipeWire/xdg-desktop-portal 服务。", "Не удалось открыть соединение Wayland PipeWire. Повторно разрешите доступ через портал и проверьте PipeWire/xdg-desktop-portal."}},
         {"gifSettings",{"GIF Ayarları", "GIF Settings", "GIF-Einstellungen", "Réglages GIF", "Ajustes GIF", "GIF設定", "GIF 设置", "Настройки GIF"}},
         {"recordingCancel",{"İptal", "Cancel", "Abbrechen", "Annuler", "Cancelar", "キャンセル", "取消", "Отмена"}},
+        {"recordingStartsIn",{"Kayıt başlıyor", "Recording starts in", "Aufnahme beginnt in", "L'enregistrement commence dans", "La grabación empieza en", "録画開始まで", "录制即将开始", "Запись начнётся через"}},
         {"videoQualityCrf",{"Video kalitesi (CRF)", "Video quality (CRF)", "Videoqualität (CRF)", "Qualité vidéo (CRF)", "Calidad de video (CRF)", "動画品質 (CRF)", "视频质量 (CRF)", "Качество видео (CRF)"}},
         {"videoCrfHint",{"Düşük değer daha yüksek kalite ve daha büyük dosya demektir. 24 dengeli varsayılandır.", "Lower values mean higher quality and larger files. 24 is the balanced default.", "Niedrigere Werte bedeuten höhere Qualität und größere Dateien. 24 ist der ausgewogene Standard.", "Une valeur plus basse donne une meilleure qualité et des fichiers plus volumineux. 24 est le réglage équilibré par défaut.", "Los valores más bajos dan más calidad y archivos más grandes. 24 es el valor equilibrado predeterminado.", "値が低いほど高品質でファイルサイズが大きくなります。24 がバランスの取れた既定値です。", "数值越低质量越高，文件越大。24 是均衡默认值。", "Чем ниже значение, тем выше качество и больше файл. 24 — сбалансированное значение по умолчанию."}},
         {"audioMode",{"Ses", "Audio", "Audio", "Audio", "Audio", "音声", "音频", "Аудио"}},

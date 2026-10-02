@@ -1,6 +1,8 @@
 #ifndef SCREENRECORDER_H
 #define SCREENRECORDER_H
 
+#include "core/LinuxPortalScreenCast.h"
+
 #include <QObject>
 #include <QTimer>
 #include <QRect>
@@ -35,6 +37,11 @@ public:
 
     void start(const QRect &captureRect, int fps, int maxSeconds, int loopCount,
                const QString &outputPath, const QRect &displayRect = QRect());
+    // Opens the Wayland portal source picker before start() so a start delay
+    // runs after the user picked the source; start() then reuses that stream.
+    // Other platforms have nothing to prepare. On failure recordingFailed()
+    // has been emitted.
+    bool prepareSource(const QRect &captureRect, const QRect &displayRect = QRect());
     void stop();
     void cancel();
     void pause();
@@ -66,6 +73,7 @@ private:
     void releaseCaptureResources();
     bool startWaylandPortalRecording(const QRect &captureRect);
     QString gstLaunchPath() const;
+    void discardPreparedSource();
     QString ffmpegPath() const;
     bool startPortalVideoToGifConversion();
     void cleanupPortalConversion();
@@ -97,6 +105,7 @@ private:
     QString m_portalVideoPath;
     int m_loopCount = 0;
     QString m_portalSessionHandle;
+    LinuxPortalScreenCast::Stream m_preparedStream;
     RecordingTimeline m_timeline;
     QElapsedTimer m_monotonicClock;
 
