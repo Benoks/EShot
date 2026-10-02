@@ -47,6 +47,8 @@ set(SOURCES
     src/core/SecureCredentialStore.cpp
     src/core/UploadResponseParser.cpp
     src/core/VisualSearch.cpp
+    src/core/Sha256Digest.cpp
+    src/core/ComponentDownloadPolicy.cpp
     src/core/UpdateAssetSelector.cpp
     src/core/UpdatePolicy.cpp
     src/core/WindowsInstallPolicy.cpp
@@ -121,6 +123,8 @@ set(HEADERS
     src/core/SecureCredentialStore.h
     src/core/UploadResponseParser.h
     src/core/VisualSearch.h
+    src/core/Sha256Digest.h
+    src/core/ComponentDownloadPolicy.h
     src/core/UpdateAssetSelector.h
     src/core/UpdatePolicy.h
     src/core/WindowsInstallPolicy.h
@@ -511,6 +515,18 @@ if(BUILD_TESTING)
             tests/UpdateAssetSelectorTests.cpp
             src/core/UpdateAssetSelector.cpp
             src/core/UpdateAssetSelector.h
+            src/core/Sha256Digest.cpp
+            src/core/Sha256Digest.h
+        LIBS Qt6::Core
+    )
+
+    eshot_add_test(eshot_component_download_policy_tests component_download_policy
+        SOURCES
+            tests/ComponentDownloadPolicyTests.cpp
+            src/core/ComponentDownloadPolicy.cpp
+            src/core/ComponentDownloadPolicy.h
+            src/core/Sha256Digest.cpp
+            src/core/Sha256Digest.h
         LIBS Qt6::Core
     )
 

@@ -28,6 +28,8 @@ void SettingsTranslationTests::issue15SettingsTextExistsInEveryLanguage()
         QStringLiteral("packageDelete"),
         QStringLiteral("packageDownload"),
         QStringLiteral("packageDownloading"),
+        QStringLiteral("packageChecksumUnavailable"),
+        QStringLiteral("packageChecksumMismatch"),
         QStringLiteral("ocrLanguagePacks"),
         QStringLiteral("ocrPackagesHint"),
         QStringLiteral("downloadEssentials"),

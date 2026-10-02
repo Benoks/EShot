@@ -1,5 +1,6 @@
 #include "SettingsDialog.h"
 #include "../core/ComponentPaths.h"
+#include "../core/ComponentDownloadPolicy.h"
 #include "OnboardingTips.h"
 #include "../core/WindowsElevatedStartup.h"
 #include "SettingsHotkeyPolicy.h"
@@ -240,7 +241,7 @@ QString packageStatusText(bool installed)
 
 QString packageSourceUrl(const QString &code)
 {
-    return QStringLiteral("https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/main/%1.traineddata").arg(code);
+    return tessdataDownloadUrl(code);
 }
 
 // Bundled or downloaded component folder that contains the executable.
@@ -1535,14 +1536,29 @@ void SettingsDialog::downloadOcrLanguage(const QString &code)
         return;
     }
 
+    // Only languages with a pinned SHA-256 are offered; fail closed otherwise.
+    const QString expectedSha256 = pinnedTessdataSha256(code);
+    const QString sourceUrl = packageSourceUrl(code);
+    if (expectedSha256.isEmpty() || sourceUrl.isEmpty()) {
+        QMessageBox::warning(this, TranslationManager::errTitle(),
+                             TranslationManager::tr("packageChecksumUnavailable"));
+        if (!m_pendingOcrDownloads.isEmpty()) {
+            const QString next = m_pendingOcrDownloads.takeFirst();
+            QTimer::singleShot(0, this, [this, next]() { downloadOcrLanguage(next); });
+        }
+        refreshPackageStatus();
+        return;
+    }
+
     m_activeOcrDownload = code;
     refreshPackageStatus();
 
-    QNetworkRequest request(QUrl(packageSourceUrl(code)));
+    QNetworkRequest request{QUrl(sourceUrl)};
     request.setRawHeader("User-Agent", "EShot-Package-Manager");
     request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
+    request.setTransferTimeout(60000);
     m_packageReply = m_packageNetwork->get(request);
-    connect(m_packageReply, &QNetworkReply::finished, this, [this, code, targetPath]() {
+    connect(m_packageReply, &QNetworkReply::finished, this, [this, code, targetPath, expectedSha256]() {
         QNetworkReply *reply = m_packageReply;
         m_packageReply = nullptr;
         m_activeOcrDownload.clear();
@@ -1556,6 +1572,9 @@ void SettingsDialog::downloadOcrLanguage(const QString &code)
         if (!networkOk || data.size() < 1024) {
             QMessageBox::warning(this, TranslationManager::errTitle(),
                                  uiLabel("OCR paketi indirilemedi: ", "Could not download OCR package: ") + errorText);
+        } else if (!dataMatchesSha256(data, expectedSha256)) {
+            QMessageBox::warning(this, TranslationManager::errTitle(),
+                                 TranslationManager::tr("packageChecksumMismatch"));
         } else {
             const QString tempPath = targetPath + QStringLiteral(".download");
             QFile file(tempPath);
@@ -1656,6 +1675,7 @@ void SettingsDialog::downloadReleaseComponent(const QString &componentDir, const
     request.setRawHeader("Accept", "application/vnd.github+json");
     request.setRawHeader("User-Agent", "EShot-Package-Manager");
     request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
+    request.setTransferTimeout(30000);
     m_packageReply = m_packageNetwork->get(request);
     connect(m_packageReply, &QNetworkReply::finished, this, [this, componentDir, exeName, statusPrefix]() {
         QNetworkReply *reply = m_packageReply;
@@ -1676,39 +1696,31 @@ void SettingsDialog::downloadReleaseComponent(const QString &componentDir, const
 
         const QJsonDocument doc = QJsonDocument::fromJson(data);
         const QJsonArray assets = doc.object().value(QStringLiteral("assets")).toArray();
-        const QString arch = QSysInfo::currentCpuArchitecture().toLower().contains(QStringLiteral("arm"))
-            ? QStringLiteral("arm64")
-            : QStringLiteral("x64");
-        QString assetUrl;
-        QString assetName;
-        qint64 assetSize = 0;
-        for (const QJsonValue &value : assets) {
-            const QJsonObject asset = value.toObject();
-            const QString name = asset.value(QStringLiteral("name")).toString();
-            const QString lower = name.toLower();
-            if (lower.endsWith(QStringLiteral(".zip"))
-                && lower.contains(QStringLiteral("portable"))
-                && lower.contains(arch)) {
-                assetName = name;
-                assetUrl = asset.value(QStringLiteral("browser_download_url")).toString();
-                assetSize = static_cast<qint64>(asset.value(QStringLiteral("size")).toDouble());
-                break;
-            }
-        }
+        const UpdateAsset asset = selectPortableComponentAsset(assets, QSysInfo::currentCpuArchitecture());
 
-        if (assetUrl.isEmpty()) {
+        if (!asset.isValid()) {
             QMessageBox::warning(this, TranslationManager::errTitle(),
                                  uiLabel("Bu cihaz için portable release paketi bulunamadı.", "No portable release package was found for this device."));
             m_packageOperationStatus.clear();
             refreshPackageStatus();
             return;
         }
-        downloadComponentArchive(assetUrl, assetName, assetSize, componentDir, exeName, statusPrefix);
+        // The ZIP's executables are run after install, so never accept an
+        // asset without GitHub's SHA-256 digest.
+        if (asset.sha256.isEmpty()) {
+            QMessageBox::warning(this, TranslationManager::errTitle(),
+                                 TranslationManager::tr("packageChecksumUnavailable"));
+            m_packageOperationStatus.clear();
+            refreshPackageStatus();
+            return;
+        }
+        downloadComponentArchive(asset.url, asset.name, asset.size, asset.sha256, componentDir, exeName, statusPrefix);
     });
 }
 
 void SettingsDialog::downloadComponentArchive(const QString &url, const QString &assetName, qint64 expectedSize,
-                                              const QString &componentDir, const QString &exeName, const QString &statusPrefix)
+                                              const QString &expectedSha256, const QString &componentDir,
+                                              const QString &exeName, const QString &statusPrefix)
 {
     QString cacheDir = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
     if (cacheDir.trimmed().isEmpty())
@@ -1736,12 +1748,13 @@ void SettingsDialog::downloadComponentArchive(const QString &url, const QString 
     QNetworkRequest request{QUrl(url)};
     request.setRawHeader("User-Agent", "EShot-Package-Manager");
     request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
+    request.setTransferTimeout(600000);
     m_packageReply = m_packageNetwork->get(request);
     connect(m_packageReply, &QNetworkReply::readyRead, this, [this]() {
         if (m_packageDownloadFile && m_packageReply)
             m_packageDownloadFile->write(m_packageReply->readAll());
     });
-    connect(m_packageReply, &QNetworkReply::finished, this, [this, componentDir, exeName, statusPrefix]() {
+    connect(m_packageReply, &QNetworkReply::finished, this, [this, expectedSha256, componentDir, exeName, statusPrefix]() {
         QNetworkReply *reply = m_packageReply;
         m_packageReply = nullptr;
         if (m_packageDownloadFile && reply)
@@ -1763,6 +1776,17 @@ void SettingsDialog::downloadComponentArchive(const QString &url, const QString 
             QFile::remove(m_packageDownloadPath);
             QMessageBox::warning(this, TranslationManager::errTitle(),
                                  uiLabel("OCR bileşeni indirilemedi: ", "Could not download OCR component: ") + errorText);
+            m_packageOperationStatus.clear();
+            refreshPackageStatus();
+            return;
+        }
+        // Same rule as the app updater: the archive must match the release
+        // asset digest before anything from it is unpacked or executed.
+        const bool digestRequired = true;
+        if (!downloadedAssetDigestIsValid(m_packageDownloadPath, expectedSha256, digestRequired)) {
+            QFile::remove(m_packageDownloadPath);
+            QMessageBox::warning(this, TranslationManager::errTitle(),
+                                 TranslationManager::tr("packageChecksumMismatch"));
             m_packageOperationStatus.clear();
             refreshPackageStatus();
             return;

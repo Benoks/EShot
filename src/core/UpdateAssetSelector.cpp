@@ -1,42 +1,7 @@
 #include "UpdateAssetSelector.h"
 
-#include <QCryptographicHash>
-#include <QFile>
 #include <QJsonObject>
 #include <QRegularExpression>
-
-QString normalizedSha256Digest(const QString &digest)
-{
-    QString value = digest.trimmed().toLower();
-    if (!value.startsWith(QStringLiteral("sha256:")))
-        return QString();
-    value = value.mid(7);
-    static const QRegularExpression sha256Pattern(QStringLiteral("^[0-9a-f]{64}$"));
-    return sha256Pattern.match(value).hasMatch() ? value : QString();
-}
-
-bool fileMatchesSha256(const QString &path, const QString &expectedSha256)
-{
-    if (expectedSha256.size() != 64)
-        return false;
-
-    QFile file(path);
-    if (!file.open(QIODevice::ReadOnly))
-        return false;
-
-    QCryptographicHash hash(QCryptographicHash::Sha256);
-    if (!hash.addData(&file))
-        return false;
-    return QString::fromLatin1(hash.result().toHex()) == expectedSha256.toLower();
-}
-
-bool downloadedAssetDigestIsValid(const QString &path, const QString &expectedSha256,
-                                  bool digestRequired)
-{
-    if (expectedSha256.isEmpty())
-        return !digestRequired;
-    return fileMatchesSha256(path, expectedSha256);
-}
 
 UpdateAsset selectUpdateAsset(const QJsonArray &assets,
                               UpdatePlatform platform,

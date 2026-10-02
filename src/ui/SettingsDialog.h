@@ -80,7 +80,8 @@ private:
     void downloadFfmpegComponent();
     void downloadReleaseComponent(const QString &componentDir, const QString &exeName, const QString &statusPrefix);
     void downloadComponentArchive(const QString &url, const QString &assetName, qint64 expectedSize,
-                                  const QString &componentDir, const QString &exeName, const QString &statusPrefix);
+                                  const QString &expectedSha256, const QString &componentDir,
+                                  const QString &exeName, const QString &statusPrefix);
     void extractComponentArchive(const QString &archivePath, const QString &componentDir,
                                  const QString &exeName, const QString &statusPrefix);
     QString tessdataTargetDir() const;
