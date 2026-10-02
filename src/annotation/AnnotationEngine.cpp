@@ -510,7 +510,8 @@ void AnnotationEngine::replaceAnnotation(int index, const Annotation &updated)
     m_redoStack.clear();
 }
 
-bool AnnotationEngine::updateTextAnnotation(int index, const QString &text, const TextStyle &style)
+bool AnnotationEngine::updateTextAnnotation(int index, const QString &text, const TextStyle &style,
+                                            const QPoint &offset)
 {
     if (!isTextAnnotation(index))
         return false;
@@ -524,11 +525,14 @@ bool AnnotationEngine::updateTextAnnotation(int index, const QString &text, cons
     updated.color = style.color;
     updated.textBold = style.bold;
     updated.textBackground = style.background;
+    for (QPoint &point : updated.points)
+        point += offset;
     const Annotation &current = m_annotations[index];
     if (updated.text == current.text && updated.fontFamily == current.fontFamily
         && updated.fontSize == current.fontSize && updated.color == current.color
         && updated.textBold == current.textBold
-        && updated.textBackground == current.textBackground) {
+        && updated.textBackground == current.textBackground
+        && updated.points == current.points) {
         return false;
     }
     replaceAnnotation(index, updated);

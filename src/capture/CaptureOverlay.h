@@ -183,6 +183,7 @@ private:
     QToolButton *m_textBackgroundButton = nullptr;
     // Index of the existing label open in the editor, or -1 for a new one.
     int m_editingTextIndex = -1;
+    QPoint m_textEditStartPosition;
     ShortcutSheetLayer *m_shortcutSheet = nullptr;
     bool m_showSelectionHint = false;
     HintBubble *m_hintBubble = nullptr;

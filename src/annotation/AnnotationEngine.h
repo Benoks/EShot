@@ -95,7 +95,9 @@ public:
     QString textOf(int index) const;
     TextStyle textStyleOf(int index) const;
     QPoint textAnchorOf(int index) const;
-    bool updateTextAnnotation(int index, const QString &text, const TextStyle &style);
+    // offset moves the label, e.g. when its editor was dragged elsewhere.
+    bool updateTextAnnotation(int index, const QString &text, const TextStyle &style,
+                              const QPoint &offset = QPoint());
     // Recolours a finished annotation (not blur/pixelate); one undo step.
     bool setAnnotationColor(int index, const QColor &color);
     bool removeAnnotation(int index);

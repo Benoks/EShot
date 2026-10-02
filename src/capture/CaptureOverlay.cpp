@@ -192,11 +192,21 @@ void drawCaptureHints(QPainter &painter, const QRect &monitorRect, bool recordin
                TranslationManager::recordingStopShort()},
               {HotkeyManager::instance().recordingCancelShortcutText(),
                TranslationManager::recordingCancel()}}
-        : QList<HintShortcut>{
-              {QStringLiteral("Ctrl+C"), TranslationManager::captureHintCopy()},
-              {QStringLiteral("Ctrl+S"), TranslationManager::captureHintSave()},
-              {QStringLiteral("Esc"), TranslationManager::captureHintCancel()},
-              {QStringLiteral("?"), TranslationManager::tr("captureHintShortcuts")}};
+        : [] {
+              // Follow the user's overlay shortcuts; a cleared one is not shown.
+              QList<HintShortcut> items;
+              const QString copyKey = OnboardingTips::overlayShortcutText(
+                  QStringLiteral("actionCopy"), QStringLiteral("Ctrl+C"));
+              const QString saveKey = OnboardingTips::overlayShortcutText(
+                  QStringLiteral("actionSave"), QStringLiteral("Ctrl+S"));
+              if (!copyKey.isEmpty())
+                  items.append({copyKey, TranslationManager::captureHintCopy()});
+              if (!saveKey.isEmpty())
+                  items.append({saveKey, TranslationManager::captureHintSave()});
+              items.append({QStringLiteral("Esc"), TranslationManager::captureHintCancel()});
+              items.append({QStringLiteral("?"), TranslationManager::tr("captureHintShortcuts")});
+              return items;
+          }();
 
     QFont keyFont = painter.font();
     keyFont.setPointSize(9);
@@ -626,10 +636,13 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
     m_toolbar->hide();
 
     connect(m_toolbar, &AnnotationToolbar::toolSelected, this, &CaptureOverlay::onToolSelected);
+    // Undo/redo shift annotation indices, so close an open label editor first.
     connect(m_toolbar, &AnnotationToolbar::undoRequested, [this]() {
+        cancelTextEdit();
         if (m_annotationEngine) { m_annotationEngine->undo(); update(); updateUndoRedoState(); }
     });
     connect(m_toolbar, &AnnotationToolbar::redoRequested, [this]() {
+        cancelTextEdit();
         if (m_annotationEngine) { m_annotationEngine->redo(); update(); updateUndoRedoState(); }
     });
     connect(m_toolbar, &AnnotationToolbar::colorChanged, [this](const QColor &c) {
@@ -741,6 +754,8 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
         actionLayout->addWidget(helpSeparator);
         actionLayout->addSpacing(2);
         m_helpButton = addBtn(":/icons/help.svg", QString(), [this]() { toggleShortcutSheet(); });
+        m_helpButton->setToolTip(QStringLiteral("<b>%1</b>&nbsp;&nbsp;<span style='color:#a8a8a8'>? / F1</span>")
+                                     .arg(TranslationManager::tr("sheetTitle").toHtmlEscaped()));
         m_helpButton->setStyleSheet(R"(
             QPushButton { background-color: #3a3a3a; border: 1px solid #505050; border-radius: 8px; }
             QPushButton:hover { background-color: #454545; border-color: #606060; }
@@ -852,6 +867,7 @@ void CaptureOverlay::setupToolSettingsDrawer()
     timeRow->addWidget(new QLabel(TranslationManager::quickMaxSeconds(), m_toolSettingsDrawer));
     m_quickGifSecondsSpin = new QSpinBox(m_toolSettingsDrawer);
     m_quickGifSecondsSpin->setRange(0, 600);
+    m_quickGifSecondsSpin->setSpecialValueText(TranslationManager::recordingUnlimited());
     configureOverlaySpinBox(m_quickGifSecondsSpin);
     m_quickGifSecondsSpin->setFixedWidth(96);
     timeRow->addWidget(m_quickGifSecondsSpin);
@@ -1712,7 +1728,8 @@ void CaptureOverlay::startCaptureInternal(CaptureSelectionMode selectionMode, bo
     if (m_textEditPanel) m_textEditPanel->hide();
     if (m_textFocusProxy) m_textFocusProxy->hide();
     m_textJustCommitted = false;
-    m_editingTextIndex = -1;
+    // Restores the text style if the last capture ended mid-edit.
+    finishExistingTextEdit();
     if (m_shortcutSheet)
         m_shortcutSheet->hide();
     m_showSelectionHint = false;
@@ -2585,7 +2602,11 @@ void CaptureOverlay::mousePressEvent(QMouseEvent *event)
             const bool selectionHandleHit = mode != ResNone && mode != ResMove && mode != ResNewSelection;
             if (m_annotationEngine && shouldReleaseToolForResize(selectionHandleHit,
                     m_annotationEngine->currentTool(), AnnotationEngine::None)) {
-                selectAnnotationTool(AnnotationEngine::None);
+                // Temporary release for the resize; not a remembered choice.
+                m_annotationEngine->setCurrentTool(AnnotationEngine::None);
+                m_annotationEngine->setSelectedIndex(-1);
+                if (m_toolbar)
+                    m_toolbar->selectTool(AnnotationEngine::None);
             }
             
             bool isDrawingTool = (m_annotationEngine && m_annotationEngine->currentTool() != AnnotationEngine::None);
@@ -2636,6 +2657,9 @@ void CaptureOverlay::mousePressEvent(QMouseEvent *event)
                 m_selectionStart = event->pos();
                 m_selectionEnd = event->pos();
                 m_selectionAnchorScreenRect = monitorRectAt(event->pos());
+                // A new selection discards the annotations, including a
+                // label that is still being typed.
+                cancelTextEdit();
                 hideToolbar();
                 if (m_annotationEngine) m_annotationEngine->clear();
                 update();
@@ -2727,6 +2751,7 @@ void CaptureOverlay::resetGestureState()
 
 void CaptureOverlay::resetSelection()
 {
+    cancelTextEdit();
     m_selectionComplete = false;
     m_isSelecting = false;
     m_windowSnapClickPending = false;
@@ -2783,7 +2808,7 @@ bool CaptureOverlay::handleAnnotationPress(const QPoint &pos, Qt::KeyboardModifi
 
 void CaptureOverlay::mouseDoubleClickEvent(QMouseEvent *event)
 {
-    if (event->button() != Qt::LeftButton || m_eyedropperActive || m_selectionLocked)
+    if (event->button() != Qt::LeftButton || m_eyedropperActive)
         return;
     // Inside a finished selection a quick second click belongs to the active
     // tool; treating it as "select monitor" would wipe the annotations.
@@ -2800,6 +2825,8 @@ void CaptureOverlay::mouseDoubleClickEvent(QMouseEvent *event)
             m_ignoreNextMouseRelease = true;
             return;
         }
+        if (m_selectionLocked)
+            return;
         mousePressEvent(event);
         return;
     }
@@ -3898,6 +3925,15 @@ void CaptureOverlay::updateTextEditPanelPosition()
         x = selRect.left() + 4;
     if (y + m_textEditPanel->height() > selRect.bottom() - 4)
         y = qMax(selRect.top() + 4, m_textEdit->y() - m_textEditPanel->height() - 6);
+    // A narrow selection at a screen edge must not push the panel's
+    // confirm/cancel buttons off the monitor.
+    const QRect monitor = monitorRectAt(m_textEdit->geometry().center()).intersected(rect());
+    if (monitor.isValid()) {
+        x = qBound(monitor.left() + 4, x,
+                   qMax(monitor.left() + 4, monitor.right() - m_textEditPanel->width() - 4));
+        y = qBound(monitor.top() + 4, y,
+                   qMax(monitor.top() + 4, monitor.bottom() - m_textEditPanel->height() - 4));
+    }
     m_textEditPanel->move(x, y);
     m_textEditPanel->raise();
     m_textEdit->raise();
@@ -3939,6 +3975,7 @@ void CaptureOverlay::beginEditExistingText(int index)
     m_annotationEngine->setHiddenIndex(index);
 
     beginTextEditAt(anchor);
+    m_textEditStartPosition = m_textEditPosition;
     m_textEdit->setPlainText(text);
     QTextCursor cursor = m_textEdit->textCursor();
     cursor.movePosition(QTextCursor::End);
@@ -4018,7 +4055,8 @@ void CaptureOverlay::commitText()
     if (m_editingTextIndex >= 0 && m_annotationEngine) {
         // Clearing an existing label deletes it.
         m_annotationEngine->updateTextAnnotation(m_editingTextIndex, text,
-                                                 m_annotationEngine->currentTextStyle());
+                                                 m_annotationEngine->currentTextStyle(),
+                                                 m_textEditPosition - m_textEditStartPosition);
         finishExistingTextEdit();
         update();
         updateUndoRedoState();
@@ -4030,7 +4068,10 @@ void CaptureOverlay::commitText()
     releaseTextKeyboardFocus();
     m_textEdit->hide();
     if (m_textEditPanel) m_textEditPanel->hide();
+    // Swallows only a duplicate of the committing Enter (delivered twice
+    // through the managed focus proxy), not the user's next Enter = copy.
     m_textJustCommitted = true;
+    QTimer::singleShot(300, this, [this]() { m_textJustCommitted = false; });
     acquireCaptureKeyboardFocus();
 }
 
@@ -4086,10 +4127,10 @@ void CaptureOverlay::selectAnnotationTool(int toolId)
 {
     if (!m_annotationEngine)
         return;
-    m_annotationEngine->setCurrentTool(static_cast<AnnotationEngine::Tool>(toolId));
-    m_annotationEngine->setSelectedIndex(-1);
     if (m_toolbar)
         m_toolbar->selectTool(toolId);
+    // Same path as a toolbar click: remembers the tool and shows its hints.
+    onToolSelected(toolId);
 }
 
 void CaptureOverlay::onClose() { cancelCapture(); }
@@ -4715,7 +4756,13 @@ void CaptureOverlay::onSave()
 
     QSettings s("EShot", "EShot");
     QString cliFullPath = s.value("cliSaveFullPath").toString();
+    // A --save path belongs to that one capture. If it was cancelled or
+    // copied instead, a much later Save must not overwrite that file.
+    const qint64 requestedAt = s.value("cliSaveRequestedAt", 0).toLongLong();
+    if (QDateTime::currentSecsSinceEpoch() - requestedAt > 300)
+        cliFullPath.clear();
     s.remove("cliSaveFullPath");
+    s.remove("cliSaveRequestedAt");
     QString path = s.contains("screenshotSavePath")
         ? s.value("screenshotSavePath").toString().trimmed()
         : QDir(ComponentPaths::defaultSaveDirectory()).filePath(QStringLiteral("Screenshots"));

@@ -49,7 +49,11 @@ PinnedWindow::PinnedWindow(const QPixmap &pixmap, const QPoint &screenPos, QWidg
         m_pixmap.setDevicePixelRatio(dpr);
 
     updateWindowSize();
-    move(screenPos);
+    // screenPos is where the image was captured; the title bar sits above it.
+    QPoint windowPos = screenPos - QPoint(1, BAR_HEIGHT + 1);
+    if (QScreen *screen = QGuiApplication::screenAt(screenPos))
+        windowPos.setY(qMax(windowPos.y(), screen->availableGeometry().top()));
+    move(windowPos);
     show();
 
     qDebug() << "[PinnedWindow] Created at" << screenPos << "size:" << m_pixmap.size();
