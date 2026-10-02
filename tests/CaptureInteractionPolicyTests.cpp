@@ -43,6 +43,28 @@ private slots:
         QCOMPARE(quickSettingsTabHeight(400, 300), 236);
     }
 
+    void selectionButtonsFollowMovesBetweenOutputsInBothDirections()
+    {
+        const QRect left(0, 0, 1920, 1200);
+        const QRect right(1920, 0, 1920, 1080);
+        const QList<QRect> monitors = {left, right};
+        QCOMPARE(selectionUiMonitorRect(QRect(2100, 200, 600, 400), monitors, left), right);
+        QCOMPARE(selectionUiMonitorRect(QRect(200, 200, 600, 400), monitors, right), left);
+        QCOMPARE(selectionUiMonitorRect(QRect(1700, 200, 600, 400), monitors, left), right);
+        QCOMPARE(selectionUiMonitorRect(QRect(1500, 200, 600, 400), monitors, right), left);
+    }
+
+    void selectionButtonsUseOverlapWhenTheCentreFallsInADesktopGap()
+    {
+        const QRect left(-200, 0, 100, 100);
+        const QRect right(100, 0, 100, 100);
+        const QList<QRect> monitors = {left, right};
+        QCOMPARE(selectionUiMonitorRect(QRect(-180, 20, 310, 40), monitors, right), left);
+        QCOMPARE(selectionUiMonitorRect(QRect(-130, 20, 310, 40), monitors, left), right);
+        QCOMPARE(selectionUiMonitorRect(QRect(-200, 20, 400, 40), monitors, right), right);
+        QCOMPARE(selectionUiMonitorRect(QRect(), monitors, left), left);
+    }
+
     void overlayInputTakesPriorityOverInlineTextEditing()
     {
         QCOMPARE(managedProxyKeyDestination(false, false),

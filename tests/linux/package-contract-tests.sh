@@ -66,7 +66,7 @@ grep -F 'install-user.sh' "${desktop_launcher}" >/dev/null
   echo 'repository root must not contain a machine-specific desktop launcher' >&2
   exit 1
 }
-grep -F 'ESHOT_WAYLAND_XWAYLAND_OVERLAY=1' "${installed_launcher}" >/dev/null
+grep -xF 'eshot_configure_overlay_backend' "${installed_launcher}" >/dev/null
 grep -F 'Terminal=false' "${source_desktop_entry}" >/dev/null
 grep -F 'StartupNotify=false' "${source_desktop_entry}" >/dev/null
 grep -F 'Icon=io.github.benoks.EShot-v4' "${repo_root}/packaging/linux/io.github.benoks.EShot.desktop" >/dev/null

@@ -5,19 +5,42 @@ eshot_desktop_backend() {
   desktop="${desktop,,}"
   case "${desktop}" in
     *kde*|*plasma*) printf 'kde\n' ;;
-    *gnome*) printf 'gnome\n' ;;
+    *gnome*|*ubuntu*) printf 'gnome\n' ;;
     *) printf 'gtk\n' ;;
   esac
 }
 
 eshot_xwayland_overlay_enabled() {
-  local backend
+  local backend session="${XDG_SESSION_TYPE:-}"
   backend="$(eshot_desktop_backend)"
-  if [[ "${XDG_SESSION_TYPE:-}" == "wayland" ]] \
-     && [[ "${backend}" == "kde" || "${backend}" == "gnome" ]]; then
+  if [[ "${session,,}" == "wayland" ]] \
+      && [[ "${backend}" == "gnome" ]]; then
     printf '1\n'
   else
     printf '0\n'
+  fi
+}
+
+eshot_native_wayland_overlay_enabled() {
+  local session="${XDG_SESSION_TYPE:-}"
+  if [[ "${session,,}" == "wayland" ]] \
+     && [[ "$(eshot_desktop_backend)" == "kde" ]]; then
+    printf '1\n'
+  else
+    printf '0\n'
+  fi
+}
+
+eshot_configure_overlay_backend() {
+  if [[ "$(eshot_native_wayland_overlay_enabled)" == "1" \
+        && "${ESHOT_CAPTURE_BACKEND:-wayland}" != "xcb" ]]; then
+    export QT_QPA_PLATFORM=wayland
+    export ESHOT_WAYLAND_XWAYLAND_OVERLAY=0
+  elif [[ "$(eshot_xwayland_overlay_enabled)" == "1" \
+          || ( "$(eshot_native_wayland_overlay_enabled)" == "1" \
+               && "${ESHOT_CAPTURE_BACKEND:-}" == "xcb" ) ]]; then
+    export QT_QPA_PLATFORM='xcb;wayland'
+    export ESHOT_WAYLAND_XWAYLAND_OVERLAY=1
   fi
 }
 

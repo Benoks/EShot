@@ -35,6 +35,32 @@ QRect captureHintRect(const QRect &monitorRect, const QSize &preferredSize)
     return QRect(x, y, width, height);
 }
 
+QRect selectionUiMonitorRect(const QRect &selection, const QList<QRect> &monitors,
+                            const QRect &fallback)
+{
+    if (!selection.isValid())
+        return fallback;
+    for (const QRect &monitor : monitors) {
+        if (monitor.isValid() && monitor.contains(selection.center()))
+            return monitor;
+    }
+    // The selection centre can fall in a desktop gap. Prefer the output
+    // containing most of the selection, keeping the previous output on ties.
+    QRect result = fallback;
+    qint64 largestArea = 0;
+    for (const QRect &monitor : monitors) {
+        const QRect overlap = monitor.intersected(selection);
+        if (!overlap.isValid())
+            continue;
+        const qint64 area = qint64(overlap.width()) * overlap.height();
+        if (area > largestArea || (area == largestArea && monitor == fallback)) {
+            largestArea = area;
+            result = monitor;
+        }
+    }
+    return result;
+}
+
 int quickSettingsTabHeight(int textWidth, int availableHeight)
 {
     constexpr int MinimumHeight = 118;

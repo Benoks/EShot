@@ -106,4 +106,25 @@ grep -F 'current-image' "${desktop_launch_log}" >/dev/null || {
   exit 1
 }
 
+# Exercise the packaged entry point, not just the shell policy in isolation.
+backend_log="${temp_root}/backend.log"
+cat >"${appdir}/usr/bin/EShot" <<'SH'
+#!/usr/bin/env bash
+printf '%s/%s\n' "${QT_QPA_PLATFORM:-}" "${ESHOT_WAYLAND_XWAYLAND_OVERLAY:-}" >"${ESHOT_BACKEND_LOG}"
+SH
+chmod +x "${appdir}/usr/bin/EShot"
+for row in 'KDE wayland wayland/0' 'GNOME wayland xcb;wayland/1' \
+           'KDE x11 existing/9' 'GNOME x11 existing/9' 'sway wayland existing/9'; do
+  read -r desktop_name session_type expected <<<"${row}"
+  HOME="${home_dir}" XDG_DATA_HOME="${data_home}" APPDIR="${appdir}" \
+    APPIMAGE="${source_appimage}" XDG_CURRENT_DESKTOP="${desktop_name}" \
+    XDG_SESSION_TYPE="${session_type}" ESHOT_CAPTURE_BACKEND= \
+    QT_QPA_PLATFORM=existing ESHOT_WAYLAND_XWAYLAND_OVERLAY=9 \
+    ESHOT_BACKEND_LOG="${backend_log}" bash "${repo_root}/packaging/linux/AppRun" --silent
+  [[ "$(cat "${backend_log}")" == "${expected}" ]] || {
+    echo "AppRun selected wrong backend for ${desktop_name} ${session_type}" >&2
+    exit 1
+  }
+done
+
 printf 'AppRun integration tests passed\n'

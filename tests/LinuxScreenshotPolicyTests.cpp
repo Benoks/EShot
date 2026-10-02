@@ -26,9 +26,11 @@ private slots:
                  LinuxDesktopEnvironment::Other);
     }
 
-    void selectsXWaylandCompatibilityOverlayForSupportedWaylandDesktops()
+    void selectsNativeKdeAndKeepsGnomeCompatibilityOverlay()
     {
-        QVERIFY(LinuxDesktopIntegration::useXWaylandOverlay(
+        QVERIFY(!LinuxDesktopIntegration::useXWaylandOverlay(
+            LinuxDesktopEnvironment::Kde, QStringLiteral("wayland")));
+        QVERIFY(LinuxDesktopIntegration::useNativeWaylandOverlay(
             LinuxDesktopEnvironment::Kde, QStringLiteral("wayland")));
         QVERIFY(LinuxDesktopIntegration::useXWaylandOverlay(
             LinuxDesktopEnvironment::Gnome, QStringLiteral("Wayland")));
@@ -36,6 +38,30 @@ private slots:
             LinuxDesktopEnvironment::Other, QStringLiteral("wayland")));
         QVERIFY(!LinuxDesktopIntegration::useXWaylandOverlay(
             LinuxDesktopEnvironment::Gnome, QStringLiteral("x11")));
+        QVERIFY(!LinuxDesktopIntegration::useNativeWaylandOverlay(
+            LinuxDesktopEnvironment::Gnome, QStringLiteral("wayland")));
+        QVERIFY(!LinuxDesktopIntegration::useNativeWaylandOverlay(
+            LinuxDesktopEnvironment::Kde, QStringLiteral("x11")));
+        QVERIFY(!LinuxDesktopIntegration::useNativeWaylandOverlay(
+            LinuxDesktopEnvironment::Other, QStringLiteral("wayland")));
+    }
+
+    void screenViewsAreRestrictedToNativeKdeWayland()
+    {
+        QVERIFY(LinuxScreenshotPolicy::useNativeScreenViews(
+            QStringLiteral("KDE"), QString(), QStringLiteral("wayland"), QStringLiteral("wayland")));
+        QVERIFY(LinuxScreenshotPolicy::useNativeScreenViews(
+            QString(), QStringLiteral("plasma"), QStringLiteral("Wayland"), QStringLiteral("wayland-egl")));
+        QVERIFY(!LinuxScreenshotPolicy::useNativeScreenViews(
+            QStringLiteral("KDE"), QString(), QStringLiteral("wayland"), QStringLiteral("xcb")));
+        QVERIFY(!LinuxScreenshotPolicy::useNativeScreenViews(
+            QStringLiteral("GNOME"), QString(), QStringLiteral("wayland"), QStringLiteral("wayland")));
+        QVERIFY(!LinuxScreenshotPolicy::useNativeScreenViews(
+            QStringLiteral("KDE"), QString(), QStringLiteral("x11"), QStringLiteral("xcb")));
+        QVERIFY(!LinuxScreenshotPolicy::useNativeScreenViews(
+            QStringLiteral("KDE"), QString(), QStringLiteral("wayland"), QStringLiteral("windows")));
+        QVERIFY(!LinuxScreenshotPolicy::useNativeScreenViews(
+            QStringLiteral("sway"), QString(), QStringLiteral("wayland"), QStringLiteral("wayland")));
     }
 
     void classifiesFirstRunDesktopSupport()

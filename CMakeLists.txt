@@ -63,6 +63,8 @@ set(SOURCES
     src/core/NotificationFolderOpener.cpp
     src/core/DebouncedSettingsWriter.cpp
     src/capture/CaptureGeometry.cpp
+    src/capture/CaptureScreenImage.cpp
+    src/capture/CaptureScreenViews.cpp
     src/capture/CaptureInteractionPolicy.cpp
     src/capture/WindowSnapPolicy.cpp
     src/capture/WindowsWindowProvider.cpp
@@ -132,6 +134,8 @@ set(HEADERS
     src/core/NotificationFolderOpener.h
     src/core/DebouncedSettingsWriter.h
     src/capture/CaptureGeometry.h
+    src/capture/CaptureScreenImage.h
+    src/capture/CaptureScreenViews.h
     src/capture/CaptureInteractionPolicy.h
     src/capture/WindowSnapPolicy.h
     src/capture/WindowsWindowProvider.h
@@ -390,6 +394,27 @@ if(BUILD_TESTING)
             src/capture/CaptureInteractionPolicy.h
         LIBS Qt6::Core Qt6::Gui
     )
+
+    eshot_add_test(eshot_capture_screen_image_tests capture_screen_image
+        SOURCES
+            tests/CaptureScreenImageTests.cpp
+            src/capture/CaptureScreenImage.cpp
+            src/capture/CaptureScreenImage.h
+            src/capture/CaptureGeometry.cpp
+            src/capture/CaptureGeometry.h
+        LIBS Qt6::Core Qt6::Gui
+    )
+
+    eshot_add_test(eshot_capture_screen_views_tests capture_screen_views
+        SOURCES
+            tests/CaptureScreenViewsTests.cpp
+            src/capture/CaptureScreenViews.cpp
+            src/capture/CaptureScreenViews.h
+            src/capture/CaptureScreenImage.cpp
+            src/capture/CaptureGeometry.cpp
+        LIBS Qt6::Core Qt6::Gui Qt6::Widgets
+    )
+    set_tests_properties(capture_screen_views PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
     eshot_add_test(eshot_debounced_settings_writer_tests debounced_settings_writer
         SOURCES

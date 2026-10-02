@@ -34,9 +34,12 @@ bool isWayland(const QString &sessionType, const QString &platformName)
 
 bool useXWaylandOverlay(LinuxDesktopEnvironment desktop, const QString &sessionType)
 {
-    return isWayland(sessionType)
-        && (desktop == LinuxDesktopEnvironment::Kde
-            || desktop == LinuxDesktopEnvironment::Gnome);
+    return isWayland(sessionType) && desktop == LinuxDesktopEnvironment::Gnome;
+}
+
+bool useNativeWaylandOverlay(LinuxDesktopEnvironment desktop, const QString &sessionType)
+{
+    return isWayland(sessionType) && desktop == LinuxDesktopEnvironment::Kde;
 }
 
 LinuxDesktopSupportLevel startupSupportLevel(LinuxDesktopEnvironment desktop,
