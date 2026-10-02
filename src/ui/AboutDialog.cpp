@@ -80,9 +80,7 @@ void AboutDialog::setupUI()
 
     // Update status
     m_updateStatusLabel = new QLabel(
-        TranslationManager::currentLanguage() == TranslationManager::Turkish
-            ? QString::fromUtf8("Yüklü sürüm: v%1").arg(QApplication::applicationVersion())
-            : QStringLiteral("Installed version: v%1").arg(QApplication::applicationVersion()));
+        TranslationManager::tr("installedVersion").arg(QApplication::applicationVersion()));
     m_updateStatusLabel->setAlignment(Qt::AlignCenter);
     m_updateStatusLabel->setWordWrap(true);
     m_updateStatusLabel->setStyleSheet("color: #888888; font-size: 11px;");

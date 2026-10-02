@@ -84,11 +84,13 @@ constexpr UINT defaultWindowCaptureVirtualKey()
 #endif
 }
 
-QString uiLabel(const char *tr, const char *en)
+// A form label such as "Video:" without its trailing colon, for messages.
+QString labelName(QString label)
 {
-    return TranslationManager::currentLanguage() == TranslationManager::Turkish
-        ? QString::fromUtf8(tr)
-        : QString::fromLatin1(en);
+    while (!label.isEmpty() && (label.endsWith(QLatin1Char(':')) || label.endsWith(QChar(0xFF1A))
+                                || label.endsWith(QLatin1Char(' '))))
+        label.chop(1);
+    return label;
 }
 
 QStringList defaultAnnotationTools()
@@ -557,8 +559,7 @@ QWidget* SettingsDialog::createGeneralTab()
     QVBoxLayout *fnLayout = new QVBoxLayout(fnGroup);
     m_filenamePatternEdit = new QLineEdit();
     m_filenamePatternEdit->setPlaceholderText("Screenshot_%Y-%M-%D_%h-%m-%s");
-    m_filenamePatternEdit->setToolTip(uiLabel("Dosya adinda tarih/saat ve pencere basligi degiskenlerini kullanir.",
-                                              "Use date/time and window title variables in saved filenames."));
+    m_filenamePatternEdit->setToolTip(TranslationManager::tr("tipFilenamePattern"));
     connect(m_filenamePatternEdit, &QLineEdit::textChanged, this, &SettingsDialog::onFilenamePatternChanged);
     fnLayout->addWidget(m_filenamePatternEdit);
     m_patternPreviewLabel = new QLabel();
@@ -608,13 +609,11 @@ QWidget* SettingsDialog::createGeneralTab()
     m_notifyVideoCheck = new QCheckBox(TranslationManager::notifyVideo(), m_notificationOptionsWidget);
     m_notificationOpenFolderCheck = new QCheckBox(
         TranslationManager::notificationOpenFolder(), m_notificationOptionsWidget);
-    m_notifyCopyCheck->setToolTip(uiLabel("Gorsel panoya kopyalaninca bildirim gosterir.", "Show a notification when an image is copied."));
-    m_notifySaveCheck->setToolTip(uiLabel("Gorsel dosyaya kaydedilince klasoru acabilen bildirim gosterir.", "Show a folder-opening notification when an image is saved."));
-    m_notifyGifCheck->setToolTip(uiLabel("GIF kaydi bitince klasoru acabilen bildirim gosterir.", "Show a folder-opening notification when a GIF recording finishes."));
-    m_notifyVideoCheck->setToolTip(uiLabel("Video kaydi bitince klasoru acabilen bildirim gosterir.", "Show a folder-opening notification when a video recording finishes."));
-    m_notificationOpenFolderCheck->setToolTip(uiLabel(
-        "Kaydedilen dosyalarin bildirimlerinde Klasoru Ac eylemini gosterir.",
-        "Show the Open Folder action in notifications for saved files."));
+    m_notifyCopyCheck->setToolTip(TranslationManager::tr("tipNotifyCopy"));
+    m_notifySaveCheck->setToolTip(TranslationManager::tr("tipNotifySave"));
+    m_notifyGifCheck->setToolTip(TranslationManager::tr("tipNotifyGif"));
+    m_notifyVideoCheck->setToolTip(TranslationManager::tr("tipNotifyVideo"));
+    m_notificationOpenFolderCheck->setToolTip(TranslationManager::tr("tipNotificationOpenFolder"));
     notifLayout->addWidget(m_notifyCopyCheck);
     notifLayout->addWidget(m_notifySaveCheck);
     notifLayout->addWidget(m_notifyGifCheck);
@@ -718,7 +717,7 @@ QWidget* SettingsDialog::createPackagesTab()
     componentsLayout->setColumnStretch(1, 1);
     layout->addWidget(componentsGroup);
 #ifdef Q_OS_LINUX
-    QPushButton *linuxSetupButton = new QPushButton(uiLabel("Linux bağımlılık kurulumunu aç", "Open Linux dependency setup"), tab);
+    QPushButton *linuxSetupButton = new QPushButton(TranslationManager::tr("openLinuxDependencySetup"), tab);
     connect(linuxSetupButton, &QPushButton::clicked, this, &SettingsDialog::onOpenLinuxDependencySetup);
     layout->addWidget(linuxSetupButton);
 #endif
@@ -791,7 +790,7 @@ QWidget* SettingsDialog::createCaptureTab()
     m_formatCombo->addItem(TranslationManager::formatPng(), "PNG");
     m_formatCombo->addItem(TranslationManager::formatJpeg(), "JPEG");
     m_formatCombo->addItem(TranslationManager::formatBmp(), "BMP");
-    m_formatCombo->setToolTip(uiLabel("Kaydedilen ekran görüntüsünün dosya biçimi.", "File format for saved screenshots."));
+    m_formatCombo->setToolTip(TranslationManager::tr("tipFileFormat"));
     fmtLayout->addRow(TranslationManager::tr("formatLabel"), m_formatCombo);
 
     QHBoxLayout *qLayout = new QHBoxLayout();
@@ -800,7 +799,7 @@ QWidget* SettingsDialog::createCaptureTab()
     m_qualitySpin = new QSpinBox();
     m_qualitySpin->setRange(10, 100);
     m_qualitySpin->setSuffix("%");
-    m_qualitySlider->setToolTip(uiLabel("Yalnızca JPEG için kalite ayarı.", "Quality setting for JPEG only."));
+    m_qualitySlider->setToolTip(TranslationManager::tr("tipJpegQuality"));
     m_qualitySpin->setToolTip(m_qualitySlider->toolTip());
     connect(m_qualitySlider, &QSlider::valueChanged, m_qualitySpin, &QSpinBox::setValue);
     connect(m_qualitySpin, QOverload<int>::of(&QSpinBox::valueChanged), m_qualitySlider, &QSlider::setValue);
@@ -823,14 +822,14 @@ QWidget* SettingsDialog::createCaptureTab()
     m_delaySpin->setSingleStep(500);
     m_delaySpin->setSuffix(" ms");
     m_delaySpin->setSpecialValueText(TranslationManager::noDelay());
-    m_delaySpin->setToolTip(uiLabel("Kısayola bastıktan sonra yakalama ekranının açılması için bekleme süresi.", "Delay before opening the capture overlay after the shortcut is pressed."));
+    m_delaySpin->setToolTip(TranslationManager::tr("tipCaptureDelay"));
     capLayout->addRow(TranslationManager::delay(), m_delaySpin);
     m_copyAfterCaptureCheck = new QCheckBox(TranslationManager::copyAfterCapture());
     m_copyAfterCaptureCheck->hide();
     m_closeAfterCopyCheck = new QCheckBox(TranslationManager::closeAfterCopy());
-    m_closeAfterCopyCheck->setToolTip(uiLabel("Kopyala komutundan sonra seçim ekranını otomatik kapatır.", "Automatically closes the capture overlay after copying."));
+    m_closeAfterCopyCheck->setToolTip(TranslationManager::tr("tipCloseAfterCopy"));
     m_instantCopyAfterSelectionCheck = new QCheckBox(TranslationManager::tr("instantCopyAfterSelection"));
-    m_instantCopyAfterSelectionCheck->setToolTip(uiLabel("Varsayilan kapali. Aciksa alan secimini bitirdigin anda goruntu panoya kopyalanir.", "Off by default. When enabled, the image is copied as soon as you finish selecting a region."));
+    m_instantCopyAfterSelectionCheck->setToolTip(TranslationManager::tr("tipInstantCopyAfterSelection"));
     capLayout->addRow(m_closeAfterCopyCheck);
     capLayout->addRow(m_instantCopyAfterSelectionCheck);
     m_rememberLastAnnotationToolCheck = new QCheckBox(TranslationManager::rememberLastAnnotationTool());
@@ -850,7 +849,7 @@ QWidget* SettingsDialog::createAppearanceTab()
     QGroupBox *themeGroup = new QGroupBox(TranslationManager::theme());
     QVBoxLayout *themeLayout = new QVBoxLayout(themeGroup);
     m_darkModeCheck = new QCheckBox(TranslationManager::darkMode());
-    m_darkModeCheck->setToolTip(uiLabel("Ayarlar penceresi ve yardimci pencereler icin koyu tema.", "Dark theme for settings and helper windows."));
+    m_darkModeCheck->setToolTip(TranslationManager::tr("tipDarkMode"));
     connect(m_darkModeCheck, &QCheckBox::toggled, this, &SettingsDialog::onThemeChanged);
     themeLayout->addWidget(m_darkModeCheck);
     layout->addWidget(themeGroup);
@@ -861,7 +860,7 @@ QWidget* SettingsDialog::createAppearanceTab()
     m_opacitySlider = new QSlider(Qt::Horizontal);
     m_opacitySlider->setRange(0, 255);
     m_opacitySlider->setTickInterval(25);
-    m_opacitySlider->setToolTip(uiLabel("Secilmeyen ekran alaninin karartma miktari.", "Dim amount for the non-selected screen area."));
+    m_opacitySlider->setToolTip(TranslationManager::tr("tipBgOpacity"));
     m_opacityValueLabel = new QLabel("0%");
     m_opacityValueLabel->setFixedWidth(40);
     connect(m_opacitySlider, &QSlider::valueChanged, [this](int val) {
@@ -875,7 +874,7 @@ QWidget* SettingsDialog::createAppearanceTab()
     m_crosshairStyleCombo->addItem(TranslationManager::crossDash(), "dash");
     m_crosshairStyleCombo->addItem(TranslationManager::crossSolid(), "solid");
     m_crosshairStyleCombo->addItem(TranslationManager::crossNone(), "none");
-    m_crosshairStyleCombo->setToolTip(uiLabel("Alan secmeden once imlec kilavuz cizgisi stili.", "Cursor guide line style before selecting an area."));
+    m_crosshairStyleCombo->setToolTip(TranslationManager::tr("tipCrosshair"));
     overlayLayout->addRow(TranslationManager::crosshair(), m_crosshairStyleCombo);
     m_captureHintsCheck = new QCheckBox(TranslationManager::showCaptureHints());
     m_captureHintsCheck->setToolTip(TranslationManager::showCaptureHintsTip());
@@ -906,7 +905,7 @@ QWidget* SettingsDialog::createRecordingTab()
     m_recordingFpsSpin->setRange(1, gifRecordingFpsLimit());
     m_recordingFpsSpin->setSuffix(QStringLiteral(" fps"));
     m_recordingFpsSpin->setValue(10);
-    m_recordingFpsSpin->setToolTip(uiLabel("GIF icin saniyedeki kare sayisi. Daha yuksek deger daha akici ama daha buyuk dosya uretir.", "Frames per second for GIF. Higher values are smoother but create larger files."));
+    m_recordingFpsSpin->setToolTip(TranslationManager::tr("tipGifFps"));
     recForm->addRow(TranslationManager::gifFpsLabel(), m_recordingFpsSpin);
 
     m_recordingMaxSecSpin = new QSpinBox();
@@ -914,7 +913,7 @@ QWidget* SettingsDialog::createRecordingTab()
     m_recordingMaxSecSpin->setSuffix(QStringLiteral(" s"));
     m_recordingMaxSecSpin->setSpecialValueText(TranslationManager::recordingUnlimited());
     m_recordingMaxSecSpin->setValue(30);
-    m_recordingMaxSecSpin->setToolTip(uiLabel("GIF kaydinin otomatik duracagi sure. 0 sinirsizdir.", "Time limit for GIF recording. 0 means unlimited."));
+    m_recordingMaxSecSpin->setToolTip(TranslationManager::tr("tipGifMaxSeconds"));
     recForm->addRow(TranslationManager::recordingMaxTime(), m_recordingMaxSecSpin);
 
     m_recordingLoopCombo = new QComboBox();
@@ -924,21 +923,21 @@ QWidget* SettingsDialog::createRecordingTab()
     m_recordingLoopCombo->addItem(QStringLiteral("3"), 3);
     m_recordingLoopCombo->addItem(QStringLiteral("5"), 5);
     m_recordingLoopCombo->addItem(QStringLiteral("10"), 10);
-    m_recordingLoopCombo->setToolTip(uiLabel("GIF dosyasinin kac kez donguye girecegi.", "How many times the GIF should loop."));
+    m_recordingLoopCombo->setToolTip(TranslationManager::tr("tipGifLoop"));
     recForm->addRow(TranslationManager::recordingLoop(), m_recordingLoopCombo);
 
     m_gifSizePresetCombo = new QComboBox();
     m_gifSizePresetCombo->addItem(TranslationManager::tr("gifSizeSmallest"), 720);
     m_gifSizePresetCombo->addItem(TranslationManager::tr("gifSizeBalanced"), 1280);
     m_gifSizePresetCombo->addItem(TranslationManager::tr("gifSizeBest"), 1920);
-    m_gifSizePresetCombo->setToolTip(uiLabel("GIF'in uzun kenar sinirini belirler. Dusuk deger dosya boyutunu ciddi azaltir.", "Controls the GIF max side length. Lower values can greatly reduce file size."));
+    m_gifSizePresetCombo->setToolTip(TranslationManager::tr("tipGifSizePreset"));
     recForm->addRow(TranslationManager::tr("gifSizePresetLabel"), m_gifSizePresetCombo);
 
     m_recordingStartDelaySpin = new QSpinBox();
     m_recordingStartDelaySpin->setRange(0, 10);
     m_recordingStartDelaySpin->setSuffix(QStringLiteral(" s"));
     m_recordingStartDelaySpin->setSpecialValueText(TranslationManager::noDelay());
-    m_recordingStartDelaySpin->setToolTip(uiLabel("Alan secildikten sonra GIF/video kaydinin baslamadan once bekleyecegi sure.", "Delay after selecting the area before GIF/video recording starts."));
+    m_recordingStartDelaySpin->setToolTip(TranslationManager::tr("tipRecordingStartDelay"));
     recForm->addRow(TranslationManager::tr("recordingStartDelayLabel"), m_recordingStartDelaySpin);
 
     layout->addWidget(recGroup);
@@ -950,7 +949,7 @@ QWidget* SettingsDialog::createRecordingTab()
     m_videoFpsSpin->setRange(1, videoRecordingFpsLimit());
     m_videoFpsSpin->setSuffix(QStringLiteral(" fps"));
     m_videoFpsSpin->setValue(30);
-    m_videoFpsSpin->setToolTip(uiLabel("Video icin saniyedeki kare sayisi.", "Frames per second for video recording."));
+    m_videoFpsSpin->setToolTip(TranslationManager::tr("tipVideoFps"));
     videoForm->addRow(TranslationManager::videoFpsLabel(), m_videoFpsSpin);
 
     m_videoMaxSecSpin = new QSpinBox();
@@ -958,7 +957,7 @@ QWidget* SettingsDialog::createRecordingTab()
     m_videoMaxSecSpin->setSuffix(QStringLiteral(" s"));
     m_videoMaxSecSpin->setSpecialValueText(TranslationManager::recordingUnlimited());
     m_videoMaxSecSpin->setValue(0);
-    m_videoMaxSecSpin->setToolTip(uiLabel("Video kaydinin otomatik duracagi sure. 0 sinirsizdir.", "Time limit for video recording. 0 means unlimited."));
+    m_videoMaxSecSpin->setToolTip(TranslationManager::tr("tipVideoMaxSeconds"));
     videoForm->addRow(TranslationManager::recordingMaxTime(), m_videoMaxSecSpin);
 
     m_videoCrfSpin = new QSpinBox();
@@ -968,7 +967,7 @@ QWidget* SettingsDialog::createRecordingTab()
     videoForm->addRow(TranslationManager::videoQualityCrf(), m_videoCrfSpin);
 
     m_videoDesktopAudioCheck = new QCheckBox(TranslationManager::audioDesktop());
-    m_videoDesktopAudioCheck->setToolTip(uiLabel("Video kaydina sistem/masaustu sesini ekler.", "Include system/desktop audio in video recordings."));
+    m_videoDesktopAudioCheck->setToolTip(TranslationManager::tr("tipVideoDesktopAudio"));
     videoForm->addRow(TranslationManager::audioMode(), m_videoDesktopAudioCheck);
 
     QWidget *desktopVolumeRow = new QWidget(videoGroup);
@@ -982,7 +981,7 @@ QWidget* SettingsDialog::createRecordingTab()
     m_videoDesktopVolumeSpin->setRange(0, 100);
     m_videoDesktopVolumeSpin->setSuffix(QStringLiteral("%"));
     m_videoDesktopVolumeSpin->setFixedWidth(72);
-    m_videoDesktopVolumeSlider->setToolTip(uiLabel("Kaydedilen masaustu sesi seviyesi.", "Recorded desktop audio volume."));
+    m_videoDesktopVolumeSlider->setToolTip(TranslationManager::tr("tipVideoDesktopVolume"));
     m_videoDesktopVolumeSpin->setToolTip(m_videoDesktopVolumeSlider->toolTip());
     connect(m_videoDesktopVolumeSlider, &QSlider::valueChanged, m_videoDesktopVolumeSpin, &QSpinBox::setValue);
     connect(m_videoDesktopVolumeSpin, qOverload<int>(&QSpinBox::valueChanged), m_videoDesktopVolumeSlider, &QSlider::setValue);
@@ -992,7 +991,7 @@ QWidget* SettingsDialog::createRecordingTab()
     videoForm->addRow(desktopVolumeLabel, desktopVolumeRow);
 
     m_videoMicrophoneCheck = new QCheckBox(TranslationManager::audioMicrophone());
-    m_videoMicrophoneCheck->setToolTip(uiLabel("Video kaydina mikrofon sesini ekler.", "Include microphone audio in video recordings."));
+    m_videoMicrophoneCheck->setToolTip(TranslationManager::tr("tipVideoMicrophone"));
     videoForm->addRow(QString(), m_videoMicrophoneCheck);
 
     m_videoMicrophoneDeviceCombo = new QComboBox(videoGroup);
@@ -1000,7 +999,7 @@ QWidget* SettingsDialog::createRecordingTab()
     for (const auto &device : microphoneAudioDevices()) {
         m_videoMicrophoneDeviceCombo->addItem(device.first, device.second);
     }
-    m_videoMicrophoneDeviceCombo->setToolTip(uiLabel("Video kaydinda kullanilacak mikrofon kaynagi.", "Microphone source used for video recording."));
+    m_videoMicrophoneDeviceCombo->setToolTip(TranslationManager::tr("tipVideoMicrophoneDevice"));
     auto *microphoneDeviceLabel = new QLabel(TranslationManager::audioMicrophoneDevice(), videoGroup);
     videoForm->addRow(microphoneDeviceLabel, m_videoMicrophoneDeviceCombo);
 
@@ -1015,7 +1014,7 @@ QWidget* SettingsDialog::createRecordingTab()
     m_videoMicrophoneVolumeSpin->setRange(0, 100);
     m_videoMicrophoneVolumeSpin->setSuffix(QStringLiteral("%"));
     m_videoMicrophoneVolumeSpin->setFixedWidth(72);
-    m_videoMicrophoneVolumeSlider->setToolTip(uiLabel("Kaydedilen mikrofon sesi seviyesi.", "Recorded microphone volume."));
+    m_videoMicrophoneVolumeSlider->setToolTip(TranslationManager::tr("tipVideoMicrophoneVolume"));
     m_videoMicrophoneVolumeSpin->setToolTip(m_videoMicrophoneVolumeSlider->toolTip());
     connect(m_videoMicrophoneVolumeSlider, &QSlider::valueChanged, m_videoMicrophoneVolumeSpin, &QSpinBox::setValue);
     connect(m_videoMicrophoneVolumeSpin, qOverload<int>(&QSpinBox::valueChanged), m_videoMicrophoneVolumeSlider, &QSlider::setValue);
@@ -1291,10 +1290,10 @@ QWidget* SettingsDialog::createHotkeyTab()
         qEnvironmentVariable("XDG_CURRENT_DESKTOP"),
         qEnvironmentVariable("XDG_SESSION_DESKTOP"));
     const QString bindingText = desktop == LinuxDesktopEnvironment::Gnome
-        ? uiLabel("PrintScreen kisayolunu GNOME ile ayarla", "Configure PrintScreen shortcut in GNOME")
+        ? TranslationManager::tr("linuxPrintScreenGnome")
         : desktop == LinuxDesktopEnvironment::Kde
-            ? uiLabel("PrintScreen kisayolunu KDE ile yeniden ayarla", "Reconfigure PrintScreen shortcut in KDE")
-            : uiLabel("PrintScreen kisayolunu masaustuyle ayarla", "Configure PrintScreen with the desktop");
+            ? TranslationManager::tr("linuxPrintScreenKde")
+            : TranslationManager::tr("linuxPrintScreenDesktop");
     m_linuxPrintScreenBindingButton = new QPushButton(bindingText);
     connect(m_linuxPrintScreenBindingButton, &QPushButton::clicked,
             this, &SettingsDialog::onRequestLinuxPrintScreenBinding);
@@ -1308,7 +1307,7 @@ QWidget* SettingsDialog::createHotkeyTab()
     });
     gl->addWidget(resetHkBtn);
 
-    QGroupBox *actionGroup = new QGroupBox(uiLabel("Direkt yakalama kisayollari", "Direct capture hotkeys"));
+    QGroupBox *actionGroup = new QGroupBox(TranslationManager::tr("directCaptureHotkeys"));
     QFormLayout *actionHotkeyLayout = new QFormLayout(actionGroup);
     auto makeRecordingHotkeyEdit = []() {
         auto *edit = new QKeySequenceEdit();
@@ -1332,9 +1331,9 @@ QWidget* SettingsDialog::createHotkeyTab()
 #ifdef Q_OS_WIN
     m_windowCaptureHotkeyEdit = makeRecordingHotkeyEdit();
 #endif
-    m_instantCaptureHotkeyEdit->setToolTip(uiLabel("Bos birakilirsa kapali kalir. Alan secimi bitince otomatik kopyalar.", "Leave empty to disable. Copies automatically when region selection finishes."));
-    m_gifCaptureHotkeyEdit->setToolTip(uiLabel("Bos birakilirsa kapali kalir. Dogrudan GIF alan secimini acar.", "Leave empty to disable. Opens GIF area selection directly."));
-    m_videoCaptureHotkeyEdit->setToolTip(uiLabel("Bos birakilirsa kapali kalir. Dogrudan video alan secimini acar.", "Leave empty to disable. Opens video area selection directly."));
+    m_instantCaptureHotkeyEdit->setToolTip(TranslationManager::tr("tipInstantCaptureHotkey"));
+    m_gifCaptureHotkeyEdit->setToolTip(TranslationManager::tr("tipGifCaptureHotkey"));
+    m_videoCaptureHotkeyEdit->setToolTip(TranslationManager::tr("tipVideoCaptureHotkey"));
     auto addActionHotkeyRow = [&](int id, const QString &label, const QString &name,
                                   QKeySequenceEdit *edit) {
         QLabel *conflictLabel = makeConflictLabel();
@@ -1342,16 +1341,16 @@ QWidget* SettingsDialog::createHotkeyTab()
         addGlobalHotkeyField(id, edit, name, conflictLabel);
     };
 #ifdef Q_OS_WIN
-    m_windowCaptureHotkeyEdit->setToolTip(uiLabel("Bos birakilirsa kapali kalir. Fareyle pencere secme modunu acar.", "Leave empty to disable. Opens window selection mode."));
-    addActionHotkeyRow(HotkeyManager::HOTKEY_WINDOW_CAPTURE, uiLabel("Pencere:", "Window:"),
+    m_windowCaptureHotkeyEdit->setToolTip(TranslationManager::tr("tipWindowCaptureHotkey"));
+    addActionHotkeyRow(HotkeyManager::HOTKEY_WINDOW_CAPTURE, TranslationManager::tr("hotkeyWindowLabel"),
                        TranslationManager::trayWindowCapture(), m_windowCaptureHotkeyEdit);
 #endif
-    addActionHotkeyRow(HotkeyManager::HOTKEY_INSTANT_CAPTURE, uiLabel("Instant bolge:", "Instant region:"),
-                       uiLabel("Instant bolge", "Instant region"), m_instantCaptureHotkeyEdit);
+    addActionHotkeyRow(HotkeyManager::HOTKEY_INSTANT_CAPTURE, TranslationManager::tr("hotkeyInstantRegionLabel"),
+                       labelName(TranslationManager::tr("hotkeyInstantRegionLabel")), m_instantCaptureHotkeyEdit);
     addActionHotkeyRow(HotkeyManager::HOTKEY_GIF_CAPTURE, QStringLiteral("GIF:"),
                        QStringLiteral("GIF"), m_gifCaptureHotkeyEdit);
-    addActionHotkeyRow(HotkeyManager::HOTKEY_VIDEO_CAPTURE, uiLabel("Video:", "Video:"),
-                       uiLabel("Video", "Video"), m_videoCaptureHotkeyEdit);
+    addActionHotkeyRow(HotkeyManager::HOTKEY_VIDEO_CAPTURE, TranslationManager::tr("hotkeyVideoLabel"),
+                       labelName(TranslationManager::tr("hotkeyVideoLabel")), m_videoCaptureHotkeyEdit);
     gl->addWidget(actionGroup);
 
     QGroupBox *recordingGroup = new QGroupBox(TranslationManager::videoRecordingTitle());
@@ -1374,7 +1373,7 @@ QWidget* SettingsDialog::createHotkeyTab()
                           TranslationManager::recordingCancel(), m_recordingCancelHotkeyEdit);
     gl->addWidget(recordingGroup);
 
-    QGroupBox *overlayGroup = new QGroupBox(uiLabel("SS ekrani kisayollari", "Screenshot screen shortcuts"));
+    QGroupBox *overlayGroup = new QGroupBox(TranslationManager::tr("overlayShortcutsGroup"));
     QGridLayout *overlayLayout = new QGridLayout(overlayGroup);
     overlayLayout->setContentsMargins(10, 10, 10, 10);
     overlayLayout->setHorizontalSpacing(10);
@@ -1388,8 +1387,7 @@ QWidget* SettingsDialog::createHotkeyTab()
         label->setStyleSheet(QStringLiteral("color: #d0d0d0; font-size: 12px;"));
         auto *edit = makeRecordingHotkeyEdit();
         edit->setMinimumHeight(28);
-        edit->setToolTip(uiLabel("Bu kisayol sadece ekran goruntusu secim/duzenleme ekraninda calisir.",
-                                 "This shortcut works only on the screenshot selection/annotation screen."));
+        edit->setToolTip(TranslationManager::tr("tipOverlayShortcut"));
         m_overlayHotkeyEdits.insert(overlayDefs[i].key, edit);
         overlayLayout->addWidget(label, row, col);
         overlayLayout->addWidget(edit, row, col + 1);
@@ -1526,7 +1524,7 @@ void SettingsDialog::downloadOcrLanguage(const QString &code)
     const QString targetDir = tessdataTargetDir();
     if (!QDir().mkpath(targetDir)) {
         QMessageBox::warning(this, TranslationManager::errTitle(),
-                             uiLabel("Paket klasörü oluşturulamadı.", "Could not create the package folder."));
+                             TranslationManager::tr("packageFolderCreateFailed"));
         return;
     }
 
@@ -1565,13 +1563,13 @@ void SettingsDialog::downloadOcrLanguage(const QString &code)
 
         const bool networkOk = reply && reply->error() == QNetworkReply::NoError;
         const QByteArray data = networkOk ? reply->readAll() : QByteArray();
-        const QString errorText = reply ? reply->errorString() : uiLabel("Bilinmeyen ağ hatası", "Unknown network error");
+        const QString errorText = reply ? reply->errorString() : TranslationManager::tr("unknownNetworkError");
         if (reply)
             reply->deleteLater();
 
         if (!networkOk || data.size() < 1024) {
             QMessageBox::warning(this, TranslationManager::errTitle(),
-                                 uiLabel("OCR paketi indirilemedi: ", "Could not download OCR package: ") + errorText);
+                                 TranslationManager::tr("ocrPackageDownloadFailed") + errorText);
         } else if (!dataMatchesSha256(data, expectedSha256)) {
             QMessageBox::warning(this, TranslationManager::errTitle(),
                                  TranslationManager::tr("packageChecksumMismatch"));
@@ -1580,7 +1578,7 @@ void SettingsDialog::downloadOcrLanguage(const QString &code)
             QFile file(tempPath);
             if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate) || file.write(data) != data.size()) {
                 QMessageBox::warning(this, TranslationManager::errTitle(),
-                                     uiLabel("OCR paketi yazılamadı.", "Could not write the OCR package."));
+                                     TranslationManager::tr("ocrPackageWriteFailed"));
                 file.close();
                 QFile::remove(tempPath);
             } else {
@@ -1589,7 +1587,7 @@ void SettingsDialog::downloadOcrLanguage(const QString &code)
                 if (!QFile::rename(tempPath, targetPath)) {
                     QFile::remove(tempPath);
                     QMessageBox::warning(this, TranslationManager::errTitle(),
-                                         uiLabel("OCR paketi yerine taşınamadı.", "Could not move the OCR package into place."));
+                                         TranslationManager::tr("ocrPackageMoveFailed"));
                 }
             }
         }
@@ -1613,7 +1611,7 @@ void SettingsDialog::deleteOcrLanguage(const QString &code)
     }
     if (!QFile::remove(path)) {
         QMessageBox::warning(this, TranslationManager::errTitle(),
-                             uiLabel("OCR paketi silinemedi.", "Could not delete the OCR package."));
+                             TranslationManager::tr("ocrPackageDeleteFailed"));
     }
     refreshPackageStatus();
 }
@@ -1628,23 +1626,22 @@ void SettingsDialog::onTesseractComponentAction()
         return;
     }
     if (QMessageBox::question(this,
-            uiLabel("OCR bileşenini sil", "Delete OCR component"),
-            uiLabel("Tesseract OCR ve tüm OCR dil paketleri silinsin mi?",
-                    "Delete Tesseract OCR and all OCR language packs?"),
+            TranslationManager::tr("deleteOcrComponentTitle"),
+            TranslationManager::tr("deleteOcrComponentConfirm"),
             QMessageBox::Yes | QMessageBox::No,
             QMessageBox::No) != QMessageBox::Yes) {
         return;
     }
     if (!QDir(dirPath).removeRecursively()) {
         QMessageBox::warning(this, TranslationManager::errTitle(),
-                             uiLabel("Tesseract OCR bileşeni silinemedi.", "Could not delete the Tesseract OCR component."));
+                             TranslationManager::tr("ocrComponentDeleteFailed"));
     }
     refreshPackageStatus();
 }
 
 void SettingsDialog::downloadTesseractComponent()
 {
-    downloadReleaseComponent(QStringLiteral("tesseract"), componentExeName(QStringLiteral("tesseract")), uiLabel("OCR bileşeni", "OCR component"));
+    downloadReleaseComponent(QStringLiteral("tesseract"), componentExeName(QStringLiteral("tesseract")), TranslationManager::tr("ocrComponentName"));
 }
 
 void SettingsDialog::downloadFfmpegComponent()
@@ -1659,15 +1656,14 @@ void SettingsDialog::downloadReleaseComponent(const QString &componentDir, const
     Q_UNUSED(exeName);
     Q_UNUSED(statusPrefix);
     QMessageBox::information(this, TranslationManager::errTitle(),
-                             uiLabel("Linux'ta bileşenler sistem paket yöneticisinden veya ileride eklenecek Linux paketinden kurulacak.",
-                                     "On Linux, components should be installed through the system package manager or a future Linux package."));
+                             TranslationManager::tr("linuxComponentsViaPackageManager"));
     return;
 #endif
     if (m_packageReply || m_packageExtractProcess)
         return;
     m_packageOperationStatus = QStringLiteral("%1: %2").arg(
         statusPrefix,
-        uiLabel("release paketi aranıyor...", "looking for release package..."));
+        TranslationManager::tr("releasePackageSearching"));
     refreshPackageStatus();
 
     QUrl url(QStringLiteral("https://api.github.com/repos/Benoks/EShot/releases/latest"));
@@ -1682,13 +1678,13 @@ void SettingsDialog::downloadReleaseComponent(const QString &componentDir, const
         m_packageReply = nullptr;
         const bool ok = reply && reply->error() == QNetworkReply::NoError;
         const QByteArray data = ok ? reply->readAll() : QByteArray();
-        const QString errorText = reply ? reply->errorString() : uiLabel("Bilinmeyen ağ hatası", "Unknown network error");
+        const QString errorText = reply ? reply->errorString() : TranslationManager::tr("unknownNetworkError");
         if (reply)
             reply->deleteLater();
 
         if (!ok) {
             QMessageBox::warning(this, TranslationManager::errTitle(),
-                                 uiLabel("Release bilgisi alınamadı: ", "Could not read release info: ") + errorText);
+                                 TranslationManager::tr("releaseInfoFailed") + errorText);
             m_packageOperationStatus.clear();
             refreshPackageStatus();
             return;
@@ -1700,7 +1696,7 @@ void SettingsDialog::downloadReleaseComponent(const QString &componentDir, const
 
         if (!asset.isValid()) {
             QMessageBox::warning(this, TranslationManager::errTitle(),
-                                 uiLabel("Bu cihaz için portable release paketi bulunamadı.", "No portable release package was found for this device."));
+                                 TranslationManager::tr("portableReleaseNotFound"));
             m_packageOperationStatus.clear();
             refreshPackageStatus();
             return;
@@ -1734,7 +1730,7 @@ void SettingsDialog::downloadComponentArchive(const QString &url, const QString 
     m_packageDownloadFile = new QFile(m_packageDownloadPath);
     if (!m_packageDownloadFile->open(QIODevice::WriteOnly | QIODevice::Truncate)) {
         QMessageBox::warning(this, TranslationManager::errTitle(),
-                             uiLabel("OCR bileşeni indirilecek dosya açılamadı.", "Could not open the OCR component download file."));
+                             TranslationManager::tr("componentDownloadFileOpenFailed"));
         delete m_packageDownloadFile;
         m_packageDownloadFile = nullptr;
         m_packageOperationStatus.clear();
@@ -1742,7 +1738,7 @@ void SettingsDialog::downloadComponentArchive(const QString &url, const QString 
         return;
     }
 
-    m_packageOperationStatus = QStringLiteral("%1: %2").arg(statusPrefix, uiLabel("indiriliyor...", "downloading..."));
+    m_packageOperationStatus = QStringLiteral("%1: %2").arg(statusPrefix, TranslationManager::tr("statusDownloading"));
     refreshPackageStatus();
 
     QNetworkRequest request{QUrl(url)};
@@ -1767,7 +1763,7 @@ void SettingsDialog::downloadComponentArchive(const QString &url, const QString 
         }
 
         const bool ok = reply && reply->error() == QNetworkReply::NoError;
-        const QString errorText = reply ? reply->errorString() : uiLabel("Bilinmeyen ağ hatası", "Unknown network error");
+        const QString errorText = reply ? reply->errorString() : TranslationManager::tr("unknownNetworkError");
         if (reply)
             reply->deleteLater();
 
@@ -1775,7 +1771,7 @@ void SettingsDialog::downloadComponentArchive(const QString &url, const QString 
         if (!ok || size <= 0 || (m_packageExpectedSize > 0 && size != m_packageExpectedSize)) {
             QFile::remove(m_packageDownloadPath);
             QMessageBox::warning(this, TranslationManager::errTitle(),
-                                 uiLabel("OCR bileşeni indirilemedi: ", "Could not download OCR component: ") + errorText);
+                                 TranslationManager::tr("componentDownloadFailed") + errorText);
             m_packageOperationStatus.clear();
             refreshPackageStatus();
             return;
@@ -1809,7 +1805,7 @@ void SettingsDialog::extractComponentArchive(const QString &archivePath, const Q
 #endif
     if (m_packageExtractProcess)
         return;
-    m_packageOperationStatus = QStringLiteral("%1: %2").arg(statusPrefix, uiLabel("kuruluyor...", "installing..."));
+    m_packageOperationStatus = QStringLiteral("%1: %2").arg(statusPrefix, TranslationManager::tr("statusInstalling"));
     refreshPackageStatus();
 
     // An all-users install lives in Program Files, which a standard user
@@ -1845,8 +1841,7 @@ void SettingsDialog::extractComponentArchive(const QString &archivePath, const Q
         m_packageExtractProcess->deleteLater();
         m_packageExtractProcess = nullptr;
         QMessageBox::warning(this, TranslationManager::errTitle(),
-                             uiLabel("OCR bileşeni kurulamadı. Kurulum klasörü için yönetici izni gerekebilir.",
-                                     "Could not install the OCR component. Administrator permission may be required for the install folder."));
+                             TranslationManager::tr("ocrComponentInstallFailed"));
         m_packageOperationStatus.clear();
         refreshPackageStatus();
     });
@@ -1858,8 +1853,7 @@ void SettingsDialog::extractComponentArchive(const QString &archivePath, const Q
         m_packageExtractProcess = nullptr;
         if (status == QProcess::NormalExit && exitCode != 0) {
             QMessageBox::warning(this, TranslationManager::errTitle(),
-                                 uiLabel("OCR bileşeni kurulamadı. Kurulum klasörü için yönetici izni gerekebilir.",
-                                         "Could not install the OCR component. Administrator permission may be required for the install folder."));
+                                 TranslationManager::tr("ocrComponentInstallFailed"));
         }
         m_packageOperationStatus.clear();
         refreshPackageStatus();
@@ -1880,16 +1874,15 @@ void SettingsDialog::onFfmpegComponentAction()
         return;
     }
     if (QMessageBox::question(this,
-            uiLabel("FFmpeg bileşenini sil", "Delete FFmpeg component"),
-            uiLabel("Bundled FFmpeg video bileşeni silinsin mi?",
-                    "Delete the bundled FFmpeg video component?"),
+            TranslationManager::tr("deleteFfmpegComponentTitle"),
+            TranslationManager::tr("deleteFfmpegComponentConfirm"),
             QMessageBox::Yes | QMessageBox::No,
             QMessageBox::No) != QMessageBox::Yes) {
         return;
     }
     if (!QDir(dirPath).removeRecursively()) {
         QMessageBox::warning(this, TranslationManager::errTitle(),
-                             uiLabel("FFmpeg bileşeni silinemedi.", "Could not delete the FFmpeg component."));
+                             TranslationManager::tr("ffmpegComponentDeleteFailed"));
     }
     refreshPackageStatus();
 }
@@ -2256,12 +2249,10 @@ void SettingsDialog::onRequestLinuxPrintScreenBinding()
             LinuxGnomeShortcutInstaller::captureCommand(executable));
         if (installed.success) {
             QMessageBox::information(this, QStringLiteral("EShot"),
-                                     uiLabel("PrintScreen GNOME'da EShot'a atandi.",
-                                             "PrintScreen was assigned to EShot in GNOME."));
+                                     TranslationManager::tr("gnomePrintScreenAssigned"));
         } else {
             QMessageBox::warning(this, QStringLiteral("EShot"),
-                                 uiLabel("GNOME kisayolu ayarlanamadi: ",
-                                         "Could not configure the GNOME shortcut: ")
+                                 TranslationManager::tr("gnomeShortcutFailed")
                                      + installed.error);
         }
         return;
@@ -2271,8 +2262,7 @@ void SettingsDialog::onRequestLinuxPrintScreenBinding()
     if (desktop == LinuxDesktopEnvironment::Kde
         && !QProcess::startDetached(QStringLiteral("kcmshell6"), {QStringLiteral("kcm_keys")})) {
         QMessageBox::warning(this, QStringLiteral("EShot"),
-                             uiLabel("KDE kisayol ayarlari acilamadi.",
-                                     "KDE shortcut settings could not be opened."));
+                             TranslationManager::tr("kdeShortcutSettingsOpenFailed"));
     }
 #endif
 }
@@ -2477,8 +2467,7 @@ void SettingsDialog::onSave()
             if (!installed.success) {
                 QMessageBox::warning(
                     this, TranslationManager::errInvalidHotkeyTitle(),
-                    uiLabel("GNOME yakalama kisayolu ayarlanamadi: ",
-                            "Could not configure the GNOME capture shortcut: ")
+                    TranslationManager::tr("gnomeCaptureShortcutFailed")
                         + installed.error);
                 return;
             }

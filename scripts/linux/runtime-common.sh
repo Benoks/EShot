@@ -259,22 +259,64 @@ eshot_setup_text() {
   local language="${ESHOT_LANGUAGE:-en}"
   language="${language,,}"
 
-  if [[ "${language}" == tr* ]]; then
-    case "${key}" in
-      unknown_option) printf 'Bilinmeyen secenek: %s\n' "${1:-}" ;;
-      unsupported_manager) printf 'Desteklenen bir paket yoneticisi bulunamadi (pacman, apt veya dnf).\n' ;;
-      missing_pkexec) printf 'Paket kurulumu icin PolicyKit (pkexec) bulunamadi.\n' ;;
-      integration_unavailable) printf 'AppImage masaustu entegrasyonu kullanilamiyor.\n' ;;
-      *) printf '%s\n' "${key}" ;;
-    esac
-    return
-  fi
+  # UTF-8 text; kdialog, zenity and terminals render it directly.
+  local unknown_option unsupported_manager missing_pkexec integration_unavailable
+  case "${language}" in
+    tr*)
+      unknown_option='Bilinmeyen seçenek: '
+      unsupported_manager='Desteklenen bir paket yöneticisi bulunamadı (pacman, apt veya dnf).'
+      missing_pkexec='Paket kurulumu için PolicyKit (pkexec) bulunamadı.'
+      integration_unavailable='AppImage masaüstü entegrasyonu kullanılamıyor.'
+      ;;
+    de*)
+      unknown_option='Unbekannte Option: '
+      unsupported_manager='Kein unterstützter Paketmanager gefunden (pacman, apt oder dnf).'
+      missing_pkexec='Zum Installieren von Paketen wird PolicyKit (pkexec) benötigt.'
+      integration_unavailable='AppImage-Desktopintegration ist nicht verfügbar.'
+      ;;
+    fr*)
+      unknown_option='Option inconnue : '
+      unsupported_manager='Aucun gestionnaire de paquets pris en charge n’a été trouvé (pacman, apt ou dnf).'
+      missing_pkexec='PolicyKit (pkexec) est requis pour installer des paquets.'
+      integration_unavailable='L’intégration de l’AppImage au bureau n’est pas disponible.'
+      ;;
+    es*)
+      unknown_option='Opción desconocida: '
+      unsupported_manager='No se encontró un gestor de paquetes compatible (pacman, apt o dnf).'
+      missing_pkexec='Se necesita PolicyKit (pkexec) para instalar paquetes.'
+      integration_unavailable='La integración del AppImage con el escritorio no está disponible.'
+      ;;
+    ja*)
+      unknown_option='不明なオプション: '
+      unsupported_manager='対応するパッケージマネージャーが見つかりません（pacman、apt、dnf）。'
+      missing_pkexec='パッケージのインストールには PolicyKit (pkexec) が必要です。'
+      integration_unavailable='AppImage のデスクトップ統合は利用できません。'
+      ;;
+    zh*)
+      unknown_option='未知选项：'
+      unsupported_manager='未找到受支持的包管理器（pacman、apt 或 dnf）。'
+      missing_pkexec='安装软件包需要 PolicyKit (pkexec)。'
+      integration_unavailable='AppImage 桌面集成不可用。'
+      ;;
+    ru*)
+      unknown_option='Неизвестный параметр: '
+      unsupported_manager='Не найден поддерживаемый менеджер пакетов (pacman, apt или dnf).'
+      missing_pkexec='Для установки пакетов требуется PolicyKit (pkexec).'
+      integration_unavailable='Интеграция AppImage с рабочим столом недоступна.'
+      ;;
+    *)
+      unknown_option='Unknown option: '
+      unsupported_manager='No supported package manager was found (pacman, apt or dnf).'
+      missing_pkexec='PolicyKit (pkexec) is required to install packages.'
+      integration_unavailable='AppImage desktop integration is unavailable.'
+      ;;
+  esac
 
   case "${key}" in
-    unknown_option) printf 'Unknown option: %s\n' "${1:-}" ;;
-    unsupported_manager) printf 'No supported package manager was found (pacman, apt or dnf).\n' ;;
-    missing_pkexec) printf 'PolicyKit (pkexec) is required to install packages.\n' ;;
-    integration_unavailable) printf 'AppImage desktop integration is unavailable.\n' ;;
+    unknown_option) printf '%s%s\n' "${unknown_option}" "${1:-}" ;;
+    unsupported_manager) printf '%s\n' "${unsupported_manager}" ;;
+    missing_pkexec) printf '%s\n' "${missing_pkexec}" ;;
+    integration_unavailable) printf '%s\n' "${integration_unavailable}" ;;
     *) printf '%s\n' "${key}" ;;
   esac
 }

@@ -120,10 +120,20 @@ assert_eq "apt" "$(ESHOT_PACKAGE_MANAGER=apt eshot_package_manager)" "forced apt
 assert_eq "dnf" "$(ESHOT_PACKAGE_MANAGER=dnf eshot_package_manager)" "forced dnf"
 assert_eq "No supported package manager was found (pacman, apt or dnf)." \
   "$(ESHOT_LANGUAGE=en eshot_setup_text unsupported_manager)" "English setup error"
-assert_eq "Desteklenen bir paket yoneticisi bulunamadi (pacman, apt veya dnf)." \
+assert_eq "Desteklenen bir paket yöneticisi bulunamadı (pacman, apt veya dnf)." \
   "$(ESHOT_LANGUAGE=tr eshot_setup_text unsupported_manager)" "Turkish setup error"
+assert_eq "Не найден поддерживаемый менеджер пакетов (pacman, apt или dnf)." \
+  "$(ESHOT_LANGUAGE=ru eshot_setup_text unsupported_manager)" "Russian setup error"
+for setup_language in tr en de fr es ja zh ru; do
+  for setup_key in unknown_option unsupported_manager missing_pkexec integration_unavailable; do
+    setup_message="$(ESHOT_LANGUAGE="${setup_language}" eshot_setup_text "${setup_key}" opt)"
+    assert_not_contains "${setup_key}" "${setup_message}" "${setup_language} ${setup_key} setup text is translated"
+  done
+done
+assert_eq "Unknown option: --bogus" \
+  "$(ESHOT_LANGUAGE=en eshot_setup_text unknown_option --bogus)" "unknown option includes the argument"
 assert_eq "No supported package manager was found (pacman, apt or dnf)." \
-  "$(ESHOT_LANGUAGE=ru eshot_setup_text unsupported_manager)" "unsupported language falls back to English"
+  "$(ESHOT_LANGUAGE=xx eshot_setup_text unsupported_manager)" "unsupported language falls back to English"
 assert_eq "/home/test/.local/opt/EShot/EShot.AppImage" \
   "$(HOME=/home/test XDG_DATA_HOME= eshot_installed_appimage_path)" "default AppImage install path"
 assert_eq "/home/test/share/applications/io.github.benoks.EShot.desktop" \

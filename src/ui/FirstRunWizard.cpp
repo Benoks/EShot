@@ -124,15 +124,11 @@ void FirstRunWizard::setupUi()
             if (detectedName.isEmpty())
                 detectedName = sessionDesktop.trimmed();
             if (detectedName.isEmpty())
-                detectedName = tr("Unknown desktop");
-            supportWarning->setText(tr("<b>Unsupported desktop environment: %1</b><br>"
-                                       "EShot officially supports KDE Plasma 6 and GNOME on Wayland. "
-                                       "Capture, global shortcuts, recording, or tray integration may not work correctly.")
+                detectedName = TranslationManager::tr("desktopUnknown");
+            supportWarning->setText(TranslationManager::tr("desktopUnsupportedWarning")
                                         .arg(detectedName.toHtmlEscaped()));
         } else {
-            supportWarning->setText(tr("<b>Limited desktop session support</b><br>"
-                                       "EShot is primarily tested on KDE Plasma 6 and GNOME Wayland. "
-                                       "Some capture, shortcut, recording, or tray behavior may differ in this session."));
+            supportWarning->setText(TranslationManager::tr("desktopLimitedWarning"));
         }
         mainLayout->addWidget(supportWarning);
     }
@@ -163,7 +159,7 @@ void FirstRunWizard::setupUi()
     m_langCombo->addItem(QString::fromUtf8("日本語"), "ja");
     m_langCombo->addItem(QString::fromUtf8("中文"), "zh");
     m_langCombo->addItem(QString::fromUtf8("Русский"), "ru");
-    m_langCombo->setToolTip(tr("Language used by EShot after setup. The setup screen starts in English."));
+    m_langCombo->setToolTip(TranslationManager::tr("wizardLanguageTip"));
     langLayout->addWidget(m_langCombo);
     mainLayout->addWidget(langGroup);
 
@@ -198,10 +194,10 @@ void FirstRunWizard::setupUi()
     const LinuxDesktopEnvironment desktop = LinuxDesktopIntegration::detect(
         qEnvironmentVariable("XDG_CURRENT_DESKTOP"),
         qEnvironmentVariable("XDG_SESSION_DESKTOP"));
-    auto *activatePrintButton = new QPushButton(tr("Use Print Screen for EShot"));
+    auto *activatePrintButton = new QPushButton(TranslationManager::tr("usePrintScreenForEshot"));
     activatePrintButton->setToolTip(desktop == LinuxDesktopEnvironment::Kde
-        ? tr("Removes only the plain Print Screen shortcut from Spectacle and assigns it to EShot. Spectacle keeps its other shortcuts.")
-        : tr("Asks the desktop to assign Print Screen to EShot. Other shortcuts are left unchanged."));
+        ? TranslationManager::tr("usePrintScreenKdeTip")
+        : TranslationManager::tr("usePrintScreenTip"));
     connect(activatePrintButton, &QPushButton::clicked,
             this, &FirstRunWizard::onActivateLinuxPrintScreen);
     hkLayout->addWidget(activatePrintButton);
@@ -218,18 +214,18 @@ void FirstRunWizard::setupUi()
     mainLayout->addWidget(pathGroup);
 
 #ifdef Q_OS_LINUX
-    QGroupBox *depsGroup = new QGroupBox(tr("Optional Linux features"));
+    QGroupBox *depsGroup = new QGroupBox(TranslationManager::tr("linuxOptionalFeatures"));
     QVBoxLayout *depsLayout = new QVBoxLayout(depsGroup);
-    QLabel *depsHint = new QLabel(tr("Select optional features to install with the system package manager. You can skip and retry from Settings."));
+    QLabel *depsHint = new QLabel(TranslationManager::tr("linuxOptionalFeaturesHint"));
     depsHint->setWordWrap(true); depsLayout->addWidget(depsHint);
-    m_linuxFfmpegCheck = new QCheckBox(tr("FFmpeg (video and GIF recording)"));
-    m_linuxOcrCheck = new QCheckBox(tr("Tesseract OCR"));
-    m_linuxDesktopCheck = new QCheckBox(tr("Wayland recording and desktop portal packages"));
-    m_linuxAppImageIntegrationCheck = new QCheckBox(tr("Add EShot to the application menu and install shortcuts"));
-    m_linuxFfmpegCheck->setToolTip(tr("Installs the media encoder used to save MP4 videos and GIF recordings. Screenshots work without it."));
-    m_linuxOcrCheck->setToolTip(tr("Installs text recognition so EShot can read and copy text from screenshots. Select OCR languages below."));
-    m_linuxDesktopCheck->setToolTip(tr("Installs PipeWire and desktop portal components used for secure screen sharing and recording on Wayland desktops such as KDE Plasma and GNOME."));
-    m_linuxAppImageIntegrationCheck->setToolTip(tr("Copies this AppImage to your user applications folder and adds EShot to the application menu. No system-wide installation is performed. After setup, use the application-menu entry; the downloaded AppImage remains a separate portable copy."));
+    m_linuxFfmpegCheck = new QCheckBox(TranslationManager::tr("linuxFeatureFfmpeg"));
+    m_linuxOcrCheck = new QCheckBox(QStringLiteral("Tesseract OCR"));
+    m_linuxDesktopCheck = new QCheckBox(TranslationManager::tr("linuxFeaturePortal"));
+    m_linuxAppImageIntegrationCheck = new QCheckBox(TranslationManager::tr("linuxFeatureAppMenu"));
+    m_linuxFfmpegCheck->setToolTip(TranslationManager::tr("linuxFeatureFfmpegTip"));
+    m_linuxOcrCheck->setToolTip(TranslationManager::tr("linuxFeatureOcrTip"));
+    m_linuxDesktopCheck->setToolTip(TranslationManager::tr("linuxFeaturePortalTip"));
+    m_linuxAppImageIntegrationCheck->setToolTip(TranslationManager::tr("linuxFeatureAppMenuTip"));
     m_linuxFfmpegCheck->setChecked(true); m_linuxOcrCheck->setChecked(true);
     m_linuxDesktopCheck->setChecked(defaultLinuxPortalSelection(qEnvironmentVariable("XDG_SESSION_TYPE")));
     const bool offerAppImageIntegration = shouldOfferAppImageIntegration(
@@ -241,12 +237,12 @@ void FirstRunWizard::setupUi()
     const auto names = ocrLanguageDisplayNames();
     const auto defaults = defaultOcrLanguageCodes(QLocale::system().name());
     int languageIndex = 0;
-    for (const QString &code : supportedOcrLanguageCodes()) { auto *check = new QCheckBox(names.value(code)); check->setProperty("ocrCode", code); check->setChecked(defaults.contains(code)); check->setToolTip(tr("OCR language data for recognizing text written in %1. This does not change the EShot interface language.").arg(names.value(code))); languages->addWidget(check, languageIndex / 2, languageIndex % 2); m_linuxLanguageChecks << check; ++languageIndex; }
+    for (const QString &code : supportedOcrLanguageCodes()) { auto *check = new QCheckBox(names.value(code)); check->setProperty("ocrCode", code); check->setChecked(defaults.contains(code)); check->setToolTip(TranslationManager::tr("ocrLanguageDataTip").arg(names.value(code))); languages->addWidget(check, languageIndex / 2, languageIndex % 2); m_linuxLanguageChecks << check; ++languageIndex; }
     depsLayout->addLayout(languages);
     connect(m_linuxOcrCheck, &QCheckBox::toggled, depsGroup, [this](bool enabled) { for (auto *check : m_linuxLanguageChecks) check->setEnabled(enabled); });
-    QPushButton *skipDeps = new QPushButton(tr("Skip optional dependency setup"));
-    skipDeps->setToolTip(tr("Starts EShot without installing optional recording or OCR components. You can reopen this setup from Settings later."));
-    connect(skipDeps, &QPushButton::clicked, depsGroup, [this] { m_linuxExplicitSkip = true; m_linuxFfmpegCheck->setChecked(false); m_linuxOcrCheck->setChecked(false); m_linuxDesktopCheck->setChecked(false); m_linuxAppImageIntegrationCheck->setChecked(false); m_linuxInstallStatus->setText(tr("Optional setup will be skipped. Click Finish to continue.")); });
+    QPushButton *skipDeps = new QPushButton(TranslationManager::tr("linuxSkipOptionalSetup"));
+    skipDeps->setToolTip(TranslationManager::tr("linuxSkipOptionalSetupTip"));
+    connect(skipDeps, &QPushButton::clicked, depsGroup, [this] { m_linuxExplicitSkip = true; m_linuxFfmpegCheck->setChecked(false); m_linuxOcrCheck->setChecked(false); m_linuxDesktopCheck->setChecked(false); m_linuxAppImageIntegrationCheck->setChecked(false); m_linuxInstallStatus->setText(TranslationManager::tr("linuxSetupWillBeSkipped")); });
     depsLayout->addWidget(skipDeps);
     m_skipDepsButton = skipDeps;
     m_linuxInstallStatus = new QLabel(); m_linuxInstallStatus->setWordWrap(true); depsLayout->addWidget(m_linuxInstallStatus);
@@ -369,7 +365,7 @@ void FirstRunWizard::onActivateLinuxPrintScreen()
         qEnvironmentVariable("XDG_CURRENT_DESKTOP"),
         qEnvironmentVariable("XDG_SESSION_DESKTOP"));
     if (desktop == LinuxDesktopEnvironment::Other) {
-        m_hotkeyStatusLabel->setText(tr("Automatic Print Screen activation is currently available on KDE Plasma and GNOME."));
+        m_hotkeyStatusLabel->setText(TranslationManager::tr("printScreenDesktopsOnly"));
         m_hotkeyStatusLabel->setStyleSheet("color: #ff9800; font-size: 12px;");
         return;
     }
@@ -378,13 +374,13 @@ void FirstRunWizard::onActivateLinuxPrintScreen()
     if (desktop == LinuxDesktopEnvironment::Gnome) {
         if (HotkeyManager::instance().linuxPortalShortcutsAvailable()) {
             if (!HotkeyManager::instance().reRegisterCaptureHotkey(0, VK_SNAPSHOT)) {
-                m_hotkeyStatusLabel->setText(tr("GNOME did not allow the Print Screen shortcut. Try again from Settings."));
+                m_hotkeyStatusLabel->setText(TranslationManager::tr("gnomePrintScreenDenied"));
                 m_hotkeyStatusLabel->setStyleSheet("color: #ff9800; font-size: 12px;");
                 return;
             }
             if (shouldOfferAppImageIntegration(qEnvironmentVariable("APPIMAGE")))
                 m_linuxAppImageIntegrationCheck->setChecked(true);
-            m_hotkeyStatusLabel->setText(tr("Choose Print Screen in the GNOME shortcut permission window."));
+            m_hotkeyStatusLabel->setText(TranslationManager::tr("gnomePrintScreenChoose"));
             m_hotkeyStatusLabel->setStyleSheet("color: #4caf50; font-size: 12px;");
             return;
         }
@@ -401,11 +397,11 @@ void FirstRunWizard::onActivateLinuxPrintScreen()
         const auto installed = LinuxGnomeShortcutInstaller::installPrintScreen(
             LinuxGnomeShortcutInstaller::captureCommand(executable));
         if (!installed.success) {
-            m_hotkeyStatusLabel->setText(tr("Could not configure GNOME Print Screen: %1").arg(installed.error));
+            m_hotkeyStatusLabel->setText(TranslationManager::tr("gnomePrintScreenFailed").arg(installed.error));
             m_hotkeyStatusLabel->setStyleSheet("color: #ff9800; font-size: 12px;");
             return;
         }
-        m_hotkeyStatusLabel->setText(tr("Print Screen activated for EShot in GNOME."));
+        m_hotkeyStatusLabel->setText(TranslationManager::tr("gnomePrintScreenActivated"));
         m_hotkeyStatusLabel->setStyleSheet("color: #4caf50; font-size: 12px;");
         return;
     }
@@ -424,7 +420,7 @@ void FirstRunWizard::onActivateLinuxPrintScreen()
     const QDBusReply<QList<int>> currentReply = globalAccel.call(
         QStringLiteral("shortcut"), spectacleLaunchId);
     if (!globalAccel.isValid() || !currentReply.isValid()) {
-        m_hotkeyStatusLabel->setText(tr("Could not read KDE shortcuts. Open System Settings > Shortcuts and remove Print from Spectacle."));
+        m_hotkeyStatusLabel->setText(TranslationManager::tr("kdeShortcutsReadFailed"));
         m_hotkeyStatusLabel->setStyleSheet("color: #ff9800; font-size: 12px;");
         return;
     }
@@ -437,7 +433,7 @@ void FirstRunWizard::onActivateLinuxPrintScreen()
         spectacleLaunchId,
         QVariant::fromValue(shortcutsForEshot));
     if (!setReply.isValid()) {
-        m_hotkeyStatusLabel->setText(tr("KDE did not allow the shortcut change. Use System Settings > Shortcuts instead."));
+        m_hotkeyStatusLabel->setText(TranslationManager::tr("kdeShortcutChangeDenied"));
         m_hotkeyStatusLabel->setStyleSheet("color: #ff9800; font-size: 12px;");
         return;
     }
@@ -449,17 +445,17 @@ void FirstRunWizard::onActivateLinuxPrintScreen()
             QVariant::fromValue(kdeShortcutsAfterEshotPrintScreenRegistration(
                 originalShortcuts, false)));
         const QString recovery = restoreReply.isValid()
-            ? tr("Spectacle's Print Screen shortcut was restored.")
-            : tr("KDE could not restore Spectacle's Print Screen shortcut. Restore it from System Settings > Shortcuts.");
+            ? TranslationManager::tr("kdeSpectacleRestored")
+            : TranslationManager::tr("kdeSpectacleRestoreFailed");
         m_hotkeyStatusLabel->setText(
-            tr("EShot could not register Print Screen with KDE. %1").arg(recovery));
+            TranslationManager::tr("kdePrintScreenRegisterFailed").arg(recovery));
         m_hotkeyStatusLabel->setStyleSheet("color: #ff9800; font-size: 12px;");
         return;
     }
 
     if (shouldOfferAppImageIntegration(qEnvironmentVariable("APPIMAGE")))
         m_linuxAppImageIntegrationCheck->setChecked(true);
-    m_hotkeyStatusLabel->setText(tr("Print Screen activated for EShot. Spectacle's other shortcuts were kept."));
+    m_hotkeyStatusLabel->setText(TranslationManager::tr("kdePrintScreenActivated"));
     m_hotkeyStatusLabel->setStyleSheet("color: #4caf50; font-size: 12px;");
 }
 #endif
@@ -511,8 +507,8 @@ void FirstRunWizard::onFinish()
         if (!installed.success) {
             QMessageBox::warning(
                 this, TranslationManager::errInvalidHotkeyTitle(),
-                tr("Could not configure the GNOME capture shortcut: %1")
-                    .arg(installed.error));
+                TranslationManager::tr("gnomeCaptureShortcutFailed")
+                    + installed.error);
             return;
         }
     }
@@ -524,7 +520,7 @@ void FirstRunWizard::onFinish()
 #ifdef Q_OS_LINUX
         if (desktop == LinuxDesktopEnvironment::Kde
             && HotkeyManager::isPlainPrintScreen(modifiers, vkey)) {
-            message = tr("Print Screen is currently assigned to Spectacle. Click \"Use Print Screen for EShot\" above, or choose another shortcut.");
+            message = TranslationManager::tr("kdePrintScreenTakenBySpectacle").arg(TranslationManager::tr("usePrintScreenForEshot"));
         }
 #endif
         QMessageBox::warning(
@@ -630,11 +626,11 @@ void FirstRunWizard::startLinuxDependencyInstaller()
     if (m_linuxExplicitSkip) { markLinuxSetupCompleted(); accept(); return; }
     if (args.isEmpty() && !integrate) { markLinuxSetupCompleted(); accept(); return; }
     const QString script = linuxInstallerPath();
-    if (!QFileInfo::exists(script)) { m_linuxInstallStatus->setText(tr("Installer script was not found. Retry after reinstalling EShot, or skip optional setup.")); return; }
+    if (!QFileInfo::exists(script)) { m_linuxInstallStatus->setText(TranslationManager::tr("installerScriptMissingWizard")); return; }
     m_finishButton->setEnabled(false);
     if (m_skipDepsButton)
         m_skipDepsButton->setEnabled(false);
-    m_linuxInstallStatus->setText(tr("Installing selected dependencies…"));
+    m_linuxInstallStatus->setText(TranslationManager::tr("installingSelectedDependencies"));
     m_linuxInstallerProcess = new QProcess(this);
     QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
     environment.insert(QStringLiteral("ESHOT_LANGUAGE"), TranslationManager::langCode());
@@ -642,13 +638,13 @@ void FirstRunWizard::startLinuxDependencyInstaller()
     const QString program = QStringLiteral("bash");
     const QStringList processArgs = QStringList{script} + args;
     qInfo() << "[FirstRunWizard] Starting optional setup:" << program << processArgs << "packages/options; no credentials are logged";
-    connect(m_linuxInstallerProcess, &QProcess::started, this, [this] { m_linuxInstallStatus->setText(tr("Installing selected optional components…")); });
+    connect(m_linuxInstallerProcess, &QProcess::started, this, [this] { m_linuxInstallStatus->setText(TranslationManager::tr("installingOptionalComponents")); });
     connect(m_linuxInstallerProcess, &QProcess::errorOccurred, this, [this](QProcess::ProcessError) {
         if (!m_linuxInstallerProcess) return;
         m_finishButton->setEnabled(true);
         if (m_skipDepsButton)
             m_skipDepsButton->setEnabled(true);
-        m_linuxInstallStatus->setText(tr("Could not start optional setup. Click Finish to retry, or choose Skip."));
+        m_linuxInstallStatus->setText(TranslationManager::tr("optionalSetupStartFailed"));
         m_linuxInstallerProcess->deleteLater(); m_linuxInstallerProcess = nullptr;
     });
     connect(m_linuxInstallerProcess, &QProcess::finished, this, [this, markLinuxSetupCompleted](int exitCode, QProcess::ExitStatus status) {
@@ -661,12 +657,12 @@ void FirstRunWizard::startLinuxDependencyInstaller()
             const bool integration = m_linuxAppImageIntegrationCheck->isChecked()
                 && shouldOfferAppImageIntegration(qEnvironmentVariable("APPIMAGE"));
             if (!selectedLinuxCapabilitiesAvailable(m_linuxFfmpegCheck->isChecked(), m_linuxOcrCheck->isChecked(), integration)) {
-                m_linuxInstallStatus->setText(tr("Setup finished, but one or more selected capabilities are still unavailable. Click Finish to retry, or choose Skip."));
+                m_linuxInstallStatus->setText(TranslationManager::tr("optionalSetupIncomplete"));
                 m_linuxInstallerProcess->deleteLater(); m_linuxInstallerProcess = nullptr;
                 return;
             }
             markLinuxSetupCompleted();
-            m_linuxInstallStatus->setText(tr("Selected optional components installed successfully."));
+            m_linuxInstallStatus->setText(TranslationManager::tr("optionalSetupSucceeded"));
             const bool restartFromDesktop = integration && scheduleIntegratedAppRestart();
             accept();
             if (restartFromDesktop)
@@ -674,7 +670,7 @@ void FirstRunWizard::startLinuxDependencyInstaller()
             return;
         }
         const QString detail = QString::fromUtf8(m_linuxInstallerProcess->readAllStandardError()).trimmed();
-        m_linuxInstallStatus->setText(tr("Installation failed or authorization was cancelled. Check your package manager, then click Finish to retry, or choose Skip. %1").arg(detail));
+        m_linuxInstallStatus->setText(TranslationManager::tr("optionalSetupFailed").arg(detail));
         m_linuxInstallerProcess->deleteLater(); m_linuxInstallerProcess = nullptr;
     });
     m_linuxInstallerProcess->start(program, processArgs);
@@ -682,43 +678,46 @@ void FirstRunWizard::startLinuxDependencyInstaller()
 
 void FirstRunWizard::showLinuxDependencySetup(QWidget *parent)
 {
-    QDialog dialog(parent); dialog.setWindowTitle(QObject::tr("Linux dependency setup"));
+    QDialog dialog(parent); dialog.setWindowTitle(TranslationManager::tr("linuxDependencySetupTitle"));
     QVBoxLayout layout(&dialog);
-    auto *ffmpeg = new QCheckBox(QObject::tr("FFmpeg (video and GIF recording)")); ffmpeg->setChecked(true);
-    auto *ocr = new QCheckBox(QObject::tr("Tesseract OCR")); ocr->setChecked(true);
-    auto *desktop = new QCheckBox(QObject::tr("Wayland recording and desktop portal packages"));
+    auto *ffmpeg = new QCheckBox(TranslationManager::tr("linuxFeatureFfmpeg")); ffmpeg->setChecked(true);
+    auto *ocr = new QCheckBox(QStringLiteral("Tesseract OCR")); ocr->setChecked(true);
+    auto *desktop = new QCheckBox(TranslationManager::tr("linuxFeaturePortal"));
     desktop->setChecked(defaultLinuxPortalSelection(qEnvironmentVariable("XDG_SESSION_TYPE")));
-    ffmpeg->setToolTip(QObject::tr("Installs the media encoder used to save MP4 videos and GIF recordings."));
-    ocr->setToolTip(QObject::tr("Installs text recognition and the selected OCR language data."));
-    desktop->setToolTip(QObject::tr("Installs PipeWire and desktop portal components for secure screen recording on Wayland."));
+    ffmpeg->setToolTip(TranslationManager::tr("linuxFeatureFfmpegShortTip"));
+    ocr->setToolTip(TranslationManager::tr("linuxFeatureOcrShortTip"));
+    desktop->setToolTip(TranslationManager::tr("linuxFeaturePortalShortTip"));
     const auto defaults = defaultOcrLanguageCodes(QLocale::system().name());
     layout.addWidget(ffmpeg); layout.addWidget(ocr);
     QList<QCheckBox *> languageChecks;
     const auto names = ocrLanguageDisplayNames();
     QGridLayout languageLayout;
     int languageIndex = 0;
-    for (const QString &code : supportedOcrLanguageCodes()) { auto *check = new QCheckBox(names.value(code)); check->setProperty("ocrCode", code); check->setChecked(defaults.contains(code)); check->setToolTip(QObject::tr("OCR language data for recognizing text written in %1.").arg(names.value(code))); languageLayout.addWidget(check, languageIndex / 4, languageIndex % 4); languageChecks << check; ++languageIndex; }
+    for (const QString &code : supportedOcrLanguageCodes()) { auto *check = new QCheckBox(names.value(code)); check->setProperty("ocrCode", code); check->setChecked(defaults.contains(code)); check->setToolTip(TranslationManager::tr("ocrLanguageDataShortTip").arg(names.value(code))); languageLayout.addWidget(check, languageIndex / 4, languageIndex % 4); languageChecks << check; ++languageIndex; }
     layout.addLayout(&languageLayout); layout.addWidget(desktop);
     QObject::connect(ocr, &QCheckBox::toggled, &dialog, [&languageChecks](bool enabled) { for (auto *check : languageChecks) check->setEnabled(enabled); });
-    QHBoxLayout buttons; auto *cancel = new QPushButton(QObject::tr("Cancel")); auto *install = new QPushButton(QObject::tr("Install selected")); buttons.addStretch(); buttons.addWidget(cancel); buttons.addWidget(install); layout.addLayout(&buttons);
+    QHBoxLayout buttons; auto *cancel = new QPushButton(TranslationManager::cancel()); auto *install = new QPushButton(TranslationManager::tr("installSelected")); buttons.addStretch(); buttons.addWidget(cancel); buttons.addWidget(install); layout.addLayout(&buttons);
     QLabel statusLabel; statusLabel.setWordWrap(true); layout.addWidget(&statusLabel);
     QProcess installer(&dialog);
+    QProcessEnvironment installerEnvironment = QProcessEnvironment::systemEnvironment();
+    installerEnvironment.insert(QStringLiteral("ESHOT_LANGUAGE"), TranslationManager::langCode());
+    installer.setProcessEnvironment(installerEnvironment);
     QObject::connect(cancel, &QPushButton::clicked, &dialog, &QDialog::reject);
     QObject::connect(install, &QPushButton::clicked, &dialog, [&] {
         QStringList languages; for (auto *check : languageChecks) if (check->isChecked()) languages << check->property("ocrCode").toString();
         const auto args = linuxDependencyArguments(ffmpeg->isChecked(), ocr->isChecked(), languages, desktop->isChecked());
         if (args.isEmpty()) { dialog.accept(); return; }
-        if (!QFileInfo::exists(linuxInstallerPath())) { statusLabel.setText(QObject::tr("Installer script not found. Reinstall EShot and retry, or cancel.")); return; }
-        install->setEnabled(false); cancel->setEnabled(false); statusLabel.setText(QObject::tr("Installing selected dependencies…"));
+        if (!QFileInfo::exists(linuxInstallerPath())) { statusLabel.setText(TranslationManager::tr("installerScriptMissingDialog")); return; }
+        install->setEnabled(false); cancel->setEnabled(false); statusLabel.setText(TranslationManager::tr("installingSelectedDependencies"));
         installer.start("bash", QStringList{linuxInstallerPath()} + args);
     });
     QObject::connect(&installer, &QProcess::finished, &dialog, [&](int exitCode, QProcess::ExitStatus exitStatus) {
         install->setEnabled(true); cancel->setEnabled(true);
-        if (exitStatus == QProcess::NormalExit && exitCode == 0) { statusLabel.setText(QObject::tr("Selected dependencies installed successfully.")); dialog.accept(); return; }
+        if (exitStatus == QProcess::NormalExit && exitCode == 0) { statusLabel.setText(TranslationManager::tr("dependenciesInstalled")); dialog.accept(); return; }
         const QString detail = QString::fromUtf8(installer.readAllStandardError()).trimmed();
-        statusLabel.setText(QObject::tr("Installation failed or authorization was cancelled. Check your package manager, then retry or cancel. %1").arg(detail));
+        statusLabel.setText(TranslationManager::tr("dependencyInstallFailed").arg(detail));
     });
-    QObject::connect(&installer, &QProcess::errorOccurred, &dialog, [&](QProcess::ProcessError) { install->setEnabled(true); cancel->setEnabled(true); statusLabel.setText(QObject::tr("Could not start the installer. Retry or cancel.")); });
+    QObject::connect(&installer, &QProcess::errorOccurred, &dialog, [&](QProcess::ProcessError) { install->setEnabled(true); cancel->setEnabled(true); statusLabel.setText(TranslationManager::tr("installerStartFailed")); });
     dialog.exec();
 }
 #endif

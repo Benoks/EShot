@@ -1,6 +1,7 @@
 #include "OcrEngine.h"
 #include "OcrLanguageSelector.h"
 #include "ComponentPaths.h"
+#include "TranslationManager.h"
 #include <QProcess>
 #include <QProcessEnvironment>
 #include <QFile>
@@ -140,18 +141,18 @@ OcrEngine::~OcrEngine()
 void OcrEngine::recognize(const QPixmap &pixmap, const QString &languageTag,
                           const QString &preferredLanguageTag) {
     if (pixmap.isNull()) {
-        emit failed(QStringLiteral("empty image"));
+        emit failed(TranslationManager::tr("ocrErrorEmptyImage"));
         return;
     }
 
     if (m_proc && m_proc->state() != QProcess::NotRunning) {
-        emit failed(QStringLiteral("OCR already running"));
+        emit failed(TranslationManager::tr("ocrErrorAlreadyRunning"));
         return;
     }
 
     const QString exe = tesseractPath();
     if (exe.isEmpty() || !QFileInfo::exists(exe)) {
-        emit failed(QStringLiteral("Tesseract OCR engine not found. Please install Tesseract-OCR or place Tesseract in the app folder."));
+        emit failed(TranslationManager::tr("ocrErrorEngineMissing"));
         return;
     }
 
@@ -165,7 +166,7 @@ void OcrEngine::recognize(const QPixmap &pixmap, const QString &languageTag,
     const QString baseName = QStringLiteral("eshot_ocr_%1").arg(unique);
     const QString imagePath = QDir(tempDir).filePath(baseName + QStringLiteral(".png"));
     if (!pixmap.save(imagePath, "PNG")) {
-        emit failed(QStringLiteral("cannot save temp image"));
+        emit failed(TranslationManager::tr("ocrErrorTempImage"));
         return;
     }
     m_pendingFiles.insert(imagePath);
@@ -187,7 +188,7 @@ void OcrEngine::startAutomaticRecognition(const QString &imagePath,
 {
     const QStringList installed = installedOcrLanguageCodes(tessdataDirectory);
     if (installed.isEmpty()) {
-        failAndRemoveImage(imagePath, QStringLiteral("No OCR language packs are installed"));
+        failAndRemoveImage(imagePath, TranslationManager::tr("ocrErrorNoLanguagePacks"));
         return;
     }
 
@@ -256,7 +257,7 @@ void OcrEngine::startRecognitionProcess(const QString &imagePath,
                                         const QString &languageArgument)
 {
     if (languageArgument.trimmed().isEmpty()) {
-        failAndRemoveImage(imagePath, QStringLiteral("No usable OCR language pack is installed"));
+        failAndRemoveImage(imagePath, TranslationManager::tr("ocrErrorNoUsableLanguagePack"));
         return;
     }
 
@@ -291,7 +292,7 @@ void OcrEngine::startRecognitionProcess(const QString &imagePath,
             return;
         }
         if (outText.isEmpty()) {
-            emit failed(QStringLiteral("No text recognized"));
+            emit failed(TranslationManager::ocrEmpty());
             return;
         }
         emit textReady(outText);
@@ -319,7 +320,7 @@ void OcrEngine::startRecognitionProcess(const QString &imagePath,
             m_proc->kill();
         m_proc->deleteLater();
         m_proc = nullptr;
-        failAndRemoveImage(imagePath, QStringLiteral("Cannot start Tesseract: ") + errStr);
+        failAndRemoveImage(imagePath, TranslationManager::tr("ocrErrorCannotStart") + errStr);
     }
 }
 

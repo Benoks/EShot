@@ -11,6 +11,7 @@ private slots:
     void v416TextExistsInEveryLanguage();
     void hotkeyFailureTextExistsInEveryLanguage();
     void linuxRemovalTextExistsInEveryLanguage();
+    void formerlyBilingualTextExistsInEveryLanguage();
 };
 
 void SettingsTranslationTests::issue15SettingsTextExistsInEveryLanguage()
@@ -150,6 +151,153 @@ void SettingsTranslationTests::linuxRemovalTextExistsInEveryLanguage()
                                     .arg(key).arg(language)));
         }
     }
+}
+
+void SettingsTranslationTests::formerlyBilingualTextExistsInEveryLanguage()
+{
+    // Settings tooltips/messages, first-run setup text and OCR failure reasons
+    // that used to be Turkish/English-only or hard-coded English.
+    static const char *const keys[] = {
+        "tipFilenamePattern",
+        "tipNotifyCopy",
+        "tipNotifySave",
+        "tipNotifyGif",
+        "tipNotifyVideo",
+        "tipNotificationOpenFolder",
+        "openLinuxDependencySetup",
+        "tipFileFormat",
+        "tipJpegQuality",
+        "tipCaptureDelay",
+        "tipCloseAfterCopy",
+        "tipInstantCopyAfterSelection",
+        "tipDarkMode",
+        "tipBgOpacity",
+        "tipCrosshair",
+        "tipGifFps",
+        "tipGifMaxSeconds",
+        "tipGifLoop",
+        "tipGifSizePreset",
+        "tipRecordingStartDelay",
+        "tipVideoFps",
+        "tipVideoMaxSeconds",
+        "tipVideoDesktopAudio",
+        "tipVideoDesktopVolume",
+        "tipVideoMicrophone",
+        "tipVideoMicrophoneDevice",
+        "tipVideoMicrophoneVolume",
+        "linuxPrintScreenGnome",
+        "linuxPrintScreenKde",
+        "linuxPrintScreenDesktop",
+        "directCaptureHotkeys",
+        "tipInstantCaptureHotkey",
+        "tipGifCaptureHotkey",
+        "tipVideoCaptureHotkey",
+        "tipWindowCaptureHotkey",
+        "hotkeyWindowLabel",
+        "hotkeyInstantRegionLabel",
+        "hotkeyVideoLabel",
+        "overlayShortcutsGroup",
+        "tipOverlayShortcut",
+        "packageFolderCreateFailed",
+        "unknownNetworkError",
+        "ocrPackageDownloadFailed",
+        "ocrPackageWriteFailed",
+        "ocrPackageMoveFailed",
+        "ocrPackageDeleteFailed",
+        "deleteOcrComponentTitle",
+        "deleteOcrComponentConfirm",
+        "ocrComponentDeleteFailed",
+        "ocrComponentName",
+        "linuxComponentsViaPackageManager",
+        "releasePackageSearching",
+        "releaseInfoFailed",
+        "portableReleaseNotFound",
+        "componentDownloadFileOpenFailed",
+        "statusDownloading",
+        "componentDownloadFailed",
+        "statusInstalling",
+        "ocrComponentInstallFailed",
+        "deleteFfmpegComponentTitle",
+        "deleteFfmpegComponentConfirm",
+        "ffmpegComponentDeleteFailed",
+        "gnomePrintScreenAssigned",
+        "gnomeShortcutFailed",
+        "kdeShortcutSettingsOpenFailed",
+        "gnomeCaptureShortcutFailed",
+        "installedVersion",
+        "ocrErrorEmptyImage",
+        "ocrErrorAlreadyRunning",
+        "ocrErrorEngineMissing",
+        "ocrErrorTempImage",
+        "ocrErrorNoLanguagePacks",
+        "ocrErrorNoUsableLanguagePack",
+        "ocrErrorCannotStart",
+        "desktopUnknown",
+        "desktopUnsupportedWarning",
+        "desktopLimitedWarning",
+        "wizardLanguageTip",
+        "usePrintScreenForEshot",
+        "usePrintScreenKdeTip",
+        "usePrintScreenTip",
+        "linuxOptionalFeatures",
+        "linuxOptionalFeaturesHint",
+        "linuxFeatureFfmpeg",
+        "linuxFeaturePortal",
+        "linuxFeatureAppMenu",
+        "linuxFeatureFfmpegTip",
+        "linuxFeatureOcrTip",
+        "linuxFeaturePortalTip",
+        "linuxFeatureAppMenuTip",
+        "ocrLanguageDataTip",
+        "ocrLanguageDataShortTip",
+        "linuxSkipOptionalSetup",
+        "linuxSkipOptionalSetupTip",
+        "linuxSetupWillBeSkipped",
+        "printScreenDesktopsOnly",
+        "gnomePrintScreenDenied",
+        "gnomePrintScreenChoose",
+        "gnomePrintScreenFailed",
+        "gnomePrintScreenActivated",
+        "kdeShortcutsReadFailed",
+        "kdeShortcutChangeDenied",
+        "kdeSpectacleRestored",
+        "kdeSpectacleRestoreFailed",
+        "kdePrintScreenRegisterFailed",
+        "kdePrintScreenActivated",
+        "kdePrintScreenTakenBySpectacle",
+        "installerScriptMissingWizard",
+        "installingSelectedDependencies",
+        "installingOptionalComponents",
+        "optionalSetupStartFailed",
+        "optionalSetupIncomplete",
+        "optionalSetupSucceeded",
+        "optionalSetupFailed",
+        "linuxDependencySetupTitle",
+        "linuxFeatureFfmpegShortTip",
+        "linuxFeatureOcrShortTip",
+        "linuxFeaturePortalShortTip",
+        "installSelected",
+        "installerScriptMissingDialog",
+        "dependenciesInstalled",
+        "dependencyInstallFailed",
+        "installerStartFailed",
+    };
+
+    for (const char *key : keys) {
+        TranslationManager::setLanguage(TranslationManager::English, false);
+        const QString english = TranslationManager::tr(key);
+        for (int language = 0; language < TranslationManager::LangCount; ++language) {
+            TranslationManager::setLanguage(static_cast<TranslationManager::Language>(language), false);
+            const QString translated = TranslationManager::tr(key);
+            QVERIFY2(!translated.trimmed().isEmpty() && translated != QString::fromLatin1(key),
+                     qPrintable(QStringLiteral("Missing translation for %1 in language %2")
+                                    .arg(QString::fromLatin1(key)).arg(language)));
+            QVERIFY2(english.contains(QStringLiteral("%1")) == translated.contains(QStringLiteral("%1")),
+                     qPrintable(QStringLiteral("Placeholder mismatch for %1 in language %2")
+                                    .arg(QString::fromLatin1(key)).arg(language)));
+        }
+    }
+    TranslationManager::setLanguage(TranslationManager::English, false);
 }
 
 QTEST_APPLESS_MAIN(SettingsTranslationTests)
