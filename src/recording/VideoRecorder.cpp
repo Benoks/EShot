@@ -549,7 +549,8 @@ void VideoRecorder::cancel()
 
 void VideoRecorder::pause()
 {
-    if (!m_recording || m_paused || !m_process)
+    // Suspending the encoder while it finalizes would corrupt the file.
+    if (!m_recording || m_paused || !m_process || m_stopping)
         return;
     m_pauseStartedMs = m_elapsed.elapsed();
     if (setProcessSuspended(true)) {
@@ -578,7 +579,8 @@ void VideoRecorder::onProcessFinished(int exitCode, QProcess::ExitStatus status)
     const bool canceled = m_canceling;
     const bool expectedStop = m_stopping || (m_maxSeconds > 0 && activeElapsedMs() / 1000 >= m_maxSeconds);
     const QString output = m_outputPath;
-    const QString stderrText = m_process ? QString::fromLocal8Bit(m_process->readAll()).trimmed() : QString();
+    const QString stderrText = m_process
+        ? gstFailureReason(QString::fromLocal8Bit(m_process->readAll())) : QString();
 
     stopSystemAudioCapture();
 

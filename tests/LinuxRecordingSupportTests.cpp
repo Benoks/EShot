@@ -5,6 +5,18 @@
 class LinuxRecordingSupportTests : public QObject {
     Q_OBJECT
 private slots:
+    void gstFailureReasonSkipsProgressOutput()
+    {
+        const QString log = QStringLiteral(
+            "Setting pipeline to PAUSED ...\nPipeline is live and does not need PREROLL ...\n"
+            "ERROR: from element /GstPipeline:pipeline0/GstPulseSrc:pulsesrc0: Failed to connect\n"
+            "Additional debug info:\nExecution ended after 0:00:00.1\n");
+        QCOMPARE(gstFailureReason(log), QStringLiteral(
+            "ERROR: from element /GstPipeline:pipeline0/GstPulseSrc:pulsesrc0: Failed to connect"));
+        QCOMPARE(gstFailureReason(QStringLiteral("a\nlast line\n")), QStringLiteral("last line"));
+        QVERIFY(gstFailureReason(QString()).isEmpty());
+    }
+
     void usesStablePipeWireSerialWhenAvailable()
     {
         QCOMPARE(pipeWireSourcePath(77, 0), QStringLiteral("path=77"));

@@ -3,6 +3,7 @@
 
 #include <QObject>
 #include <QString>
+#include <functional>
 
 class QFile;
 class QNetworkAccessManager;
@@ -21,6 +22,9 @@ public:
     QString statusText() const { return m_statusText; }
     bool isSilentUpdate() const { return m_silentUpdate; }
 
+    // A silent update restarts EShot; it waits while this returns true
+    // (for example during a recording).
+    void setBusyCheck(std::function<bool()> busy) { m_busyCheck = std::move(busy); }
     void checkForUpdates(bool manual = false);
     void installUpdate(bool silent = false);
 
@@ -53,6 +57,7 @@ private:
     bool m_installing = false;
     bool m_installAfterCheck = false;
     bool m_silentUpdate = false;
+    std::function<bool()> m_busyCheck;
     bool m_updateAvailable = false;
     QString m_latestVersion;
     QString m_releaseUrl;

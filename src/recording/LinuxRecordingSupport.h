@@ -22,6 +22,9 @@ PortalCropGeometry portalCropGeometry(const QRect &captureRect,
                                       const QSize &requestedOutputSize);
 QSize evenRecordingSize(const QSize &size);
 QString preferredGstAacEncoder(const QStringList &availableElements);
+// gst-launch prints progress ("Setting pipeline to PAUSED ...") before the
+// real error; returns the ERROR lines, or the last line when there are none.
+QString gstFailureReason(const QString &log);
 QString discoverGstAacEncoder();
 QStringList waylandRecordingAudioArguments(bool desktopEnabled, int desktopVolume,
                                            const QString &desktopDevice,

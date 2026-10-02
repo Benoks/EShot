@@ -125,7 +125,10 @@ void UpdateManager::checkForUpdates(bool manual)
             reply->deleteLater();
             m_installAfterCheck = false;
             setStatus(TranslationManager::updateStatusFailed(msg));
-            emit failed(msg);
+            // The automatic check runs at login, often before the network
+            // is up; only a check the user started reports the error.
+            if (manual)
+                emit failed(msg);
             return;
         }
 
@@ -440,6 +443,10 @@ void UpdateManager::finishDownload()
 
 void UpdateManager::launchInstaller(const QString &installerPath)
 {
+    if (m_silentUpdate && m_busyCheck && m_busyCheck()) {
+        QTimer::singleShot(30000, this, [this, installerPath]() { launchInstaller(installerPath); });
+        return;
+    }
     m_installing = true;
     setStatus(TranslationManager::updateStatusInstalling());
 

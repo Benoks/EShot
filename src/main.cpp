@@ -159,6 +159,14 @@ void prepareKWinScreenshotPermission()
         QStringLiteral("applications"));
     QString desktopPath;
     QString error;
+    const QString entryPath = QDir(applicationsDirectory).filePath(
+        QStringLiteral("io.github.benoks.EShot.KWinScreenshot.desktop"));
+    QByteArray previousEntry;
+    {
+        QFile previous(entryPath);
+        if (previous.open(QIODevice::ReadOnly))
+            previousEntry = previous.readAll();
+    }
     if (!LinuxScreenshotPolicy::installKWinPermissionDesktopEntry(
             applicationsDirectory, executablePath, &desktopPath, &error)) {
         qWarning() << "[KWinPermission] could not install restricted-interface entry:"
@@ -174,12 +182,28 @@ void prepareKWinScreenshotPermission()
         return;
     }
 
+    // An unchanged entry is already in the service cache (installed builds;
+    // an AppImage's mount path changes on every launch).
+    {
+        QFile current(desktopPath.isEmpty() ? entryPath : desktopPath);
+        if (!previousEntry.isEmpty() && current.open(QIODevice::ReadOnly)
+            && current.readAll() == previousEntry) {
+            return;
+        }
+    }
+
     // KWin checks the service cache before allowing ScreenShot2 access. Wait
-    // for this small, one-time rebuild so the very first capture is not raced
-    // against authorization setup.
+    // for this small rebuild so the very first capture is not raced against
+    // authorization setup, but never block startup on a hung rebuild.
     QElapsedTimer timer;
     timer.start();
-    const int exitCode = QProcess::execute(cacheBuilder, {});
+    QProcess builder;
+    builder.start(cacheBuilder, {});
+    const bool finished = builder.waitForStarted(3000) && builder.waitForFinished(10000);
+    if (!finished)
+        builder.kill();
+    const int exitCode = finished && builder.exitStatus() == QProcess::NormalExit
+        ? builder.exitCode() : -1;
     if (exitCode != 0) {
         qWarning() << "[KWinPermission] cache refresh failed with exit code="
                    << exitCode << "desktop=" << desktopPath;
@@ -394,7 +418,43 @@ public slots:
         }
     }
 
-    void onQuitAction() { qApp->quit(); }
+    // Quitting kills the recorder processes, which leaves an unplayable file.
+    // Stop and save a running recording first, then quit.
+    void onQuitAction()
+    {
+        QObject *recorder = nullptr;
+        if (m_videoRecorder && m_videoRecorder->isRecording())
+            recorder = m_videoRecorder;
+        else if (m_screenRecorder && m_screenRecorder->isRecording())
+            recorder = m_screenRecorder;
+        if (!recorder) {
+            qApp->quit();
+            return;
+        }
+        if (m_quitAfterRecording)
+            return;
+        m_quitAfterRecording = true;
+        const auto quitSoon = []() { QTimer::singleShot(1500, qApp, &QCoreApplication::quit); };
+        if (auto *video = qobject_cast<VideoRecorder *>(recorder)) {
+            connect(video, &VideoRecorder::recordingStopped, qApp, quitSoon, Qt::QueuedConnection);
+            connect(video, &VideoRecorder::recordingFailed, qApp, quitSoon, Qt::QueuedConnection);
+            if (!video->isFinalizing())
+                video->stop();
+        } else if (auto *gif = qobject_cast<ScreenRecorder *>(recorder)) {
+            connect(gif, &ScreenRecorder::recordingStopped, qApp, quitSoon, Qt::QueuedConnection);
+            connect(gif, &ScreenRecorder::recordingFailed, qApp, quitSoon, Qt::QueuedConnection);
+            if (!gif->isFinalizing())
+                gif->stop();
+        }
+        // Never hang on a stuck encoder; GIF conversion can take a while.
+        QTimer::singleShot(120000, qApp, &QCoreApplication::quit);
+    }
+
+    bool isRecordingActive() const
+    {
+        return (m_videoRecorder && m_videoRecorder->isRecording())
+            || (m_screenRecorder && m_screenRecorder->isRecording());
+    }
 
     void onNotificationClicked()
     {
@@ -473,7 +533,10 @@ public slots:
         }
         if (dlg.exec() == QDialog::Accepted) {
             loadSettings();
-            if (!m_updateAvailable)
+            // Applies a changed black-icon setting to either icon variant.
+            if (m_updateAvailable)
+                setTrayIconUpdate();
+            else
                 setTrayIconNormal();
             rebuildTrayMenu();
             if (m_overlay) m_overlay->refreshUI();
@@ -758,6 +821,7 @@ public slots:
             connect(m_recordingIndicator, &RecordingIndicator::cancelRequested, this, [this]() {
                 if (m_screenRecorder && m_screenRecorder->isRecording())
                     m_screenRecorder->cancel();
+                QTimer::singleShot(0, this, &EShotApp::rebuildTrayMenu);
                 if (m_recordingIndicator) {
                     m_recordingIndicator->stop();
                     m_recordingIndicator->deleteLater();
@@ -834,6 +898,7 @@ public slots:
                 if (m_videoRecorder && m_videoRecorder->isRecording())
                     m_videoRecorder->cancel();
                 if (m_recordingIndicator) { m_recordingIndicator->stop(); m_recordingIndicator->deleteLater(); m_recordingIndicator = nullptr; }
+                QTimer::singleShot(0, this, &EShotApp::rebuildTrayMenu);
             });
             m_recordingIndicator->startCaptureSafePresentation();
         }
@@ -879,6 +944,10 @@ private:
     void setupUpdater()
     {
         m_updateManager = new UpdateManager(this);
+        m_updateManager->setBusyCheck([this]() {
+            return isRecordingActive() || m_recordingStartPending
+                || (m_overlay && m_overlay->isVisible());
+        });
         connect(m_updateManager, &UpdateManager::updateCheckFinished, this,
                 [this](bool available, const QString &version) {
             m_updateAvailable = available;
@@ -964,6 +1033,8 @@ private:
                     m_videoRecorder->cancel();
                 else if (m_screenRecorder && m_screenRecorder->isRecording())
                     m_screenRecorder->cancel();
+                // Deferred: this action belongs to the menu being rebuilt.
+                QTimer::singleShot(0, this, &EShotApp::rebuildTrayMenu);
                 if (m_recordingIndicator) {
                     m_recordingIndicator->stop();
                     m_recordingIndicator->deleteLater();
@@ -1094,6 +1165,7 @@ private:
                 m_screenRecorder->cancel();
                 if (m_recordingIndicator) { m_recordingIndicator->stop(); m_recordingIndicator->deleteLater(); m_recordingIndicator = nullptr; }
             }
+            QTimer::singleShot(0, this, &EShotApp::rebuildTrayMenu);
         });
     }
 
@@ -1194,6 +1266,7 @@ private:
     ScreenRecorder *m_screenRecorder = nullptr;
     VideoRecorder *m_videoRecorder = nullptr;
     bool m_recordingStartPending = false;
+    bool m_quitAfterRecording = false;
     QPointer<SettingsDialog> m_settingsDialog;
     QElapsedTimer m_recordingStartTimer;
     RecordingIndicator *m_recordingIndicator = nullptr;
@@ -1677,6 +1750,7 @@ int main(int argc, char *argv[])
             // not permanently change the configured save directory.
             QSettings s("EShot", "EShot");
             s.setValue("cliSaveFullPath", fi.absoluteFilePath());
+            s.setValue("cliSaveRequestedAt", QDateTime::currentSecsSinceEpoch());
         }
     }
     if (parser.isSet(captureOption) || !cliSavePath.isEmpty()) {

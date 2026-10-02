@@ -160,8 +160,21 @@ SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent)
 
 SettingsDialog::~SettingsDialog()
 {
-    if (m_packageReply)
+    // abort() emits finished() right away; its handlers would show an
+    // "Operation canceled" error on this half-destroyed dialog.
+    if (m_packageReply) {
+        m_packageReply->disconnect(this);
         m_packageReply->abort();
+    }
+    // Killing the installer between removing the old component and copying
+    // the new one would leave FFmpeg/Tesseract missing. Let it finish.
+    if (m_packageExtractProcess && m_packageExtractProcess->state() != QProcess::NotRunning) {
+        QProcess *process = m_packageExtractProcess;
+        m_packageExtractProcess = nullptr;
+        process->disconnect(this);
+        process->setParent(nullptr);
+        connect(process, &QProcess::finished, process, &QObject::deleteLater);
+    }
     if (m_packageDownloadFile) {
         m_packageDownloadFile->close();
         delete m_packageDownloadFile;
@@ -2529,8 +2542,22 @@ void SettingsDialog::onReset()
     if (QMessageBox::question(this, TranslationManager::resetTitle(),
             TranslationManager::resetConfirm(),
             QMessageBox::Yes | QMessageBox::No, QMessageBox::No) == QMessageBox::Yes) {
+        // The elevated start task lives outside QSettings; remove it too, or
+        // EShot keeps starting elevated while Settings shows the option off.
+        if (WindowsElevatedStartup::isSupported() && m_settings->value("runElevated", false).toBool())
+            WindowsElevatedStartup::configure(false, false);
+        // Reset the preferences, not the first-run setup state.
+        QHash<QString, QVariant> keep;
+        for (const QString &key : {QStringLiteral("wizardCompleted"),
+                                   QStringLiteral("linuxSetupCompleted")}) {
+            if (m_settings->contains(key))
+                keep.insert(key, m_settings->value(key));
+        }
         m_settings->clear();
+        for (auto it = keep.cbegin(); it != keep.cend(); ++it)
+            m_settings->setValue(it.key(), it.value());
         m_settings->sync();
+        m_loadedRunElevated = false;
         // clear() wiped the hotkey config; re-register every group with its
         // defaults so the live keys match what the dialog now shows.
         HotkeyManager::instance().reRegisterCaptureHotkey(0, VK_SNAPSHOT);

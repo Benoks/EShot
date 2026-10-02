@@ -28,6 +28,8 @@
 
 #if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
 #include <fcntl.h>
+#include <csignal>
+#include <sys/prctl.h>
 #endif
 
 namespace {
@@ -251,7 +253,8 @@ void ScreenRecorder::cancel()
 
 void ScreenRecorder::pause()
 {
-    if (!m_recording || m_paused)
+    // Suspending the encoder while it finalizes would corrupt the file.
+    if (!m_recording || m_paused || m_stopping)
         return;
     if (m_portalRecording && !setPortalProcessSuspended(true))
         return;
@@ -328,7 +331,8 @@ void ScreenRecorder::onPortalProcessFinished(int exitCode, QProcess::ExitStatus 
 {
     if (!m_portalRecording && !m_process)
         return;
-    const QString stderrText = m_process ? QString::fromLocal8Bit(m_process->readAll()).trimmed() : QString();
+    const QString stderrText = m_process
+        ? gstFailureReason(QString::fromLocal8Bit(m_process->readAll())) : QString();
     const QString output = m_outputPath;
     const bool expectedStop = m_stopping;
 
@@ -464,6 +468,12 @@ bool ScreenRecorder::startWaylandPortalRecording(const QRect &captureRect)
         emit recordingFailed(QStringLiteral("gstreamer not found"));
         return false;
     }
+    // The portal recording is converted to GIF with ffmpeg afterwards; check
+    // now instead of discarding the finished recording.
+    if (ffmpegPath().isEmpty()) {
+        emit recordingFailed(QStringLiteral("ffmpeg not found"));
+        return false;
+    }
     if (!LinuxPortalScreenCast::isAvailable()) {
         emit recordingFailed(QStringLiteral("Wayland ScreenCast portal is not available"));
         return false;
@@ -545,6 +555,8 @@ bool ScreenRecorder::startWaylandPortalRecording(const QRect &captureRect)
     m_process->setProgram(gst);
     m_process->setArguments(args);
     m_process->setProcessChannelMode(QProcess::MergedChannels);
+    // Do not leave gst-launch encoding if EShot crashes or is killed.
+    m_process->setChildProcessModifier([]() { prctl(PR_SET_PDEATHSIG, SIGINT); });
     if (!configurePipeWireRemote(m_process, pipewireFd)) {
         if (m_process) { m_process->deleteLater(); m_process = nullptr; }
         closePortalSession();
@@ -650,7 +662,7 @@ QString ScreenRecorder::gstLaunchPath() const
 
 QString ScreenRecorder::ffmpegPath() const
 {
-    return QStandardPaths::findExecutable(QStringLiteral("ffmpeg"));
+    return ComponentPaths::ffmpegPath();
 }
 
 void ScreenRecorder::closePortalSession()

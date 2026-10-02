@@ -35,6 +35,13 @@ QString buildLinuxUpdateScript(qint64 processId,
     script += QStringLiteral("mv -f -- \"$staged\" \"$current\"\n");
     script += QStringLiteral("chmod 0755 -- \"$current\"\n");
     script += QStringLiteral("sync\n");
+    // The backup is only needed until the new file is in place.
+    script += QStringLiteral("rm -f -- \"$current.bak\"\n");
+    // Refresh the menu entry and icons of an integrated copy; a release may
+    // change them. Never integrate a copy the user keeps elsewhere.
+    script += QStringLiteral("if [ \"$current\" = \"${HOME:-}/.local/opt/EShot/EShot.AppImage\" ]; then\n");
+    script += QStringLiteral("  \"$current\" --integrate-only >/dev/null 2>&1 || true\n");
+    script += QStringLiteral("fi\n");
     script += QStringLiteral("\"$current\" --silent >/dev/null 2>&1 &\n");
     script += QStringLiteral("rm -f -- \"$download\" \"$0\"\n");
     return script;

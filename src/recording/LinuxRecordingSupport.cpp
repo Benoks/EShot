@@ -59,6 +59,21 @@ QSize evenRecordingSize(const QSize &size)
                  qMax(8, size.height() - (size.height() % 2)));
 }
 
+QString gstFailureReason(const QString &log)
+{
+    QStringList errors;
+    QString last;
+    for (const QString &rawLine : log.split(QLatin1Char('\n'))) {
+        const QString line = rawLine.trimmed();
+        if (line.isEmpty())
+            continue;
+        last = line;
+        if (line.startsWith(QStringLiteral("ERROR")))
+            errors.append(line);
+    }
+    return errors.isEmpty() ? last : errors.join(QLatin1Char('\n'));
+}
+
 QString preferredGstAacEncoder(const QStringList &availableElements)
 {
     const QStringList preference = {QStringLiteral("fdkaacenc"), QStringLiteral("avenc_aac"),
