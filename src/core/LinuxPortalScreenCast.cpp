@@ -319,7 +319,7 @@ bool LinuxPortalScreenCast::callAndWait(QDBusInterface &portal,
 #endif
 }
 
-QSharedPointer<int> LinuxPortalScreenCast::openPipeWireRemote(const QString &sessionHandle) const
+QSharedPointer<int> LinuxPortalScreenCast::openPipeWireRemote(const QString &sessionHandle)
 {
 #if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
     if (sessionHandle.isEmpty())

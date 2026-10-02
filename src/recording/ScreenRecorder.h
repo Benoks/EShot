@@ -10,9 +10,11 @@
 #include <QProcess>
 #include <QSize>
 #include <QString>
+#include <QStringList>
 #include <QDateTime>
 #include <QElapsedTimer>
 
+#include "LinuxRecordingSupport.h"
 #include "RecordingTimeline.h"
 
 #ifdef Q_OS_WIN
@@ -62,6 +64,8 @@ private slots:
     void onPortalConversionFinished(int exitCode, QProcess::ExitStatus status);
 
 private:
+    enum class ConversionStage { Concat, Palette, Encode };
+
     void finishRecording();
     bool flushPendingFrame(int delayCs);
     int finalFrameDelayCs();
@@ -78,7 +82,14 @@ private:
     bool startPortalVideoToGifConversion();
     void cleanupPortalConversion();
     void closePortalSession();
-    bool setPortalProcessSuspended(bool suspended);
+    QStringList portalCaptureArguments(int pipewireFd, const QString &outputPath) const;
+    bool startPortalSegment(int pipewireFd, const QString &outputPath, QString *error);
+    bool startNextPortalSegment(QString *error);
+    void requestPortalProcessStop();
+    void finishPortalRecording();
+    void startPortalConversionStage(ConversionStage stage, const QStringList &arguments, int timeoutMs);
+    void failPortalConversion(const QString &reason);
+    void removePortalIntermediates();
     qint64 nowMs() const;
 
     GifEncoder *m_encoder = nullptr;
@@ -103,6 +114,21 @@ private:
     qint64 m_lastFrameMs = -1;
     QString m_outputPath;
     QString m_portalVideoPath;
+    // Wayland portal recordings write one file per active span (see
+    // RecordingSegments.h); m_portalSegmentPath is the one being written.
+    QStringList m_portalSegments;
+    QString m_portalSegmentPath;
+    QString m_portalSegmentStamp;
+    QString m_portalConcatListPath;
+    QString m_portalPalettePath;
+    QString m_gstPath;
+    QString m_portalSourcePath;
+    PortalCropGeometry m_portalCrop;
+    QString m_conversionFfmpeg;
+    ConversionStage m_conversionStage = ConversionStage::Encode;
+    int m_portalSegmentCount = 0;
+    bool m_portalResumePending = false;
+    qint64 m_recordedMs = 0;
     int m_loopCount = 0;
     QString m_portalSessionHandle;
     LinuxPortalScreenCast::Stream m_preparedStream;

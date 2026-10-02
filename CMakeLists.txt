@@ -94,6 +94,7 @@ set(SOURCES
     src/recording/RecordingControlLayout.cpp
     src/recording/RecordingTimeline.cpp
     src/recording/RecordingFinalizationPolicy.cpp
+    src/recording/RecordingSegments.cpp
     src/recording/ScreenRecorder.cpp
     src/recording/AudioDevices.cpp
     src/recording/VideoRecorder.cpp
@@ -170,6 +171,7 @@ set(HEADERS
     src/recording/RecordingControlLayout.h
     src/recording/RecordingTimeline.h
     src/recording/RecordingFinalizationPolicy.h
+    src/recording/RecordingSegments.h
     src/recording/ScreenRecorder.h
     src/recording/AudioDevices.h
     src/recording/VideoRecorder.h
@@ -466,6 +468,27 @@ if(BUILD_TESTING)
             src/recording/RecordingFinalizationPolicy.h
         LIBS Qt6::Core
     )
+
+    eshot_add_test(eshot_recording_segments_tests recording_segments
+        SOURCES
+            tests/RecordingSegmentsTests.cpp
+            src/recording/RecordingSegments.cpp
+            src/recording/RecordingSegments.h
+        LIBS Qt6::Core
+    )
+
+    eshot_add_test(eshot_audio_devices_tests audio_devices
+        SOURCES
+            tests/AudioDevicesTests.cpp
+            src/recording/AudioDevices.cpp
+            src/recording/AudioDevices.h
+            src/recording/LinuxRecordingSupport.cpp
+            src/recording/LinuxRecordingSupport.h
+        LIBS Qt6::Core
+    )
+    if(WIN32)
+        target_link_libraries(eshot_audio_devices_tests PRIVATE Ole32 OleAut32)
+    endif()
 
     eshot_add_test(eshot_settings_layout_policy_tests settings_layout_policy
         SOURCES

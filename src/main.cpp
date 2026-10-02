@@ -962,10 +962,18 @@ public slots:
     {
         m_recordingStartPending = false;
         if (m_recordingIndicator) { m_recordingIndicator->stop(); m_recordingIndicator->deleteLater(); m_recordingIndicator = nullptr; }
+        // Warnings (e.g. a dropped audio source) are shown even when video
+        // notifications are off: the saved file differs from what was asked.
+        const QStringList warnings = m_videoRecorder ? m_videoRecorder->warnings() : QStringList();
+        const QString warningText = warnings.join(QStringLiteral("\n"));
         if (m_trayIcon && m_showNotifications && m_notifyVideo) {
             QFileInfo fi(outputPath);
-            showSuccessNotification(TranslationManager::videoSaved() + QStringLiteral("\n") + QDir::toNativeSeparators(fi.absoluteFilePath()),
-                                    fi.absoluteFilePath(), 5000);
+            QString message = TranslationManager::videoSaved() + QStringLiteral("\n") + QDir::toNativeSeparators(fi.absoluteFilePath());
+            if (!warningText.isEmpty())
+                message += QStringLiteral("\n") + warningText;
+            showSuccessNotification(message, fi.absoluteFilePath(), warningText.isEmpty() ? 5000 : 10000);
+        } else if (!warningText.isEmpty()) {
+            showFailureNotification(TranslationManager::videoSaved() + QStringLiteral("\n") + warningText, 10000);
         }
         rebuildTrayMenu();
     }

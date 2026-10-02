@@ -40,6 +40,9 @@ public:
                                const QString &persistenceId = QString());
     static void closeSession(const QString &sessionHandle);
     static void clearRestoreToken(const QString &persistenceId);
+    // A fresh PipeWire connection to an already started session, e.g. for
+    // the encoder that continues a paused recording.
+    static QSharedPointer<int> openPipeWireRemote(const QString &sessionHandle);
 
 private slots:
     void onPortalResponse(uint response, const QVariantMap &results);
@@ -51,7 +54,6 @@ private:
                      const QList<QVariant> &arguments,
                      const QString &handleToken,
                      int timeoutMs);
-    QSharedPointer<int> openPipeWireRemote(const QString &sessionHandle) const;
     QString objectPathString(const QVariant &value) const;
     Stream firstStreamFromResults(const QVariantMap &results) const;
 

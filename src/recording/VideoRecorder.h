@@ -2,12 +2,14 @@
 #define VIDEORECORDER_H
 
 #include "core/LinuxPortalScreenCast.h"
+#include "LinuxRecordingSupport.h"
 
 #include <QObject>
 #include <QElapsedTimer>
 #include <QProcess>
 #include <QRect>
 #include <QString>
+#include <QStringList>
 #include <QTimer>
 #include <atomic>
 #include <thread>
@@ -21,9 +23,12 @@ public:
 
     bool isRecording() const { return m_recording || isFinalizing(); }
     bool isPaused() const { return m_paused; }
-    bool isFinalizing() const { return m_muxProcess != nullptr; }
+    bool isFinalizing() const { return m_muxProcess != nullptr || m_concatProcess != nullptr; }
     QRect captureRect() const { return m_displayRect.isValid() ? m_displayRect : m_captureRect; }
     int maxSeconds() const { return m_maxSeconds; }
+    // Problems that did not stop the recording but changed what was saved
+    // (e.g. a dropped audio source); valid once recordingStopped() is emitted.
+    QStringList warnings() const { return m_warnings; }
 
     void start(const QRect &captureRect, int fps, int maxSeconds, int crf,
                bool desktopAudioEnabled, int desktopVolume,
@@ -53,17 +58,30 @@ signals:
 private slots:
     void onProcessFinished(int exitCode, QProcess::ExitStatus status);
     void onMuxFinished(int exitCode, QProcess::ExitStatus status);
+    void onConcatFinished(int exitCode, QProcess::ExitStatus status);
 
 private:
     QString ffmpegPath() const;
     QString makeDefaultOutputPath() const;
     qint64 activeElapsedMs() const;
     void startCountdown();
-    bool setProcessSuspended(bool suspended);
+    QString segmentTargetPath() const;
+    QStringList ffmpegCaptureArguments(const QString &outputPath) const;
+    QStringList gstCaptureArguments(int pipewireFd, const QString &outputPath) const;
+    bool startFfmpegSegment(const QString &outputPath, QString *error);
+    bool startGstSegment(int pipewireFd, const QString &outputPath, QString *error);
+    bool startNextSegment(QString *error);
+    void requestEncoderStop();
+    void finishRecording();
+    void finishVideo();
+    bool startSegmentConcat();
+    void keepSegmentsAfterFailedConcat(const QString &reason);
+    void cleanupConcatProcess();
     void cleanupProcess();
     void stopSystemAudioCapture();
     void removeRecordingFiles();
     bool startSystemAudioMux();
+    void useVideoWithoutSystemAudio(const QString &warning);
     void cleanupMuxProcess();
     bool startWaylandPortalRecording(const QRect &captureRect);
     QString gstLaunchPath() const;
@@ -72,6 +90,8 @@ private:
     QProcess *m_process = nullptr;
     QProcess *m_muxProcess = nullptr;
     QTimer *m_muxTimeout = nullptr;
+    QProcess *m_concatProcess = nullptr;
+    QTimer *m_concatTimeout = nullptr;
     QTimer *m_countdownTimer = nullptr;
     QRect m_captureRect;
     QRect m_displayRect;
@@ -83,6 +103,7 @@ private:
     QElapsedTimer m_elapsed;
     qint64 m_pausedMs = 0;
     qint64 m_pauseStartedMs = 0;
+    qint64 m_recordedMs = 0;
     int m_fps = 30;
     int m_maxSeconds = 0;
     int m_crf = 24;
@@ -95,12 +116,27 @@ private:
     QString m_microphoneDevice;
     QString m_portalSessionHandle;
     LinuxPortalScreenCast::Stream m_preparedStream;
+    QString m_gstPath;
+    QString m_portalSourcePath;
+    PortalCropGeometry m_portalCrop;
+    QString m_gstAacEncoder;
+    bool m_gstHasAudio = false;
+    // One file per active span; m_segmentPath is the one being written.
+    QStringList m_segmentPaths;
+    QString m_segmentPath;
+    QString m_segmentDirectory;
+    QString m_segmentStamp;
+    QString m_concatListPath;
+    int m_segmentCount = 0;
+    QStringList m_warnings;
     int m_lastElapsedSeconds = -1;
     bool m_recording = false;
     bool m_paused = false;
+    bool m_resumePending = false;
     bool m_stopping = false;
     bool m_canceling = false;
     std::atomic_bool m_audioStop { false };
+    std::atomic_bool m_audioPaused { false };
     std::thread m_audioThread;
 };
 

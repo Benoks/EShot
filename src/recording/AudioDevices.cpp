@@ -1,6 +1,7 @@
 #include "AudioDevices.h"
 #include "LinuxRecordingSupport.h"
 
+#include <QHash>
 #include <QProcess>
 #include <QRegularExpression>
 
@@ -92,25 +93,40 @@ QList<QPair<QString, QString>> microphoneAudioDevices()
 #endif
 }
 
+QStringList parseDshowAudioDevices(const QString &listDevicesOutput)
+{
+    QStringList devices;
+    QRegularExpression re(QStringLiteral("\"([^\"]+)\"\\s*\\(audio\\)"));
+    auto it = re.globalMatch(listDevicesOutput);
+    while (it.hasNext()) {
+        const QString name = it.next().captured(1).trimmed();
+        if (!name.isEmpty() && !devices.contains(name))
+            devices.append(name);
+    }
+    return devices;
+}
+
 QStringList dshowAudioDevices(const QString &ffmpegPath)
 {
+    // DirectShow enumeration can take seconds while drivers wake up; a short
+    // limit returned no devices and silently dropped the default microphone.
+    // Keep the last successful list for runs that still come back empty.
+    static QHash<QString, QStringList> lastDevices;
+
     QProcess process;
     process.setProgram(ffmpegPath);
     process.setArguments({QStringLiteral("-hide_banner"), QStringLiteral("-list_devices"), QStringLiteral("true"),
                           QStringLiteral("-f"), QStringLiteral("dshow"), QStringLiteral("-i"), QStringLiteral("dummy")});
     process.setProcessChannelMode(QProcess::MergedChannels);
     process.start();
-    if (!process.waitForFinished(1800))
+    if (!process.waitForFinished(6000)) {
         process.kill();
-
-    const QString output = QString::fromLocal8Bit(process.readAll());
-    QStringList devices;
-    QRegularExpression re(QStringLiteral("\"([^\"]+)\"\\s*\\(audio\\)"));
-    auto it = re.globalMatch(output);
-    while (it.hasNext()) {
-        const QString name = it.next().captured(1).trimmed();
-        if (!name.isEmpty() && !devices.contains(name))
-            devices.append(name);
+        process.waitForFinished(1000);
     }
+
+    const QStringList devices = parseDshowAudioDevices(QString::fromLocal8Bit(process.readAll()));
+    if (devices.isEmpty())
+        return lastDevices.value(ffmpegPath);
+    lastDevices.insert(ffmpegPath, devices);
     return devices;
 }
