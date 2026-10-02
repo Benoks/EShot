@@ -133,12 +133,7 @@ void FirstRunWizard::setupUi()
         mainLayout->addWidget(supportWarning);
     }
     if (isAppImageManagedExternally(qEnvironmentVariable("APPIMAGE"), QDir::homePath())) {
-        auto *managerWarning = new QLabel(tr(
-            "<b>This AppImage seems to be managed by an AppImage manager</b><br>"
-            "(Gear Lever, AppImageLauncher or similar). EShot sets itself up: keep "
-            "<i>Add EShot to the application menu</i> selected below, then remove EShot "
-            "from that manager. Otherwise you get two menu entries and the other copy "
-            "does not receive EShot updates."));
+        auto *managerWarning = new QLabel(TranslationManager::tr("appImageManagerWarning"));
         managerWarning->setWordWrap(true);
         managerWarning->setStyleSheet(
             "background: rgba(255, 193, 7, 0.14); color: #ffd166; "
