@@ -44,6 +44,19 @@ private slots:
         QCOMPARE(countNewerStableReleases(releases, QStringLiteral("4.2.0")), 1);
     }
 
+    void comparesMultiDigitVersionsNumerically()
+    {
+        // As text, "4.10.0" would sort before "4.9.9".
+        const QJsonArray releases{
+            release(QStringLiteral("v4.10.1")),
+            release(QStringLiteral("v4.10.0")),
+            release(QStringLiteral("v4.9.9"))};
+
+        QCOMPARE(countNewerStableReleases(releases, QStringLiteral("4.9.9")), 2);
+        QCOMPARE(countNewerStableReleases(releases, QStringLiteral("4.10.0")), 1);
+        QCOMPARE(countNewerStableReleases(releases, QStringLiteral("4.10.1")), 0);
+    }
+
     void requiresTwoMissedReleasesAndAManagedInstall()
     {
         QVERIFY(!shouldSilentlyInstallUpdate(1, true));
