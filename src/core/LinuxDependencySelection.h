@@ -14,3 +14,7 @@ QList<int> kdeShortcutsAfterEshotPrintScreenRegistration(const QList<int> &origi
                                                           bool eshotRegistered);
 bool defaultLinuxPortalSelection(const QString &sessionType);
 bool shouldOfferAppImageIntegration(const QString &appImagePath);
+// True when the AppImage runs from a folder used by AppImage managers such as
+// Gear Lever (~/AppImages) or AppImageLauncher (~/Applications). EShot sets
+// itself up, so those copies add a second menu entry and miss its updates.
+bool isAppImageManagedExternally(const QString &appImagePath, const QString &homePath);

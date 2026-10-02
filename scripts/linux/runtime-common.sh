@@ -87,7 +87,9 @@ eshot_runtime_packages() {
       local portal="xdg-desktop-portal-gtk"
       [[ "${backend}" == "kde" ]] && portal="xdg-desktop-portal-kde"
       [[ "${backend}" == "gnome" ]] && portal="xdg-desktop-portal-gnome"
-      printf '%s\n' "ffmpeg tesseract tesseract-langpack-eng pipewire wireplumber pipewire-gstreamer gstreamer1-plugins-base gstreamer1-plugins-good gstreamer1-plugins-bad-free gstreamer1-plugins-ugly-free gstreamer1-libav libsecret xdg-desktop-portal ${portal}"
+      # Fedora ships ffmpeg-free and the libav plugin itself; x264enc (MP4
+      # recording) is only in RPM Fusion's gstreamer1-plugins-ugly.
+      printf '%s\n' "ffmpeg-free tesseract tesseract-langpack-eng pipewire wireplumber pipewire-gstreamer gstreamer1-plugins-base gstreamer1-plugins-good gstreamer1-plugins-bad-free gstreamer1-plugins-ugly-free gstreamer1-plugins-ugly gstreamer1-plugin-libav libsecret xdg-desktop-portal ${portal}"
       ;;
     *) return 1 ;;
   esac
@@ -101,7 +103,15 @@ eshot_supported_ocr_language() {
 eshot_selected_packages() {
   local manager="$1" ffmpeg="$2" ocr="$3" languages="${4:-}" desktop="${5:-0}"
   local packages=() code portal backend
-  [[ "${ffmpeg}" == 1 ]] && packages+=(ffmpeg)
+  if [[ "${ffmpeg}" == 1 ]]; then
+    # Fedora's own repositories have ffmpeg-free; RPM Fusion's ffmpeg
+    # conflicts with it, so keep whichever ffmpeg is already installed.
+    if [[ "${manager}" != dnf ]]; then
+      packages+=(ffmpeg)
+    elif ! command -v ffmpeg >/dev/null 2>&1; then
+      packages+=(ffmpeg-free)
+    fi
+  fi
   if [[ "${ocr}" == 1 ]]; then
     case "${manager}" in
       pacman|dnf) packages+=(tesseract) ;;
@@ -127,7 +137,7 @@ eshot_selected_packages() {
       packages+=(pipewire wireplumber gst-plugin-pipewire gst-plugins-base gst-plugins-good gst-plugins-bad gst-plugins-ugly gst-libav xdg-desktop-portal "${portal}")
       [[ "${backend}" == gnome ]] && packages+=(gnome-shell-extension-appindicator)
     elif [[ "${manager}" == dnf ]]; then
-      packages+=(pipewire wireplumber pipewire-gstreamer gstreamer1-plugins-base gstreamer1-plugins-good gstreamer1-plugins-bad-free gstreamer1-plugins-ugly-free gstreamer1-libav xdg-desktop-portal "${portal}")
+      packages+=(pipewire wireplumber pipewire-gstreamer gstreamer1-plugins-base gstreamer1-plugins-good gstreamer1-plugins-bad-free gstreamer1-plugins-ugly-free gstreamer1-plugins-ugly gstreamer1-plugin-libav xdg-desktop-portal "${portal}")
     else
       packages+=(pipewire wireplumber gstreamer1.0-tools gstreamer1.0-pipewire gstreamer1.0-pulseaudio gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav xdg-desktop-portal "${portal}")
     fi
@@ -140,6 +150,34 @@ eshot_missing_selected_packages() {
   local selected=(); read -r -a selected <<<"$(eshot_selected_packages "${manager}" "$@")"
   for package in "${selected[@]}"; do eshot_package_installed "${manager}" "${package}" || missing+=("${package}"); done
   printf '%s\n' "${missing[*]}"
+}
+
+# Prints the packages the configured repositories actually provide. dnf and
+# PackageKit reject a whole request when one name is unknown, for example
+# RPM Fusion packages on a stock Fedora install.
+eshot_available_packages() {
+  local manager="$1"; shift
+  (( $# )) || return 0
+  if [[ -n "${ESHOT_AVAILABLE_PACKAGES:-}" ]]; then
+    local package available=()
+    for package in "$@"; do
+      [[ " ${ESHOT_AVAILABLE_PACKAGES} " == *" ${package} "* ]] && available+=("${package}")
+    done
+    printf '%s\n' "${available[*]}"
+    return
+  fi
+  if [[ "${manager}" == dnf ]] && command -v dnf >/dev/null 2>&1; then
+    local names
+    if names="$(dnf -q repoquery --qf '%{name}\n' "$@" 2>/dev/null)" && [[ -n "${names}" ]]; then
+      local package available=()
+      for package in "$@"; do
+        grep -qxF "${package}" <<<"${names}" && available+=("${package}")
+      done
+      printf '%s\n' "${available[*]}"
+      return
+    fi
+  fi
+  printf '%s\n' "$*"
 }
 
 eshot_package_installed() {

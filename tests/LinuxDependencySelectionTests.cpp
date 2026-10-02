@@ -35,6 +35,17 @@ private slots:
             QVERIFY(defaults.contains("eng"));
         }
     }
+    void detectsAppImageManagerFolders() {
+        const QString home = QStringLiteral("/home/user");
+        QVERIFY(isAppImageManagedExternally(QStringLiteral("/home/user/AppImages/eshot.appimage"), home));
+        QVERIFY(isAppImageManagedExternally(QStringLiteral("/home/user/Applications/EShot.AppImage"), home));
+        QVERIFY(isAppImageManagedExternally(QStringLiteral("/home/user/.local/share/gearlever/eshot.appimage"), home));
+        QVERIFY(!isAppImageManagedExternally(QStringLiteral("/home/user/.local/opt/EShot/EShot.AppImage"), home));
+        QVERIFY(!isAppImageManagedExternally(QStringLiteral("/home/user/Downloads/EShot-v4.5.1-x86_64.AppImage"), home));
+        QVERIFY(!isAppImageManagedExternally(QStringLiteral("/home/user/AppImages/sub/eshot.appimage"), home));
+        QVERIFY(!isAppImageManagedExternally(QString(), home));
+    }
+
     void legacyWizardCompletionDoesNotSkipLinuxSetup() {
         QVERIFY(linuxSetupShouldShow(false, false));
         QVERIFY(linuxSetupShouldShow(false, true));

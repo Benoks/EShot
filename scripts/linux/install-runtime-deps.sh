@@ -17,6 +17,7 @@ done
 
 trap 'status=$?; printf "[EShot setup] exit status: %d\n" "${status}" >&2' EXIT
 packages=()
+requested=()
 manager=""
 if (( ffmpeg || ocr || desktop )); then
   manager="$(eshot_package_manager)" || {
@@ -24,6 +25,12 @@ if (( ffmpeg || ocr || desktop )); then
     exit 1
   }
   read -r -a packages <<<"$(eshot_missing_selected_packages "${manager}" "${ffmpeg}" "${ocr}" "${languages}" "${desktop}")"
+  requested=("${packages[@]}")
+  read -r -a packages <<<"$(eshot_available_packages "${manager}" "${packages[@]}")"
+  for package in "${requested[@]}"; do
+    [[ " ${packages[*]} " == *" ${package} "* ]] \
+      || printf '[EShot setup] not in the enabled repositories, skipped: %s\n' "${package}" >&2
+  done
 fi
 
 printf '[EShot setup] attempted packages: %s\n' "${packages[*]:-(none)}" >&2

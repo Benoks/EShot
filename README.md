@@ -11,6 +11,10 @@ Native screenshot, annotation, OCR, visual-search, upload, GIF, and video captur
 > [!IMPORTANT]
 > EShot supports KDE Plasma 6 Wayland and GNOME Wayland. KDE Plasma is the primary tested Linux target, while GNOME support is stable for normal use but has received less broad real-world testing. Other desktop environments and compositors remain unsupported and are unlikely to work correctly.
 
+> [!WARNING]
+> **Linux AppImage: the AppImage is the installer. Just make it executable and run it.**
+> Do **not** add it to Gear Lever, AppImageLauncher, AppImageUpdate or any other AppImage manager or updater. On first launch EShot's own setup installs the optional system packages, adds EShot to the application menu (`~/.local/opt/EShot`) and keeps that copy updated. A manager makes a second copy that does not get EShot's updates and can end up with duplicate menu entries, shortcuts and autostart. If a manager already took it, remove EShot from the manager and run the downloaded AppImage again. On Arch/CachyOS, prefer the [AUR package](#arch-linux-and-cachyos).
+
 EShot keeps the complete screenshot workflow in one compact tray application: select a region, annotate it, copy or save it, extract text, search the image, upload it, pin it above other windows, or record it as GIF/MP4.
 
 ## Screenshots
@@ -73,6 +77,8 @@ Portable x64 and ARM64 ZIP archives are also attached to each release.
 
 KDE Plasma 6 Wayland and GNOME Wayland are supported Linux targets. KDE Plasma is the primary tested environment. GNOME is stable for normal use, although its wider real-world testing coverage is still smaller. As with any Wayland desktop, portal versions can affect capture, shortcuts, tray integration, and recording behavior.
 
+Do not open the AppImage with Gear Lever, AppImageLauncher or another AppImage manager; EShot integrates and updates itself (see the warning at the top).
+
 1. Download `EShot-v<version>-x86_64.AppImage`.
 2. Mark it executable:
 
@@ -86,7 +92,7 @@ KDE Plasma 6 Wayland and GNOME Wayland are supported Linux targets. KDE Plasma i
    ./EShot-v*-x86_64.AppImage
    ```
 
-   KDE Plasma commonly offers a graphical launch flow after the file is executable. Stock GNOME Files does not register AppImages as applications, so double-clicking can show an "open with" prompt instead of starting EShot. Running the two commands above is the reliable first-launch method on GNOME. AppImageLauncher, when installed by the user, can provide double-click integration.
+   KDE Plasma commonly offers a graphical launch flow after the file is executable. Stock GNOME Files does not register AppImages as applications, so double-clicking can show an "open with" prompt instead of starting EShot. Running the two commands above is the reliable first-launch method on GNOME. Avoid AppImage managers such as AppImageLauncher or Gear Lever for EShot; they move the file and skip EShot's own setup and updates.
 
 4. Complete the graphical first-run wizard. It can install FFmpeg/GStreamer, PipeWire portal components, Tesseract, selected OCR languages, and optional application-menu integration through the system package manager.
 5. Use **Use Print Screen for EShot** to assign `Print Screen`. KDE keeps Spectacle's other shortcuts. GNOME uses the Global Shortcuts portal when available and an EShot-only custom shortcut on older GNOME releases.
@@ -119,12 +125,13 @@ The package installs the release AppImage and its desktop entry through pacman. 
 - KDE global shortcuts use KGlobalAccel. GNOME uses the Global Shortcuts portal where available and can install an EShot-only GNOME custom shortcut as a compatibility fallback.
 - Stock GNOME does not expose legacy tray icons. When no tray integration is available, launching EShot from the application list opens a compact control window with Capture, Settings, About, and Quit. Autostart remains silent. `Print Screen` and custom shortcuts continue to work independently of the tray.
 - GNOME screenshots are delivered through its secure Screenshot portal. EShot warms that service at startup, but the portal still adds a short delay before the selection panel appears. This varies by GNOME and portal version and is expected on Wayland.
-- GNOME and KDE Wayland use an XWayland selection overlay so text entry, focus, and one-canvas multi-monitor selection behave consistently.
+- GNOME and KDE Wayland use an XWayland selection overlay so text entry, focus, one-canvas multi-monitor selection and the placement of pinned images and recording controls behave consistently. On KDE, `ESHOT_CAPTURE_BACKEND=wayland` opts into experimental per-output native surfaces, which give sharper previews on mixed-DPI setups but cannot place pinned images or the recording frame.
 - GIF recording uses GStreamer for portal capture and FFmpeg for final GIF encoding.
 - MP4 recording requires a GStreamer AAC encoder when audio is enabled.
 - Screen recording permission is handled by the desktop portal. EShot stores a separate restore token per monitor when the portal supports persistent sessions.
 - A recorded region must fit inside one monitor. If the portal opens a monitor chooser, select the monitor containing the region.
-- The optional dependency setup uses the PackageKit session installer when the desktop provides it, then falls back to the native pacman, apt or dnf workflow.
+- The optional dependency setup uses the PackageKit session installer when the desktop provides it, then falls back to the native pacman, apt or dnf workflow. Packages the enabled repositories do not provide are skipped instead of failing the whole install.
+- Fedora: the setup installs `ffmpeg-free` and the GStreamer plugins from Fedora's own repositories. MP4 recording needs `x264enc` from RPM Fusion's `gstreamer1-plugins-ugly`; enable [RPM Fusion](https://rpmfusion.org/Configuration) (free and nonfree) before running the setup, or install that package afterwards.
 
 ## Visual search
 

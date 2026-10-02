@@ -1,6 +1,7 @@
 #include "LinuxDependencySelection.h"
 
 #include <QDir>
+#include <QFileInfo>
 #include <QHash>
 
 QStringList supportedOcrLanguageCodes()
@@ -81,6 +82,23 @@ QList<int> kdeShortcutsAfterEshotPrintScreenRegistration(const QList<int> &origi
 bool defaultLinuxPortalSelection(const QString &sessionType)
 {
     return sessionType.compare(QStringLiteral("wayland"), Qt::CaseInsensitive) == 0;
+}
+
+bool isAppImageManagedExternally(const QString &appImagePath, const QString &homePath)
+{
+    const QString path = QDir::cleanPath(appImagePath.trimmed());
+    if (path.isEmpty() || path == QStringLiteral(".") || homePath.trimmed().isEmpty())
+        return false;
+    if (path.contains(QStringLiteral("gearlever"), Qt::CaseInsensitive))
+        return true;
+    const QDir home(QDir::cleanPath(homePath.trimmed()));
+    const QString folder = QFileInfo(path).absolutePath();
+    for (const QString &managed : {QStringLiteral("AppImages"), QStringLiteral("Applications"),
+                                   QStringLiteral(".local/share/AppImage")}) {
+        if (folder == QDir::cleanPath(home.filePath(managed)))
+            return true;
+    }
+    return false;
 }
 
 bool shouldOfferAppImageIntegration(const QString &appImagePath)

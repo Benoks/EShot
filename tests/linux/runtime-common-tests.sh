@@ -86,6 +86,14 @@ assert_contains "tesseract" "${kde_pacman}" "Tesseract runtime"
 assert_contains "pipewire-gstreamer" "${kde_dnf}" "Fedora PipeWire GStreamer package"
 assert_contains "gstreamer1-plugins-ugly-free" "${kde_dnf}" "Fedora GStreamer ugly package"
 assert_contains "xdg-desktop-portal-kde" "${kde_dnf}" "Fedora KDE portal package"
+assert_contains "ffmpeg-free" "${kde_dnf}" "Fedora ships ffmpeg-free"
+assert_contains "gstreamer1-plugin-libav" "${kde_dnf}" "Fedora libav plugin name"
+assert_not_contains "gstreamer1-libav" "${kde_dnf}" "RPM Fusion-only libav name"
+dnf_ffmpeg="$(PATH=/nonexistent eshot_selected_packages dnf 1 0 '')"
+assert_eq "ffmpeg-free" "${dnf_ffmpeg}" "dnf installs ffmpeg-free when ffmpeg is missing"
+assert_eq "ffmpeg-free tesseract" \
+  "$(ESHOT_AVAILABLE_PACKAGES='tesseract ffmpeg-free' eshot_available_packages dnf ffmpeg-free gstreamer1-plugins-ugly tesseract)" \
+  "unavailable packages are skipped"
 
 pacman_ffmpeg="$(eshot_selected_packages pacman 1 0 '')"
 pacman_ocr="$(eshot_selected_packages pacman 0 1 'eng,tur,bogus')"
