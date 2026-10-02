@@ -1,5 +1,6 @@
 #include "VideoRecorder.h"
 #include "AudioDevices.h"
+#include "core/TranslationManager.h"
 #include "core/ComponentPaths.h"
 #include "core/LinuxPortalScreenCast.h"
 #include "PortalRecordingSource.h"
@@ -314,7 +315,7 @@ void VideoRecorder::start(const QRect &captureRect, int fps, int maxSeconds, int
         && (m_microphoneDevice.isEmpty() || !containsDevice(audioDevices, m_microphoneDevice))) {
         m_microphoneEnabled = false;
         if (m_microphoneVolume > 0) {
-            m_warnings << QStringLiteral("The microphone was not recorded because no microphone device could be found.");
+            m_warnings << TranslationManager::tr("recWarnMicMissing");
             qWarning() << "VideoRecorder: default microphone could not be resolved; recording without it";
         }
     }
@@ -634,7 +635,7 @@ void VideoRecorder::resume()
     }
     QString error;
     if (!startNextSegment(&error)) {
-        m_warnings << QStringLiteral("The recording could not be resumed: %1")
+        m_warnings << TranslationManager::tr("recWarnResumeFailed")
                           .arg(error.isEmpty() ? QStringLiteral("encoder did not start") : error);
         m_stopping = true;
         finishRecording();
@@ -711,7 +712,7 @@ void VideoRecorder::onProcessFinished(int exitCode, QProcess::ExitStatus status)
         return;
     }
     if (!ok)
-        m_warnings << QStringLiteral("The end of the recording could not be saved.");
+        m_warnings << TranslationManager::tr("recWarnEndNotSaved");
     finishRecording();
 }
 
@@ -855,8 +856,8 @@ void VideoRecorder::keepSegmentsAfterFailedConcat(const QString &reason)
             kept << QDir::toNativeSeparators(segment);
     }
     m_segmentPaths.clear();
-    emit recordingFailed(QStringLiteral("the paused recording parts could not be joined (%1); they were kept as %2")
-                             .arg(reason, kept.join(QStringLiteral(", "))));
+    emit recordingFailed(TranslationManager::tr("recPartsNotJoined").arg(reason) + QStringLiteral("\n")
+                         + TranslationManager::tr("recVideoKeptAt").arg(kept.join(QStringLiteral(", "))));
 }
 
 void VideoRecorder::cleanupConcatProcess()
@@ -886,12 +887,12 @@ void VideoRecorder::finishVideo()
             return;
         }
         if (!QFileInfo::exists(m_audioPath) || QFileInfo(m_audioPath).size() < 128) {
-            useVideoWithoutSystemAudio(QStringLiteral("System audio could not be captured; the video was saved without it."));
+            useVideoWithoutSystemAudio(TranslationManager::tr("recWarnSystemAudioCapture"));
             return;
         }
         if (startSystemAudioMux())
             return;
-        useVideoWithoutSystemAudio(QStringLiteral("System audio could not be added; the video was saved without it."));
+        useVideoWithoutSystemAudio(TranslationManager::tr("recWarnSystemAudioAdd"));
         return;
     }
 
@@ -980,7 +981,7 @@ bool VideoRecorder::startSystemAudioMux()
         if (error != QProcess::FailedToStart || !m_muxProcess)
             return;
         cleanupMuxProcess();
-        useVideoWithoutSystemAudio(QStringLiteral("System audio could not be added (ffmpeg did not start); the video was saved without it."));
+        useVideoWithoutSystemAudio(TranslationManager::tr("recWarnSystemAudioAdd"));
     });
     m_muxTimeout = new QTimer(this);
     m_muxTimeout->setSingleShot(true);
@@ -1013,8 +1014,8 @@ void VideoRecorder::onMuxFinished(int exitCode, QProcess::ExitStatus status)
         return;
     }
     useVideoWithoutSystemAudio(timedOut
-        ? QStringLiteral("Adding system audio timed out; the video was saved without it.")
-        : QStringLiteral("System audio could not be added; the video was saved without it."));
+        ? TranslationManager::tr("recWarnSystemAudioTimeout")
+        : TranslationManager::tr("recWarnSystemAudioAdd"));
 }
 
 void VideoRecorder::cleanupMuxProcess()

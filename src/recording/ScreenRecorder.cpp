@@ -1,5 +1,6 @@
 #include "ScreenRecorder.h"
 #include "GifEncoder.h"
+#include "core/TranslationManager.h"
 #include "core/ComponentPaths.h"
 #include "core/LinuxPortalScreenCast.h"
 #include "PortalRecordingSource.h"
@@ -432,7 +433,7 @@ void ScreenRecorder::onPortalConversionFinished(int exitCode, QProcess::ExitStat
 
     QString failure;
     if (timedOut)
-        failure = QStringLiteral("GIF conversion timed out");
+        failure = TranslationManager::tr("gifConversionTimedOut");
     else if (!reason.isEmpty())
         failure = reason;
     else
@@ -518,8 +519,9 @@ void ScreenRecorder::failPortalConversion(const QString &reason)
     }
     m_portalSegments.clear();
     m_portalVideoPath.clear();
-    emit recordingFailed(QStringLiteral("%1; the recorded video was kept as %2")
-                             .arg(reason, kept.join(QStringLiteral(", "))));
+    // First line is the reason (localized in main), second where the video is.
+    emit recordingFailed(reason + QStringLiteral("\n")
+                         + TranslationManager::tr("recVideoKeptAt").arg(kept.join(QStringLiteral(", "))));
 }
 
 void ScreenRecorder::removePortalIntermediates()

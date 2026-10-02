@@ -223,6 +223,12 @@ void prepareKWinScreenshotPermission()
 
 QString localizedRecordingFailureReason(const QString &reason)
 {
+    // "reason\ndetail": localize the reason, keep the detail (e.g. a path).
+    const int newline = reason.indexOf(QLatin1Char('\n'));
+    if (newline > 0) {
+        return localizedRecordingFailureReason(reason.left(newline))
+            + reason.mid(newline);
+    }
     if (reason == QStringLiteral("ffmpeg.exe not found") || reason == QStringLiteral("ffmpeg not found"))
         return TranslationManager::videoFfmpegMissing();
     if (reason == QStringLiteral("gstreamer not found"))
@@ -904,8 +910,9 @@ public slots:
         if (m_recordingIndicator) { m_recordingIndicator->stop(); m_recordingIndicator->deleteLater(); m_recordingIndicator = nullptr; }
         m_lastNotificationPath.clear();
         reason = localizedRecordingFailureReason(reason);
+        // Long enough to read where a kept recording is.
         showFailureNotification(TranslationManager::recordingFailed() + QStringLiteral(": ") + reason,
-                                3000);
+                                reason.contains(QLatin1Char('\n')) ? 10000 : 3000);
         rebuildTrayMenu();
     }
 
@@ -985,7 +992,7 @@ public slots:
         m_lastNotificationPath.clear();
         reason = localizedRecordingFailureReason(reason);
         showFailureNotification(TranslationManager::videoFailed() + QStringLiteral(": ") + reason,
-                                5000);
+                                reason.contains(QLatin1Char('\n')) ? 10000 : 5000);
         rebuildTrayMenu();
     }
 
