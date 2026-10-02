@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 env:
-  APP_VERSION: '4.2.7'
+  APP_VERSION: '4.5.1'
   QT_VERSION: '6.8.2'
   TESSERACT_RUNTIME_RELEASE: 'v4.1.2'
 
@@ -196,6 +196,19 @@ jobs:
 
           "APP_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           Write-Host "Building release version $version"
+
+      - name: Resolve Windows build version
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        shell: pwsh
+        run: |
+          # Untagged builds use the CMake version, not a stale default.
+          $match = Select-String -Path CMakeLists.txt -Pattern 'project\(EShot VERSION (\d+\.\d+\.\d+)'
+          if (-not $match) { throw "Could not read the version from CMakeLists.txt" }
+          $version = $match.Matches[0].Groups[1].Value
+          (Get-Content EShot_Setup.iss -Raw) `
+            -replace '#define MyAppVersion\s+"\d+\.\d+\.\d+"', "#define MyAppVersion   `"$version`"" |
+            Set-Content EShot_Setup.iss -NoNewline
+          "APP_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
       # Qt 6 (qtbase covers Core/Gui/Widgets/Network — no extra modules needed).
       # The arm64 arch is Qt's cross-compiled WoA package; --autodesktop pulls in

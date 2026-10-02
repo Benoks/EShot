@@ -141,6 +141,10 @@ eshot_selected_packages() {
     else
       packages+=(pipewire wireplumber gstreamer1.0-tools gstreamer1.0-pipewire gstreamer1.0-pulseaudio gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav xdg-desktop-portal "${portal}")
     fi
+    # Stock GNOME has no tray; EShot enables this extension after setup.
+    if [[ "${manager}" != pacman && "${backend}" == gnome ]]; then
+      packages+=(gnome-shell-extension-appindicator)
+    fi
   fi
   printf '%s\n' "${packages[*]}"
 }

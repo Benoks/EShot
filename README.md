@@ -29,8 +29,8 @@ EShot keeps the complete screenshot workflow in one compact tray application: se
 | --- | --- | --- |
 | Windows 10/11 x64 | Stable | Installer and portable ZIP |
 | Windows 11 ARM64 | Stable | Native ARM64 installer and portable ZIP |
-| Linux x86_64 (KDE Plasma 6 Wayland) | Stable | AppImage, `.deb`, AUR, and portable archive |
-| Linux x86_64 (GNOME Wayland) | Stable, less broadly tested | AppImage, `.deb`, AUR, and portable archive |
+| Linux x86_64 (KDE Plasma 6 Wayland) | Stable | AppImage, AUR, and portable archive |
+| Linux x86_64 (GNOME Wayland) | Stable, less broadly tested | AppImage, AUR, and portable archive |
 | Other Linux desktops | Unsupported | Unlikely to work correctly |
 
 ## Features
@@ -107,7 +107,7 @@ The AppImage bundles EShot and Qt. Optional media, OCR, and desktop-integration 
 
 Each release also includes `EShot-v<version>-linux-x64.tar.gz` for users who prefer an unpacked build. Unlike the AppImage, this archive relies on compatible Qt and runtime libraries installed by the Linux distribution.
 
-Integrated AppImages are stored for the current user under `~/.local/opt/EShot`. EShot checks for updates and always keeps manual updating available. If a per-user Windows installation or integrated AppImage is at least two stable releases behind, EShot downloads the matching release asset, verifies its GitHub SHA-256 digest, updates silently, and restarts. All-users Windows installations require an administrator for updates. The AUR package (`eshot-bin`), `.deb` packages and the `.tar.gz` archive are updated through the package manager or a new download; EShot only reports new releases there and does not replace them itself.
+Integrated AppImages are stored for the current user under `~/.local/opt/EShot`. EShot checks for updates and always keeps manual updating available. If a per-user Windows installation or integrated AppImage is at least two stable releases behind, EShot downloads the matching release asset, verifies its GitHub SHA-256 digest, updates silently, and restarts. All-users Windows installations require an administrator for updates. The AUR package (`eshot-bin`) and the `.tar.gz` archive are updated through the package manager or a new download; EShot only reports new releases there and does not replace them itself.
 
 ### Arch Linux and CachyOS
 
@@ -130,7 +130,7 @@ The package installs the release AppImage and its desktop entry through pacman. 
 - MP4 recording requires a GStreamer AAC encoder when audio is enabled.
 - Screen recording permission is handled by the desktop portal. EShot stores a separate restore token per monitor when the portal supports persistent sessions.
 - A recorded region must fit inside one monitor. If the portal opens a monitor chooser, select the monitor containing the region.
-- The optional dependency setup uses the PackageKit session installer when the desktop provides it, then falls back to the native pacman, apt or dnf workflow. Packages the enabled repositories do not provide are skipped instead of failing the whole install.
+- The optional dependency setup uses the PackageKit session installer when the desktop provides it, then falls back to the native pacman, apt or dnf workflow. On Fedora, packages the enabled repositories do not provide (such as RPM Fusion packages) are skipped instead of failing the whole install.
 - Fedora: the setup installs `ffmpeg-free` and the GStreamer plugins from Fedora's own repositories. MP4 recording needs `x264enc` from RPM Fusion's `gstreamer1-plugins-ugly`; enable [RPM Fusion](https://rpmfusion.org/Configuration) (free and nonfree) before running the setup, or install that package afterwards.
 
 ## Visual search

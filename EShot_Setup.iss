@@ -5,7 +5,7 @@
 ; ============================================================
 
 #define MyAppName      "EShot"
-#define MyAppVersion   "4.2.8"
+#define MyAppVersion   "4.5.1"
 #define MyAppPublisher "EShot"
 #define MyAppURL       "https://github.com/Benoks/EShot"
 #define MyAppExeName   "EShot.exe"
@@ -219,6 +219,7 @@ var
   ExpectedCommand: String;
   UserHives: TArrayOfString;
   I: Integer;
+  ResultCode: Integer;
 begin
   if CurUninstallStep <> usUninstall then
     Exit;
@@ -234,6 +235,16 @@ begin
   if IsAdminInstallMode and RegGetSubkeyNames(HKEY_USERS, '', UserHives) then
     for I := 0 to GetArrayLength(UserHives) - 1 do
       DeleteMatchingStartup(HKEY_USERS, UserHives[I] + '\' + RunKey, ExpectedCommand);
+
+  // "Start as administrator" registers a highest-privilege task. A per-user
+  // uninstall runs unelevated and cannot delete it, and it would keep
+  // running a user-writable EShot.exe as administrator. Ask once for UAC.
+  if not IsAdminInstallMode and
+     Exec(ExpandConstant('{sys}\schtasks.exe'), '/Query /TN "EShot Elevated"', '',
+          SW_HIDE, ewWaitUntilTerminated, ResultCode) and (ResultCode = 0) then
+    ShellExec('runas', ExpandConstant('{sys}\schtasks.exe'),
+              '/Delete /TN "EShot Elevated" /F', '', SW_HIDE,
+              ewWaitUntilTerminated, ResultCode);
 end;
 
 function IsInstalledFile(RelativePath: String): Boolean;

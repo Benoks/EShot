@@ -15,6 +15,18 @@ while (( $# )); do
   shift
 done
 
+# Menu integration does not depend on the packages; do it first so a
+# cancelled or failed package install does not skip it.
+integration_failed=0
+if (( integrate_appimage )); then
+  if [[ -z "${APPIMAGE:-}" || ! -x "${APPIMAGE}" ]]; then
+    eshot_show_error "$(eshot_setup_text integration_unavailable)"
+    integration_failed=1
+  elif ! "${APPIMAGE}" --integrate-only; then
+    integration_failed=1
+  fi
+fi
+
 trap 'status=$?; printf "[EShot setup] exit status: %d\n" "${status}" >&2' EXIT
 packages=()
 requested=()
@@ -86,10 +98,4 @@ if (( desktop )) && [[ "$(eshot_desktop_backend)" == "gnome" ]] \
   gnome-extensions enable appindicatorsupport@rgcjonas.gmail.com >/dev/null 2>&1 || true
 fi
 
-if (( integrate_appimage )); then
-  if [[ -z "${APPIMAGE:-}" || ! -x "${APPIMAGE}" ]]; then
-    eshot_show_error "$(eshot_setup_text integration_unavailable)"
-    exit 1
-  fi
-  "${APPIMAGE}" --integrate-only
-fi
+exit "${integration_failed}"
