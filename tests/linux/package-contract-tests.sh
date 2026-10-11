@@ -15,7 +15,7 @@ portability_script="${repo_root}/scripts/linux/verify-appimage-portability.sh"
 grep -F 'EShot-v${version}-x86_64.AppImage' "${build_script}" >/dev/null
 grep -F 'linuxdeploy/releases/download/1-alpha-20251107-1/linuxdeploy-x86_64.AppImage' "${build_script}" >/dev/null
 grep -F 'linuxdeploy-plugin-qt/releases/download/1-alpha-20250213-1/linuxdeploy-plugin-qt-x86_64.AppImage' "${build_script}" >/dev/null
-grep -F 'appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage' "${build_script}" >/dev/null
+grep -F 'appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage' "${build_script}" >/dev/null
 grep -F 'packaging/linux/AppRun' "${build_script}" >/dev/null
 grep -F -- '--appimage-extract-and-run' "${workflow}" >/dev/null
 grep -F 'packages/EShot-v${APP_VERSION}-x86_64.AppImage' "${workflow}" >/dev/null
