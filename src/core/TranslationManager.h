@@ -1032,6 +1032,13 @@ private:
         {"sheetNudgeSelection", {"Seçimi taşı (Shift: 10 px)", "Move the selection (Shift: 10 px)", "Auswahl verschieben (Shift: 10 px)", "Déplacer la sélection (Shift : 10 px)", "Mover la selección (Shift: 10 px)", "選択範囲を移動（Shift: 10 px）", "移动选区（Shift：10 px）", "Сдвинуть выделение (Shift: 10 px)"}},
         {"sheetResizeSelection", {"Seçimi boyutlandır (Shift: 10 px)", "Resize the selection (Shift: 10 px)", "Auswahlgröße ändern (Shift: 10 px)", "Redimensionner la sélection (Shift : 10 px)", "Cambiar el tamaño de la selección (Shift: 10 px)", "選択範囲のサイズを変更（Shift: 10 px）", "调整选区大小（Shift：10 px）", "Изменить размер выделения (Shift: 10 px)"}},
         {"sheetNudgeObject", {"Seçili nesneyi kaydır", "Nudge the selected object", "Ausgewähltes Objekt verschieben", "Décaler l’objet sélectionné", "Desplazar el objeto seleccionado", "選択したオブジェクトを少し移動", "微移所选对象", "Сдвинуть выбранный объект"}},
+
+        // ─── Counter tool (start value, size, pointer) ───
+        {"quickCounterStart", {"Başlangıç numarası", "Start at", "Beginnen bei", "Commencer à", "Empezar en", "開始番号", "起始编号", "Начать с"}},
+        {"quickCounterStartHint", {"İlk numaranın değeri; sonraki yakalamalarda da korunur", "Number of the first counter; kept for later captures", "Nummer des ersten Zählers; bleibt für weitere Aufnahmen erhalten", "Numéro du premier compteur ; conservé pour les captures suivantes", "Número del primer contador; se conserva en las siguientes capturas", "最初のカウンターの番号。次回以降のキャプチャでも保持されます", "第一个计数器的编号；之后的截图也会保留", "Номер первого счётчика; сохраняется для следующих снимков"}},
+        {"quickCounterSize", {"Numara boyutu", "Counter size", "Zählergröße", "Taille du compteur", "Tamaño del contador", "カウンターのサイズ", "计数器大小", "Размер счётчика"}},
+        {"descCounterPointer", {"Adımları numarala; sürükleyerek ok ekle", "Number the steps; drag to add a pointer", "Schritte nummerieren; Ziehen fügt einen Zeiger hinzu", "Numéroter les étapes ; glisser ajoute une flèche", "Numerar los pasos; arrastra para añadir una flecha", "手順に番号を付ける。ドラッグで矢印を追加", "为步骤编号；拖动可添加指针", "Пронумеровать шаги; перетащите, чтобы добавить указатель"}},
+        {"sheetCounterPointer", {"Numara: ok ekle", "Counter: add a pointer", "Zähler: Zeiger hinzufügen", "Compteur : ajouter une flèche", "Contador: añadir una flecha", "カウンター: 矢印を追加", "计数器：添加指针", "Счётчик: добавить указатель"}},
     };
 
     static constexpr int s_transCount = sizeof(s_trans) / sizeof(s_trans[0]);

@@ -35,6 +35,13 @@ private slots:
     void emptyingTextRemovesIt();
     void recolouringAndDeletingCanBeUndone();
     void textStyleIsStoredPerLabel();
+    void countersNumberFromTheStartValue();
+    void counterNumberingStaysConsistentAfterUndoAndErase();
+    void counterClickHasNoPointer();
+    void counterDragAddsAPointerThatIsPartOfTheCounter();
+    void counterPointerMovesAndUndoesWithTheCounter();
+    void counterPointerRendersInTheExportedImage();
+    void counterSizeIsStoredPerCounter();
 };
 
 void AnnotationEngineTests::rotatesRectangleAroundItsCenter()
@@ -539,6 +546,147 @@ void AnnotationEngineTests::textStyleIsStoredPerLabel()
     const QImage hidden = renderEngine(engine, canvas);
     QVERIFY(visible != hidden);
     engine.setHiddenIndex(-1);
+}
+
+namespace {
+void placeCounter(AnnotationEngine &engine, const QPoint &press, const QPoint &release)
+{
+    engine.setCurrentTool(AnnotationEngine::Counter);
+    engine.beginDraw(press);
+    engine.continueDraw(release);
+    engine.endDraw(release);
+}
+}
+
+void AnnotationEngineTests::countersNumberFromTheStartValue()
+{
+    AnnotationEngine engine;
+    engine.setCounterStartValue(5);
+    placeCounter(engine, QPoint(20, 20), QPoint(20, 20));
+    engine.addCounterAnnotation(QPoint(60, 20));
+    QCOMPARE(engine.counterValueOf(0), 5);
+    QCOMPARE(engine.counterValueOf(1), 6);
+
+    // Clearing for a new capture keeps the start value.
+    engine.clear();
+    placeCounter(engine, QPoint(20, 20), QPoint(20, 20));
+    QCOMPARE(engine.counterValueOf(0), 5);
+
+    engine.setCounterStartValue(0);
+    QCOMPARE(engine.counterStartValue(), 1);
+    engine.setCounterStartValue(5000);
+    QCOMPARE(engine.counterStartValue(), 999);
+}
+
+void AnnotationEngineTests::counterNumberingStaysConsistentAfterUndoAndErase()
+{
+    AnnotationEngine engine;
+    engine.setCounterStartValue(3);
+    placeCounter(engine, QPoint(20, 20), QPoint(20, 20));
+    placeCounter(engine, QPoint(80, 20), QPoint(80, 20));
+    placeCounter(engine, QPoint(140, 20), QPoint(140, 20));
+    QCOMPARE(engine.nextCounterValue(), 6);
+
+    engine.undo();
+    QCOMPARE(engine.nextCounterValue(), 5);
+    engine.redo();
+    QCOMPARE(engine.nextCounterValue(), 6);
+
+    engine.setCurrentTool(AnnotationEngine::Eraser);
+    QVERIFY(engine.eraseAnnotationAt(QPoint(140, 20)));
+    QCOMPARE(engine.nextCounterValue(), 5);
+    QVERIFY(engine.eraseAnnotationAt(QPoint(80, 20)));
+    QVERIFY(engine.eraseAnnotationAt(QPoint(20, 20)));
+    QCOMPARE(engine.nextCounterValue(), 3);
+}
+
+void AnnotationEngineTests::counterClickHasNoPointer()
+{
+    AnnotationEngine engine;
+    engine.setCounterDragDistance(10);
+    placeCounter(engine, QPoint(50, 50), QPoint(53, 52));
+    QCOMPARE(engine.boundingRectOf(0), QRect(36, 36, 28, 28));
+    QCOMPARE(engine.findAnnotationAt(QPoint(120, 50)), -1);
+}
+
+void AnnotationEngineTests::counterDragAddsAPointerThatIsPartOfTheCounter()
+{
+    AnnotationEngine engine;
+    engine.setCounterDragDistance(10);
+    engine.setPenWidth(3);
+    placeCounter(engine, QPoint(50, 50), QPoint(150, 50));
+    QCOMPARE(engine.counterValueOf(0), 1);
+
+    const QRect bounds = engine.boundingRectOf(0);
+    QCOMPARE(bounds.left(), 36);
+    QVERIFY(bounds.right() >= 150);
+    QCOMPARE(engine.findAnnotationAt(QPoint(110, 50)), 0);
+    QCOMPARE(engine.findAnnotationAt(QPoint(148, 52)), 0);
+    QCOMPARE(engine.findAnnotationAt(QPoint(110, 90)), -1);
+
+    // Erasing the pointer erases the whole counter, and undo brings both back.
+    engine.setCurrentTool(AnnotationEngine::Eraser);
+    QVERIFY(engine.eraseAnnotationAt(QPoint(110, 50)));
+    QVERIFY(!engine.hasAnnotations());
+    engine.undo();
+    QCOMPARE(engine.boundingRectOf(0), bounds);
+}
+
+void AnnotationEngineTests::counterPointerMovesAndUndoesWithTheCounter()
+{
+    AnnotationEngine engine;
+    engine.setCounterDragDistance(10);
+    placeCounter(engine, QPoint(50, 50), QPoint(50, 150));
+    const QRect original = engine.boundingRectOf(0);
+
+    engine.beginMove(0);
+    engine.moveAnnotation(0, QPoint(30, 10));
+    engine.endMove();
+    QCOMPARE(engine.boundingRectOf(0), original.translated(30, 10));
+    QCOMPARE(engine.findAnnotationAt(QPoint(80, 140)), 0);
+
+    engine.undo();
+    QCOMPARE(engine.boundingRectOf(0), original);
+    engine.undo();
+    QVERIFY(!engine.hasAnnotations());
+    engine.redo();
+    QCOMPARE(engine.boundingRectOf(0), original);
+}
+
+void AnnotationEngineTests::counterPointerRendersInTheExportedImage()
+{
+    AnnotationEngine engine;
+    engine.setColor(Qt::blue);
+    engine.setPenWidth(4);
+    engine.setCounterDragDistance(10);
+    placeCounter(engine, QPoint(60, 60), QPoint(160, 60));
+
+    QPixmap canvas(200, 120);
+    canvas.fill(Qt::white);
+    const QImage screen = renderEngine(engine, canvas);
+    QCOMPARE(screen.pixelColor(110, 60), QColor(Qt::blue));
+    QCOMPARE(screen.pixelColor(110, 90), QColor(Qt::white));
+
+    // The export crops the selection and renders with a negative offset.
+    QPixmap crop(150, 80);
+    crop.fill(Qt::white);
+    const QImage exported = renderEngine(engine, crop, QPoint(-40, -30));
+    QCOMPARE(exported.pixelColor(70, 30), QColor(Qt::blue));
+    QCOMPARE(exported, screen.copy(40, 30, 150, 80));
+}
+
+void AnnotationEngineTests::counterSizeIsStoredPerCounter()
+{
+    AnnotationEngine engine;
+    engine.setCounterDiameter(40);
+    placeCounter(engine, QPoint(50, 50), QPoint(50, 50));
+    engine.setCounterDiameter(20);
+    placeCounter(engine, QPoint(150, 50), QPoint(150, 50));
+
+    QCOMPARE(engine.boundingRectOf(0), QRect(30, 30, 40, 40));
+    QCOMPARE(engine.boundingRectOf(1), QRect(140, 40, 20, 20));
+    engine.setCounterDiameter(1);
+    QCOMPARE(engine.counterDiameter(), 16);
 }
 
 QTEST_MAIN(AnnotationEngineTests)

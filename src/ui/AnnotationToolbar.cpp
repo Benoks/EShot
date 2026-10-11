@@ -731,7 +731,7 @@ void AnnotationToolbar::refreshToolTips()
             case AnnotationEngine::Highlighter:it.value()->setToolTip(richToolTip(TM::toolHighlighter(), "toolHighlighter", "H", "descHighlighter")); break;
             case AnnotationEngine::Blur:       it.value()->setToolTip(richToolTip(TM::toolBlur(), "toolBlur", "B", "descBlur")); break;
             case AnnotationEngine::Pixelate:   it.value()->setToolTip(richToolTip(TM::toolPixelate(), "toolPixelate", "M", "descPixelate")); break;
-            case AnnotationEngine::Counter:    it.value()->setToolTip(richToolTip(TM::toolCounter(), "toolCounter", "N", "descCounter")); break;
+            case AnnotationEngine::Counter:    it.value()->setToolTip(richToolTip(TM::toolCounter(), "toolCounter", "N", "descCounterPointer")); break;
             case AnnotationEngine::Eraser:     it.value()->setToolTip(richToolTip(TM::toolEraser(), "toolEraser", "X", "descEraser")); break;
         }
     }

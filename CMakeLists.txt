@@ -75,6 +75,7 @@ set(SOURCES
     src/annotation/AnnotationEngine.cpp
     src/annotation/ImageEffects.cpp
     src/annotation/AnnotationRotationGeometry.cpp
+    src/annotation/CounterGeometry.cpp
     src/ui/AnnotationToolbar.cpp
     src/ui/ApplicationTheme.cpp
     src/ui/OverlayPanelStyle.cpp
@@ -152,6 +153,7 @@ set(HEADERS
     src/annotation/AnnotationEngine.h
     src/annotation/ImageEffects.h
     src/annotation/AnnotationRotationGeometry.h
+    src/annotation/CounterGeometry.h
     src/ui/AnnotationToolbar.h
     src/ui/ApplicationTheme.h
     src/ui/OverlayPanelStyle.h
@@ -314,7 +316,17 @@ if(BUILD_TESTING)
             src/annotation/AnnotationEngine.h
             src/annotation/ImageEffects.cpp
             src/annotation/ImageEffects.h
+            src/annotation/CounterGeometry.cpp
+            src/annotation/CounterGeometry.h
         LIBS Qt6::Core Qt6::Gui
+    )
+
+    eshot_add_test(eshot_counter_geometry_tests counter_geometry
+        SOURCES
+            tests/CounterGeometryTests.cpp
+            src/annotation/CounterGeometry.cpp
+            src/annotation/CounterGeometry.h
+        LIBS Qt6::Core
     )
 
     eshot_add_test(eshot_annotation_rotation_geometry_tests annotation_rotation_geometry

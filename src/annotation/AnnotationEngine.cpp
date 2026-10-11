@@ -39,6 +39,19 @@ bool pointTooClose(const QPoint &a, const QPoint &b)
     const int dy = a.y() - b.y();
     return dx * dx + dy * dy < 4;
 }
+
+// Line with EShot's filled arrowhead; used by the Arrow tool and counter pointers.
+void drawArrowShape(QPainter *painter, const QPointF &start, const QPointF &end,
+                    const QColor &color, int penWidth)
+{
+    painter->setPen(QPen(color, penWidth, Qt::SolidLine, Qt::RoundCap));
+    painter->setBrush(Qt::NoBrush);
+    painter->drawLine(start, end);
+    const CounterGeometry::ArrowHead head = CounterGeometry::arrowHead(start, end, penWidth);
+    painter->setPen(Qt::NoPen);
+    painter->setBrush(color);
+    painter->drawPolygon(QPolygonF() << head.tip << head.left << head.right);
+}
 }
 
 AnnotationEngine::AnnotationEngine(QObject *parent)
@@ -79,11 +92,19 @@ void AnnotationEngine::setTextFontFamily(const QString &family)
 }
 void AnnotationEngine::setTextFontSize(int size) { m_textFontSize = qBound(8, size, 72); }
 void AnnotationEngine::setBlurIntensity(int intensity) { m_blurIntensity = qBound(4, intensity, 64); }
+void AnnotationEngine::setCounterStartValue(int value)
+{
+    m_counterStartValue = qBound(CounterGeometry::MinStartValue, value, CounterGeometry::MaxStartValue);
+}
+void AnnotationEngine::setCounterDiameter(int diameter)
+{
+    m_counterDiameter = qBound(CounterGeometry::MinDiameter, diameter, CounterGeometry::MaxDiameter);
+}
 void AnnotationEngine::setShiftHeld(bool held) { m_shiftHeld = held; }
 
 void AnnotationEngine::beginDraw(const QPoint &pos)
 {
-    if (m_currentTool == None || m_currentTool == Text || m_currentTool == Counter)
+    if (m_currentTool == None || m_currentTool == Text)
         return;
 
     m_isDrawing = true;
@@ -93,6 +114,12 @@ void AnnotationEngine::beginDraw(const QPoint &pos)
     m_currentAnnotation.penWidth = m_penWidth;
     m_currentAnnotation.blurIntensity = m_blurIntensity;
     m_currentAnnotation.points.append(pos);
+
+    if (m_currentTool == Counter) {
+        // The counter sits at the press point; dragging adds a pointer.
+        m_currentAnnotation.counterValue = nextCounterValue();
+        m_currentAnnotation.counterDiameter = m_counterDiameter;
+    }
 
     if (m_currentTool == Highlighter)
         m_currentAnnotation.color = QColor(255, 193, 7, 185);
@@ -104,7 +131,9 @@ void AnnotationEngine::continueDraw(const QPoint &pos)
 
     m_currentAnnotation.shiftConstrained = m_shiftHeld;
 
-    if (m_currentTool == Pen || m_currentTool == Highlighter) {
+    if (m_currentTool == Counter) {
+        updateCounterPointer(pos);
+    } else if (m_currentTool == Pen || m_currentTool == Highlighter) {
         const QPoint drawPoint = m_currentTool == Highlighter && m_shiftHeld
             ? constrainedHighlighterPoint(m_currentAnnotation.points.first(), pos)
             : pos;
@@ -118,9 +147,29 @@ void AnnotationEngine::continueDraw(const QPoint &pos)
     }
 }
 
+void AnnotationEngine::updateCounterPointer(const QPoint &pos)
+{
+    // Short drags and targets hidden under the circle leave a plain counter.
+    const QPoint center = m_currentAnnotation.points.first();
+    m_currentAnnotation.points.resize(1);
+    if (CounterGeometry::isPointerDrag(center, pos, m_counterDragDistance)
+        && CounterGeometry::hasVisiblePointer(center, m_currentAnnotation.counterDiameter / 2.0, pos))
+        m_currentAnnotation.points.append(pos);
+}
+
 void AnnotationEngine::endDraw(const QPoint &pos)
 {
     if (!m_isDrawing || m_currentTool == None) return;
+
+    if (m_currentTool == Counter) {
+        updateCounterPointer(pos);
+        m_annotations.append(m_currentAnnotation);
+        m_counterValue = qMax(m_counterValue, m_currentAnnotation.counterValue);
+        pushHistory(HistoryAction::Add, m_currentAnnotation, m_annotations.size() - 1);
+        m_isDrawing = false;
+        emit annotationAdded();
+        return;
+    }
 
     m_currentAnnotation.shiftConstrained = m_shiftHeld;
 
@@ -210,18 +259,8 @@ void AnnotationEngine::drawAnnotation(QPainter *painter, const Annotation &ann, 
     }
     case Arrow: {
         if (ann.points.size() < 2) break;
-        QPoint start = ann.points.first() + offset;
-        QPoint end = ann.points.last() + offset;
-        QPen pen(ann.color, ann.penWidth, Qt::SolidLine, Qt::RoundCap);
-        painter->setPen(pen);
-        painter->drawLine(start, end);
-        double angle = qAtan2(end.y() - start.y(), end.x() - start.x());
-        int arrowSize = qMax(12, ann.penWidth * 4);
-        QPointF a1 = end - QPointF(qCos(angle - M_PI/6)*arrowSize, qSin(angle - M_PI/6)*arrowSize);
-        QPointF a2 = end - QPointF(qCos(angle + M_PI/6)*arrowSize, qSin(angle + M_PI/6)*arrowSize);
-        painter->setPen(Qt::NoPen);
-        painter->setBrush(ann.color);
-        painter->drawPolygon(QPolygonF() << QPointF(end) << a1 << a2);
+        drawArrowShape(painter, ann.points.first() + offset, ann.points.last() + offset,
+                       ann.color, ann.penWidth);
         break;
     }
     case Rectangle: {
@@ -345,15 +384,24 @@ void AnnotationEngine::drawAnnotation(QPainter *painter, const Annotation &ann, 
     }
     case Counter: {
         if (ann.points.isEmpty()) break;
-        QPoint center = ann.points.first() + offset;
-        int radius = 14;
-        painter->setPen(QPen(Qt::white, 2));
+        const QPointF center = ann.points.first() + offset;
+        const qreal radius = ann.counterDiameter / 2.0;
+        // The pointer starts at the circle's edge; the circle is drawn over it
+        // so a large arrowhead close to the circle never covers the number.
+        if (ann.points.size() >= 2) {
+            const QPointF target = ann.points[1] + offset;
+            drawArrowShape(painter, CounterGeometry::pointerStart(center, radius, target), target,
+                           ann.color, ann.penWidth);
+        }
+        painter->setPen(QPen(Qt::white, qMax(2.0, ann.counterDiameter / 14.0)));
         painter->setBrush(ann.color);
         painter->drawEllipse(center, radius, radius);
         painter->setPen(Qt::white);
-        QFont f("Segoe UI", 10); f.setBold(true);
+        QFont f("Segoe UI");
+        f.setPointSizeF(CounterGeometry::numberPointSize(ann.counterDiameter, ann.counterValue));
+        f.setBold(true);
         painter->setFont(f);
-        painter->drawText(QRect(center.x()-radius, center.y()-radius, radius*2, radius*2),
+        painter->drawText(QRectF(center.x() - radius, center.y() - radius, radius * 2, radius * 2),
                           Qt::AlignCenter, QString::number(ann.counterValue));
         break;
     }
@@ -576,7 +624,9 @@ void AnnotationEngine::addCounterAnnotation(const QPoint &pos)
     ann.color = m_color;
     ann.penWidth = m_penWidth;
     ann.points.append(pos);
-    ann.counterValue = ++m_counterValue;
+    ann.counterValue = nextCounterValue();
+    ann.counterDiameter = m_counterDiameter;
+    m_counterValue = ann.counterValue;
     m_annotations.append(ann);
     pushHistory(HistoryAction::Add, ann, m_annotations.size() - 1);
     emit annotationAdded();
@@ -847,8 +897,12 @@ QRect AnnotationEngine::rawAnnotationBounds(const Annotation &ann, int padding) 
     if (ann.tool == Text) {
         bounds = textBackgroundRect(ann);
     } else if (ann.tool == Counter) {
-        const int radius = 14;
-        bounds = QRect(ann.points.first() - QPoint(radius, radius), QSize(radius * 2, radius * 2));
+        bounds = counterCircleRect(ann);
+        if (ann.points.size() >= 2) {
+            bounds |= CounterGeometry::pointerBounds(ann.points.first(), ann.counterDiameter / 2.0,
+                                                     ann.points[1], ann.penWidth)
+                          .toAlignedRect();
+        }
     } else if (ann.tool == Blur || ann.tool == Pixelate || ann.tool == SemiRect || ann.tool == Rectangle || ann.tool == Circle || ann.tool == Line || ann.tool == Arrow) {
         if (ann.points.size() < 2)
             bounds = QRect(ann.points.first(), QSize(1, 1));
@@ -1012,10 +1066,22 @@ bool AnnotationEngine::annotationContainsPoint(const Annotation &ann, const QPoi
         // compare against the unscaled background.
         return textBaseBackgroundRect(ann)
             .adjusted(-padding, -padding, padding, padding).contains(hitPos);
+    case Counter: {
+        if (counterCircleRect(ann).adjusted(-padding, -padding, padding, padding).contains(hitPos))
+            return true;
+        if (ann.points.size() < 2)
+            return false;
+        const QPointF target = ann.points[1];
+        const QPointF start = CounterGeometry::pointerStart(ann.points.first(),
+                                                            ann.counterDiameter / 2.0, target);
+        if (distanceToSegment(hitPos, start, target) <= tolerance)
+            return true;
+        const CounterGeometry::ArrowHead head = CounterGeometry::arrowHead(start, target, ann.penWidth);
+        return QPolygonF({head.tip, head.left, head.right}).containsPoint(hitPos, Qt::OddEvenFill);
+    }
     case Blur:
     case Pixelate:
     case SemiRect:
-    case Counter:
         return rawAnnotationBounds(ann, padding).contains(hitPos);
 
     default:
@@ -1042,6 +1108,23 @@ void AnnotationEngine::appendHistoryAction(const HistoryAction &action)
         m_undoStack.removeFirst();
     }
     m_undoStack.append(action);
+}
+
+int AnnotationEngine::nextCounterValue() const
+{
+    return CounterGeometry::nextValue(m_counterStartValue, m_counterValue);
+}
+
+int AnnotationEngine::counterValueOf(int index) const
+{
+    return index >= 0 && index < m_annotations.size() && m_annotations[index].tool == Counter
+        ? m_annotations[index].counterValue : 0;
+}
+
+QRect AnnotationEngine::counterCircleRect(const Annotation &ann)
+{
+    const int half = (ann.counterDiameter + 1) / 2;
+    return QRect(ann.points.first() - QPoint(half, half), QSize(half * 2, half * 2));
 }
 
 void AnnotationEngine::recalculateCounterValue()

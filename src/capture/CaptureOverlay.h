@@ -224,6 +224,11 @@ private:
     QSlider *m_quickBlurSlider = nullptr;
     QLabel *m_quickPenWidthValueLabel = nullptr;
     QLabel *m_quickBlurValueLabel = nullptr;
+    // Counter tool options; only shown while the Counter tool is active.
+    QWidget *m_quickCounterOptions = nullptr;
+    QSpinBox *m_quickCounterStartSpin = nullptr;
+    QSlider *m_quickCounterSizeSlider = nullptr;
+    QLabel *m_quickCounterSizeValueLabel = nullptr;
     QSpinBox *m_quickGifFpsSpin = nullptr;
     QSpinBox *m_quickGifSecondsSpin = nullptr;
     QComboBox *m_quickGifLoopCombo = nullptr;
@@ -258,6 +263,7 @@ private:
     void setupToolSettingsDrawer();
     void updateToolSettingsDrawerPosition();
     void setToolSettingsDrawerVisible(bool visible);
+    void updateCounterQuickSettings();
     bool isToolSettingsUiAt(const QPoint &pos) const;
     void setupRecordingDrawer();
     void showRecordingDrawer(RecordingDrawerMode mode);

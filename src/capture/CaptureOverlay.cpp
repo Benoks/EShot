@@ -851,6 +851,38 @@ void CaptureOverlay::setupToolSettingsDrawer()
     addSliderRow(TranslationManager::quickPenWidth(), m_quickPenWidthSlider, m_quickPenWidthValueLabel, 1, 20, 3);
     addSliderRow(TranslationManager::quickBlurIntensity(), m_quickBlurSlider, m_quickBlurValueLabel, 4, 64, 16);
 
+    // Counter options. The pointer thickness is the width slider above, like
+    // the Arrow tool's.
+    m_quickCounterOptions = new QWidget(m_toolSettingsDrawer);
+    auto *counterLayout = new QVBoxLayout(m_quickCounterOptions);
+    counterLayout->setContentsMargins(0, 0, 0, 0);
+    counterLayout->setSpacing(panelMetrics.rowSpacing);
+    auto *counterStartRow = new QHBoxLayout();
+    counterStartRow->addWidget(new QLabel(TranslationManager::tr("quickCounterStart"), m_quickCounterOptions));
+    m_quickCounterStartSpin = new QSpinBox(m_quickCounterOptions);
+    m_quickCounterStartSpin->setRange(CounterGeometry::MinStartValue, CounterGeometry::MaxStartValue);
+    m_quickCounterStartSpin->setToolTip(TranslationManager::tr("quickCounterStartHint"));
+    configureOverlaySpinBox(m_quickCounterStartSpin);
+    m_quickCounterStartSpin->setFixedWidth(96);
+    counterStartRow->addWidget(m_quickCounterStartSpin);
+    counterLayout->addLayout(counterStartRow);
+    counterLayout->addWidget(new QLabel(TranslationManager::tr("quickCounterSize"), m_quickCounterOptions));
+    m_quickCounterSizeSlider = new QSlider(Qt::Horizontal, m_quickCounterOptions);
+    m_quickCounterSizeSlider->setRange(CounterGeometry::MinDiameter, CounterGeometry::MaxDiameter);
+    m_quickCounterSizeSlider->setValue(CounterGeometry::DefaultDiameter);
+    m_quickCounterSizeValueLabel = new QLabel(QString::number(CounterGeometry::DefaultDiameter),
+                                              m_quickCounterOptions);
+    m_quickCounterSizeValueLabel->setProperty("panelRole", QStringLiteral("value"));
+    m_quickCounterSizeValueLabel->setFixedWidth(34);
+    auto *counterSizeRow = new QHBoxLayout();
+    counterSizeRow->setContentsMargins(0, 0, 0, 0);
+    counterSizeRow->setSpacing(7);
+    counterSizeRow->addWidget(m_quickCounterSizeSlider, 1);
+    counterSizeRow->addWidget(m_quickCounterSizeValueLabel);
+    counterLayout->addLayout(counterSizeRow);
+    drawerLayout->addWidget(m_quickCounterOptions);
+    m_quickCounterOptions->hide();
+
     addOverlayPanelSection(drawerLayout, m_toolSettingsDrawer,
                            TranslationManager::quickGifRecording());
 
@@ -1053,6 +1085,20 @@ void CaptureOverlay::setupToolSettingsDrawer()
         if (m_quickPenWidthValueLabel)
             m_quickPenWidthValueLabel->setText(QString::number(value));
         if (m_annotationEngine) m_annotationEngine->setPenWidth(value);
+        if (m_settingsWriter)
+            m_settingsWriter->schedule(QStringLiteral("annotationPenWidth"), value);
+    });
+    connect(m_quickCounterStartSpin, qOverload<int>(&QSpinBox::valueChanged), this, [this](int value) {
+        if (m_annotationEngine) m_annotationEngine->setCounterStartValue(value);
+        if (m_settingsWriter)
+            m_settingsWriter->schedule(QStringLiteral("counterStartValue"), value);
+    });
+    connect(m_quickCounterSizeSlider, &QSlider::valueChanged, this, [this](int value) {
+        if (m_quickCounterSizeValueLabel)
+            m_quickCounterSizeValueLabel->setText(QString::number(value));
+        if (m_annotationEngine) m_annotationEngine->setCounterDiameter(value);
+        if (m_settingsWriter)
+            m_settingsWriter->schedule(QStringLiteral("counterSize"), value);
     });
     connect(m_quickBlurSlider, &QSlider::valueChanged, this, [this](int value) {
         if (m_quickBlurValueLabel)
@@ -1419,6 +1465,30 @@ void CaptureOverlay::updateToolSettingsDrawerPosition()
     m_toolSettingsButton->raise();
 }
 
+void CaptureOverlay::updateCounterQuickSettings()
+{
+    if (!m_quickCounterOptions || !m_annotationEngine)
+        return;
+    if (m_quickCounterStartSpin) {
+        QSignalBlocker blocker(m_quickCounterStartSpin);
+        m_quickCounterStartSpin->setValue(m_annotationEngine->counterStartValue());
+    }
+    if (m_quickCounterSizeSlider) {
+        QSignalBlocker blocker(m_quickCounterSizeSlider);
+        const int value = m_annotationEngine->counterDiameter();
+        m_quickCounterSizeSlider->setValue(value);
+        if (m_quickCounterSizeValueLabel)
+            m_quickCounterSizeValueLabel->setText(QString::number(value));
+    }
+    const bool counterActive = m_annotationEngine->currentTool() == AnnotationEngine::Counter;
+    if (m_quickCounterOptions->isHidden() != counterActive)
+        return;
+    m_quickCounterOptions->setVisible(counterActive);
+    // An open drawer grows or shrinks in place for the new tool.
+    if (m_toolSettingsDrawer && m_toolSettingsDrawer->isVisible())
+        updateToolSettingsDrawerPosition();
+}
+
 void CaptureOverlay::setToolSettingsDrawerVisible(bool visible)
 {
     if (!m_toolSettingsDrawer || !m_toolSettingsButton)
@@ -1436,6 +1506,8 @@ void CaptureOverlay::setToolSettingsDrawerVisible(bool visible)
 
     static_cast<SideTabButton *>(m_toolSettingsButton)
         ->fitToAvailableHeight(monitorRect.height());
+    if (visible)
+        updateCounterQuickSettings();
     m_toolSettingsDrawer->adjustSize();
     const int drawerW = m_toolSettingsDrawer->width();
     const int drawerH = m_toolSettingsDrawer->height();
@@ -1790,6 +1862,14 @@ void CaptureOverlay::startCaptureInternal(CaptureSelectionMode selectionMode, bo
     int blurIntensity = s.value("blurIntensity", 16).toInt();
     if (m_annotationEngine) m_annotationEngine->setBlurIntensity(blurIntensity);
     if (m_quickBlurSlider) m_quickBlurSlider->setValue(blurIntensity);
+    if (m_annotationEngine) {
+        // Counter numbering and sizes carry over between captures, since a
+        // tutorial usually spans several screenshots.
+        m_annotationEngine->setPenWidth(s.value("annotationPenWidth", m_annotationEngine->penWidth()).toInt());
+        m_annotationEngine->setCounterStartValue(s.value("counterStartValue", CounterGeometry::MinStartValue).toInt());
+        m_annotationEngine->setCounterDiameter(s.value("counterSize", CounterGeometry::DefaultDiameter).toInt());
+        m_annotationEngine->setCounterDragDistance(QApplication::startDragDistance());
+    }
     if (m_quickPenWidthSlider && m_annotationEngine) m_quickPenWidthSlider->setValue(m_annotationEngine->penWidth());
     setToolSettingsDrawerVisible(false);
 
@@ -3246,13 +3326,9 @@ void CaptureOverlay::mouseReleaseEvent(QMouseEvent *event)
                 if (selRect.contains(event->pos())) {
                     beginTextEditAt(event->pos());
                 }
-            } else if (m_annotationEngine && m_annotationEngine->currentTool() == AnnotationEngine::Counter) {
-                if (selRect.contains(event->pos())) {
-                    m_annotationEngine->addCounterAnnotation(rel);
-                    update();
-                    updateUndoRedoState();
-                }
             } else if (m_annotationEngine) {
+                // Counters also end here: the press placed the counter, and a
+                // drag to this point gives it a pointer.
                 m_annotationEngine->endDraw(rel);
                 update();
                 updateUndoRedoState();
@@ -4603,6 +4679,7 @@ void CaptureOverlay::onToolSelected(int toolId)
         m_annotationEngine->setCurrentTool(static_cast<AnnotationEngine::Tool>(toolId));
         m_annotationEngine->setSelectedIndex(-1);
     }
+    updateCounterQuickSettings();
     m_isDraggingAnnotation = false;
     QSettings settings("EShot", "EShot");
     if (settings.value("rememberLastAnnotationTool", false).toBool())

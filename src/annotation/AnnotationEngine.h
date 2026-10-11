@@ -11,6 +11,8 @@
 #include <QString>
 #include <QFont>
 
+#include "CounterGeometry.h"
+
 class AnnotationEngine : public QObject {
     Q_OBJECT
 
@@ -73,6 +75,18 @@ public:
 
     void setBlurIntensity(int intensity);
     int blurIntensity() const { return m_blurIntensity; }
+
+    // Counter tool: first number, circle diameter and the drag distance that
+    // turns a click into counter + pointer. Placed counters keep their own.
+    void setCounterStartValue(int value);
+    int counterStartValue() const { return m_counterStartValue; }
+    void setCounterDiameter(int diameter);
+    int counterDiameter() const { return m_counterDiameter; }
+    void setCounterDragDistance(int distance) { m_counterDragDistance = qMax(1, distance); }
+    // Number the next counter will get.
+    int nextCounterValue() const;
+    // 0 when index is not a counter.
+    int counterValueOf(int index) const;
 
     bool canUndo() const { return !m_undoStack.isEmpty(); }
     bool canRedo() const { return !m_redoStack.isEmpty(); }
@@ -146,6 +160,8 @@ private:
         int fontSize = 18;
         QRect boundingRect;
         int counterValue = 0;
+        // Circle size of a counter; points[1], when present, is its pointer target.
+        int counterDiameter = CounterGeometry::DefaultDiameter;
         bool shiftConstrained = false;
         qreal rotationDegrees = 0.0;
         qreal textScaleX = 1.0;
@@ -180,6 +196,8 @@ private:
     void pushHistory(HistoryAction::Type type, const Annotation &annotation, int index);
     void appendHistoryAction(const HistoryAction &action);
     void recalculateCounterValue();
+    static QRect counterCircleRect(const Annotation &ann);
+    void updateCounterPointer(const QPoint &pos);
     void adjustSelectionForInsert(int index);
     void adjustSelectionForRemove(int index);
     void resetGestureState();
@@ -198,6 +216,9 @@ private:
     Annotation m_currentAnnotation;
     bool m_isDrawing;
     int m_counterValue;
+    int m_counterStartValue = CounterGeometry::MinStartValue;
+    int m_counterDiameter = CounterGeometry::DefaultDiameter;
+    int m_counterDragDistance = 10;
     int m_selectedIndex;
     int m_textResizeIndex = -1;
     Annotation m_textResizeOriginal;

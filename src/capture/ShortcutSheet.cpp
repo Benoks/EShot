@@ -237,6 +237,7 @@ void drawShortcutSheet(QPainter &painter, const QRect &monitorRect)
     editing.rows.append({{TM::tr("keyCtrlClick")}, TM::tr("sheetMoveObject")});
     editing.rows.append({{arrows}, TM::tr("sheetNudgeObject")});
     editing.rows.append({{TM::tr("keyShiftDrag")}, TM::tr("sheetStraight")});
+    editing.rows.append({{TM::tr("keyDrag")}, TM::tr("sheetCounterPointer")});
     editing.rows.append({{TM::tr("keyDoubleClick"), QStringLiteral("F2")}, TM::tr("sheetEditText")});
 
     const Section typing{TM::tr("sheetSectionText"), {
