@@ -835,6 +835,9 @@ QWidget* SettingsDialog::createCaptureTab()
     m_rememberLastAnnotationToolCheck = new QCheckBox(TranslationManager::rememberLastAnnotationTool());
     m_rememberLastAnnotationToolCheck->setToolTip(TranslationManager::rememberLastAnnotationToolHint());
     capLayout->addRow(m_rememberLastAnnotationToolCheck);
+    m_autoLockSelectionCheck = new QCheckBox(TranslationManager::tr("autoLockSelection"));
+    m_autoLockSelectionCheck->setToolTip(TranslationManager::tr("autoLockSelectionTip"));
+    capLayout->addRow(m_autoLockSelectionCheck);
     layout->addWidget(capGroup);
 
     layout->addStretch();
@@ -1987,6 +1990,8 @@ void SettingsDialog::loadSettings()
         m_instantCopyAfterSelectionCheck->setChecked(m_settings->value("instantCopyAfterSelection", false).toBool());
     if (m_rememberLastAnnotationToolCheck)
         m_rememberLastAnnotationToolCheck->setChecked(m_settings->value("rememberLastAnnotationTool", false).toBool());
+    if (m_autoLockSelectionCheck)
+        m_autoLockSelectionCheck->setChecked(m_settings->value("autoLockSelection", false).toBool());
 
     if (m_recordingFpsSpin)
         m_recordingFpsSpin->setValue(m_settings->value("recordingFps", 10).toInt());
@@ -2567,6 +2572,8 @@ void SettingsDialog::onSave()
                          m_instantCopyAfterSelectionCheck ? m_instantCopyAfterSelectionCheck->isChecked() : false);
     m_settings->setValue("rememberLastAnnotationTool",
                          m_rememberLastAnnotationToolCheck ? m_rememberLastAnnotationToolCheck->isChecked() : false);
+    m_settings->setValue("autoLockSelection",
+                         m_autoLockSelectionCheck ? m_autoLockSelectionCheck->isChecked() : false);
 
     m_settings->setValue("darkMode",           m_darkModeCheck->isChecked());
     m_settings->setValue("overlayOpacity",     m_opacitySlider->value());
@@ -2732,6 +2739,7 @@ void SettingsDialog::onExportSettings()
     obj["closeAfterCopy"] = m_closeAfterCopyCheck->isChecked();
     obj["instantCopyAfterSelection"] = m_instantCopyAfterSelectionCheck ? m_instantCopyAfterSelectionCheck->isChecked() : false;
     obj["rememberLastAnnotationTool"] = m_rememberLastAnnotationToolCheck ? m_rememberLastAnnotationToolCheck->isChecked() : false;
+    obj["autoLockSelection"] = m_autoLockSelectionCheck ? m_autoLockSelectionCheck->isChecked() : false;
     obj["darkMode"] = m_darkModeCheck->isChecked();
     obj["overlayOpacity"] = m_opacitySlider->value();
     obj["crosshairStyle"] = m_crosshairStyleCombo->currentData().toString();
@@ -2886,6 +2894,8 @@ void SettingsDialog::onImportSettings()
         m_instantCopyAfterSelectionCheck->setChecked(obj["instantCopyAfterSelection"].toBool());
     if (m_rememberLastAnnotationToolCheck && obj.contains("rememberLastAnnotationTool"))
         m_rememberLastAnnotationToolCheck->setChecked(obj["rememberLastAnnotationTool"].toBool());
+    if (m_autoLockSelectionCheck && obj.contains("autoLockSelection"))
+        m_autoLockSelectionCheck->setChecked(obj["autoLockSelection"].toBool());
     if (obj.contains("darkMode")) m_darkModeCheck->setChecked(obj["darkMode"].toBool());
     if (obj.contains("overlayOpacity")) m_opacitySlider->setValue(obj["overlayOpacity"].toInt());
     if (obj.contains("crosshairStyle")) {

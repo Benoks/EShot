@@ -28,6 +28,19 @@ struct SelectionFrameSegments {
     qreal thickness = 1.0;
 };
 
+// Keyboard fine-tuning of a finished selection: arrows move it, Ctrl+arrows
+// move its right/bottom edge. Shift makes the step 10 px instead of 1 px.
+enum class SelectionNudgeMode {
+    Move,
+    Resize
+};
+
+struct SelectionNudge {
+    bool valid = false;
+    SelectionNudgeMode mode = SelectionNudgeMode::Move;
+    QPoint delta;
+};
+
 enum class ManagedProxyKeyDestination {
     TextEditor,
     OverlayInput,
@@ -75,3 +88,6 @@ SelectionFrameSegments selectionFrameSegments(const QRect &selection, qreal devi
 QPointF selectionFrameHandleCenter(const QRect &selection, SelectionResizeHandle handle,
                                    qreal devicePixelRatio);
 QRegion selectionFrameClipRegion(const QRect &selection, const QRect &canvasRect);
+SelectionNudge selectionNudgeForKey(int key, Qt::KeyboardModifiers modifiers);
+QRect nudgedSelection(const QRect &selection, SelectionNudgeMode mode,
+                      const QPoint &delta, const QRect &bounds);

@@ -142,6 +142,7 @@ private:
     QCheckBox *m_closeAfterCopyCheck = nullptr;
     QCheckBox *m_instantCopyAfterSelectionCheck = nullptr;
     QCheckBox *m_rememberLastAnnotationToolCheck = nullptr;
+    QCheckBox *m_autoLockSelectionCheck = nullptr;
 
     // Appearance
     QCheckBox *m_darkModeCheck = nullptr;

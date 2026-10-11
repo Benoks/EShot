@@ -258,6 +258,105 @@ private slots:
         QVERIFY(!shouldComposeCaptureResult(true));
     }
 
+    void arrowKeysMapToSelectionNudges()
+    {
+        SelectionNudge nudge = selectionNudgeForKey(Qt::Key_Left, Qt::NoModifier);
+        QVERIFY(nudge.valid);
+        QCOMPARE(nudge.mode, SelectionNudgeMode::Move);
+        QCOMPARE(nudge.delta, QPoint(-1, 0));
+
+        nudge = selectionNudgeForKey(Qt::Key_Down, Qt::ShiftModifier);
+        QCOMPARE(nudge.mode, SelectionNudgeMode::Move);
+        QCOMPARE(nudge.delta, QPoint(0, 10));
+
+        nudge = selectionNudgeForKey(Qt::Key_Right, Qt::ControlModifier);
+        QCOMPARE(nudge.mode, SelectionNudgeMode::Resize);
+        QCOMPARE(nudge.delta, QPoint(1, 0));
+
+        nudge = selectionNudgeForKey(Qt::Key_Up, Qt::ControlModifier | Qt::ShiftModifier);
+        QCOMPARE(nudge.mode, SelectionNudgeMode::Resize);
+        QCOMPARE(nudge.delta, QPoint(0, -10));
+
+        // Keypad arrows behave like the regular ones.
+        nudge = selectionNudgeForKey(Qt::Key_Up, Qt::KeypadModifier);
+        QVERIFY(nudge.valid);
+        QCOMPARE(nudge.delta, QPoint(0, -1));
+
+        QVERIFY(!selectionNudgeForKey(Qt::Key_Left, Qt::AltModifier).valid);
+        QVERIFY(!selectionNudgeForKey(Qt::Key_Left, Qt::MetaModifier).valid);
+        QVERIFY(!selectionNudgeForKey(Qt::Key_A, Qt::NoModifier).valid);
+    }
+
+    void selectionNudgeMovesInsideTheBounds()
+    {
+        const QRect bounds(0, 0, 1920, 1080);
+        const QRect selection(100, 200, 300, 150);
+        QCOMPARE(nudgedSelection(selection, SelectionNudgeMode::Move, QPoint(1, 0), bounds),
+                 QRect(101, 200, 300, 150));
+        QCOMPARE(nudgedSelection(selection, SelectionNudgeMode::Move, QPoint(0, -10), bounds),
+                 QRect(100, 190, 300, 150));
+        // Clamped at every edge without changing the size.
+        QCOMPARE(nudgedSelection(QRect(3, 4, 300, 150), SelectionNudgeMode::Move,
+                                 QPoint(-10, -10), bounds),
+                 QRect(0, 0, 300, 150));
+        QCOMPARE(nudgedSelection(QRect(1615, 925, 300, 150), SelectionNudgeMode::Move,
+                                 QPoint(10, 10), bounds),
+                 QRect(1620, 930, 300, 150));
+        // A selection covering the whole canvas stays put.
+        QCOMPARE(nudgedSelection(bounds, SelectionNudgeMode::Move, QPoint(1, 1), bounds), bounds);
+        // Bounds that do not start at the origin (virtual desktop offsets).
+        QCOMPARE(nudgedSelection(QRect(-1915, 5, 100, 100), SelectionNudgeMode::Move,
+                                 QPoint(-10, 0), QRect(-1920, 0, 3840, 1080)),
+                 QRect(-1920, 5, 100, 100));
+    }
+
+    void selectionNudgeResizesTheRightAndBottomEdges()
+    {
+        const QRect bounds(0, 0, 1920, 1080);
+        const QRect selection(100, 200, 300, 150);
+        QCOMPARE(nudgedSelection(selection, SelectionNudgeMode::Resize, QPoint(1, 0), bounds),
+                 QRect(100, 200, 301, 150));
+        QCOMPARE(nudgedSelection(selection, SelectionNudgeMode::Resize, QPoint(-10, 0), bounds),
+                 QRect(100, 200, 290, 150));
+        QCOMPARE(nudgedSelection(selection, SelectionNudgeMode::Resize, QPoint(0, 10), bounds),
+                 QRect(100, 200, 300, 160));
+        QCOMPARE(nudgedSelection(selection, SelectionNudgeMode::Resize, QPoint(0, -1), bounds),
+                 QRect(100, 200, 300, 149));
+        // Never smaller than one pixel and never past the canvas edge.
+        QCOMPARE(nudgedSelection(QRect(100, 200, 5, 5), SelectionNudgeMode::Resize,
+                                 QPoint(-10, 0), bounds),
+                 QRect(100, 200, 1, 5));
+        QCOMPARE(nudgedSelection(QRect(100, 200, 5, 5), SelectionNudgeMode::Resize,
+                                 QPoint(0, -10), bounds),
+                 QRect(100, 200, 5, 1));
+        QCOMPARE(nudgedSelection(QRect(1815, 1000, 100, 75), SelectionNudgeMode::Resize,
+                                 QPoint(10, 10), bounds),
+                 QRect(1815, 1000, 105, 80));
+    }
+
+    void selectionNudgeLabelsExistInEveryLanguage()
+    {
+        const QList<QByteArray> keys = {
+            "autoLockSelection", "autoLockSelectionTip", "sheetNudgeSelection",
+            "sheetResizeSelection", "sheetNudgeObject"
+        };
+        TranslationManager::setLanguage(TranslationManager::English, false);
+        QHash<QByteArray, QString> english;
+        for (const QByteArray &key : keys) {
+            english.insert(key, TranslationManager::tr(key.constData()));
+            QVERIFY2(english.value(key) != QString::fromLatin1(key), key.constData());
+        }
+        for (int language = 0; language < TranslationManager::LangCount; ++language) {
+            if (language == TranslationManager::English)
+                continue;
+            TranslationManager::setLanguage(static_cast<TranslationManager::Language>(language), false);
+            for (const QByteArray &key : keys)
+                QVERIFY2(TranslationManager::tr(key.constData()) != english.value(key), key.constData());
+        }
+        TranslationManager::setLanguage(TranslationManager::Turkish, false);
+        QVERIFY(TranslationManager::tr("autoLockSelection").contains(QStringLiteral("ç")));
+    }
+
     void annotationPersistenceLabelsExistInEveryLanguage()
     {
         for (int language = 0; language < TranslationManager::LangCount; ++language) {

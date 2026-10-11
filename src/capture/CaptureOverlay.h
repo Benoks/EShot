@@ -101,6 +101,9 @@ private:
     QRect monitorRectAt(const QPoint &pos) const;
     void selectMonitorAt(const QPoint &pos);
     void completeSelection(const QRect &selectionRect);
+    void applyAutoSelectionLock();
+    bool handleSelectionNudgeKey(QKeyEvent *event);
+    QRegion visibleSelectionUiRegion() const;
     void setHoveredWindowRect(const QRect &targetRect);
     void updateOverlayRegion(const QRegion &region);
     void resetGestureState();
@@ -235,6 +238,7 @@ private:
     QSlider *m_quickMicrophoneVolumeSlider = nullptr;
     QLabel *m_quickMicrophoneVolumeLabel = nullptr;
     QComboBox *m_quickMicrophoneDeviceCombo = nullptr;
+    QCheckBox *m_quickAutoLockSelectionCheck = nullptr;
     QWidget *m_recordingDrawer = nullptr;
     QWidget *m_recordingGifOptions = nullptr;
     QWidget *m_recordingVideoOptions = nullptr;
@@ -327,6 +331,7 @@ private:
 
     // New: Selection lock
     bool m_selectionLocked;
+    bool m_autoLockSelection = false;
 
     // New: Special capture mode (recording, scrolling, etc.)
     enum CaptureMode { ModeNormal, ModeRecording };

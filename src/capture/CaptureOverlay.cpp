@@ -1036,6 +1036,19 @@ void CaptureOverlay::setupToolSettingsDrawer()
                     m_quickMicrophoneDeviceCombo->setEnabled(enabled);
             });
 
+    addOverlayPanelSection(drawerLayout, m_toolSettingsDrawer,
+                           TranslationManager::tr("sheetSectionSelection"));
+    m_quickAutoLockSelectionCheck = new QCheckBox(TranslationManager::tr("autoLockSelection"),
+                                                  m_toolSettingsDrawer);
+    m_quickAutoLockSelectionCheck->setToolTip(TranslationManager::tr("autoLockSelectionTip"));
+    drawerLayout->addWidget(m_quickAutoLockSelectionCheck);
+    // Applies from the next finished selection; the current lock stays as is.
+    connect(m_quickAutoLockSelectionCheck, &QCheckBox::toggled, this, [this](bool enabled) {
+        m_autoLockSelection = enabled;
+        QSettings s("EShot", "EShot");
+        s.setValue("autoLockSelection", enabled);
+    });
+
     connect(m_quickPenWidthSlider, &QSlider::valueChanged, this, [this](int value) {
         if (m_quickPenWidthValueLabel)
             m_quickPenWidthValueLabel->setText(QString::number(value));
@@ -1766,6 +1779,11 @@ void CaptureOverlay::startCaptureInternal(CaptureSelectionMode selectionMode, bo
     m_copyAfterCapture = s.value("copyAfterCapture", true).toBool();
     m_closeAfterCopy = s.value("closeAfterCopy", true).toBool();
     m_instantCopyAfterSelection = s.value("instantCopyAfterSelection", false).toBool();
+    m_autoLockSelection = s.value("autoLockSelection", false).toBool();
+    if (m_quickAutoLockSelectionCheck) {
+        const QSignalBlocker blocker(m_quickAutoLockSelectionCheck);
+        m_quickAutoLockSelectionCheck->setChecked(m_autoLockSelection);
+    }
     m_showCaptureHints = s.value("showCaptureHints", true).toBool();
 
     // Load blur strength setting
@@ -2843,6 +2861,59 @@ void CaptureOverlay::mouseDoubleClickEvent(QMouseEvent *event)
     m_ignoreNextMouseRelease = true;
 }
 
+QRegion CaptureOverlay::visibleSelectionUiRegion() const
+{
+    // Panels that follow the selection; their old and new places need a repaint.
+    QRegion region;
+    const QWidget *widgets[] = { m_toolbar, m_actionPanel, m_toolSettingsButton,
+                                 m_toolSettingsDrawer };
+    for (const QWidget *widget : widgets) {
+        if (widget && widget->isVisible())
+            region += widget->geometry().adjusted(-4, -4, 4, 4);
+    }
+    return region;
+}
+
+bool CaptureOverlay::handleSelectionNudgeKey(QKeyEvent *event)
+{
+    const SelectionNudge nudge = selectionNudgeForKey(event->key(), event->modifiers());
+    if (!nudge.valid || !m_selectionComplete || m_isSelecting || m_eyedropperActive
+        || m_resizeMode != ResNone || m_isDraggingAnnotation || m_isRotatingAnnotation
+        || m_isResizingTextAnnotation || (m_textEdit && m_textEdit->isVisible()))
+        return false;
+
+    // A selected object takes plain and Shift arrows, one undo step per
+    // press; Ctrl+arrows keep resizing the selection.
+    const int selectedAnnotation = m_annotationEngine ? m_annotationEngine->selectedIndex() : -1;
+    if (nudge.mode == SelectionNudgeMode::Move && selectedAnnotation >= 0) {
+        m_annotationEngine->beginMove(selectedAnnotation);
+        m_annotationEngine->moveAnnotation(selectedAnnotation, nudge.delta);
+        m_annotationEngine->endMove();
+        updateUndoRedoState();
+        update();
+        return true;
+    }
+
+    // Works while locked too: the lock only guards against mouse changes.
+    const QRect oldSel = normalizedSelectionRect();
+    const QRect newSel = nudgedSelection(oldSel, nudge.mode, nudge.delta, rect());
+    if (newSel == oldSel)
+        return true;
+
+    QRegion movingUiRegion = visibleSelectionUiRegion();
+    m_selectionStart = newSel.topLeft();
+    m_selectionEnd = newSel.bottomRight();
+    const bool nativeViews = m_screenViews && m_screenViews->isActive();
+    if ((m_toolbar && m_toolbar->isVisible())
+        || (nativeViews && m_recordingDrawerMode == RecordingDrawerMode::None))
+        showToolbar();
+    movingUiRegion += visibleSelectionUiRegion();
+    QRegion dirty = selectionUpdateRegion(oldSel, newSel, rect());
+    dirty += movingUiRegion.intersected(rect());
+    updateOverlayRegion(dirty);
+    return true;
+}
+
 void CaptureOverlay::updateOverlayRegion(const QRegion &region)
 {
     if (shouldUsePartialOverlayUpdates(devicePixelRatioF()))
@@ -2996,16 +3067,8 @@ void CaptureOverlay::mouseMoveEvent(QMouseEvent *event)
             m_selectionStart = resized.topLeft();
             m_selectionEnd = resized.bottomRight();
         };
-        QRegion movingUiRegion;
-        auto includeVisibleUi = [&movingUiRegion](QWidget *widget) {
-            if (widget && widget->isVisible())
-                movingUiRegion += widget->geometry().adjusted(-4, -4, 4, 4);
-        };
-        includeVisibleUi(m_toolbar);
-        includeVisibleUi(m_actionPanel);
-        includeVisibleUi(m_toolSettingsButton);
-        includeVisibleUi(m_toolSettingsDrawer);
-        
+        QRegion movingUiRegion = visibleSelectionUiRegion();
+
         if (m_resizeMode == ResMove) {
             QPoint newTopLeft = event->pos() - m_moveOffset;
             
@@ -3052,10 +3115,7 @@ void CaptureOverlay::mouseMoveEvent(QMouseEvent *event)
         if (m_selectionComplete && ((m_toolbar && m_toolbar->isVisible())
             || (nativeViews && m_recordingDrawerMode == RecordingDrawerMode::None)))
             showToolbar();
-        includeVisibleUi(m_toolbar);
-        includeVisibleUi(m_actionPanel);
-        includeVisibleUi(m_toolSettingsButton);
-        includeVisibleUi(m_toolSettingsDrawer);
+        movingUiRegion += visibleSelectionUiRegion();
         QRegion dirty = selectionUpdateRegion(
             oldSel, normalizedSelectionRect(), rect());
         dirty += movingUiRegion.intersected(rect());
@@ -3312,6 +3372,8 @@ void CaptureOverlay::keyPressEvent(QKeyEvent *event)
         else if (matchesOverlayShortcut(event, QStringLiteral("toolPixelate"), QStringLiteral("M"))) selectAnnotationTool(AnnotationEngine::Pixelate);
         else if (matchesOverlayShortcut(event, QStringLiteral("toolCounter"), QStringLiteral("N"))) selectAnnotationTool(AnnotationEngine::Counter);
         else if (matchesOverlayShortcut(event, QStringLiteral("toolEraser"), QStringLiteral("X"))) selectAnnotationTool(AnnotationEngine::Eraser);
+        // Arrows come last so a shortcut configured on an arrow key wins.
+        else handleSelectionNudgeKey(event);
     }
 }
 
@@ -4475,6 +4537,7 @@ void CaptureOverlay::selectMonitorAt(const QPoint &pos)
         return;
     }
 
+    applyAutoSelectionLock();
     showToolbar();
     if (shouldRestoreCaptureKeyboardFocus(
             isVisible(), m_selectionComplete,
@@ -4514,6 +4577,7 @@ void CaptureOverlay::completeSelection(const QRect &selectionRect)
         return;
     }
 
+    applyAutoSelectionLock();
     showToolbar();
     if (shouldRestoreCaptureKeyboardFocus(
             isVisible(), m_selectionComplete,
@@ -4524,6 +4588,13 @@ void CaptureOverlay::completeSelection(const QRect &selectionRect)
     updateCursor(bounded.center());
     showSelectionOnboarding();
     update();
+}
+
+void CaptureOverlay::applyAutoSelectionLock()
+{
+    // Same state as the lock button; K or the button still unlocks it.
+    if (m_autoLockSelection && m_selectionComplete && !m_selectionLocked)
+        onSelectionLockToggled(true);
 }
 
 void CaptureOverlay::onToolSelected(int toolId)

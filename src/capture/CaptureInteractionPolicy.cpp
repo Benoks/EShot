@@ -350,3 +350,56 @@ QRegion selectionFrameClipRegion(const QRect &selection, const QRect &canvasRect
     excludeHandle(QPoint(rect.left(), rect.center().y()), QSize(4, 10));
     return clip;
 }
+
+SelectionNudge selectionNudgeForKey(int key, Qt::KeyboardModifiers modifiers)
+{
+    SelectionNudge nudge;
+    // Keypad arrows carry KeypadModifier; Alt and Meta combinations are left
+    // to the desktop and to user-defined shortcuts.
+    const Qt::KeyboardModifiers relevant = modifiers
+        & (Qt::ControlModifier | Qt::ShiftModifier | Qt::AltModifier | Qt::MetaModifier);
+    if (relevant & (Qt::AltModifier | Qt::MetaModifier))
+        return nudge;
+    const int step = (relevant & Qt::ShiftModifier) ? 10 : 1;
+    switch (key) {
+    case Qt::Key_Left: nudge.delta = QPoint(-step, 0); break;
+    case Qt::Key_Right: nudge.delta = QPoint(step, 0); break;
+    case Qt::Key_Up: nudge.delta = QPoint(0, -step); break;
+    case Qt::Key_Down: nudge.delta = QPoint(0, step); break;
+    default: return nudge;
+    }
+    nudge.valid = true;
+    nudge.mode = (relevant & Qt::ControlModifier) ? SelectionNudgeMode::Resize
+                                                  : SelectionNudgeMode::Move;
+    return nudge;
+}
+
+QRect nudgedSelection(const QRect &selection, SelectionNudgeMode mode,
+                      const QPoint &delta, const QRect &bounds)
+{
+    const QRect rect = selection.normalized();
+    if (!rect.isValid() || !bounds.isValid())
+        return rect;
+
+    if (mode == SelectionNudgeMode::Move) {
+        // Same clamp as a mouse move; the qMax guard keeps a selection
+        // larger than the bounds from inverting the range.
+        const int maxX = qMax(bounds.left(), bounds.right() - rect.width() + 1);
+        const int maxY = qMax(bounds.top(), bounds.bottom() - rect.height() + 1);
+        const QPoint topLeft(qBound(bounds.left(), rect.left() + delta.x(), maxX),
+                             qBound(bounds.top(), rect.top() + delta.y(), maxY));
+        return QRect(topLeft, rect.size());
+    }
+
+    // Resize moves the right/bottom edge, keeping at least 1x1 pixel.
+    QRect result = rect;
+    if (delta.x()) {
+        const int maxRight = qMax(rect.left(), bounds.right());
+        result.setRight(qBound(rect.left(), rect.right() + delta.x(), maxRight));
+    }
+    if (delta.y()) {
+        const int maxBottom = qMax(rect.top(), bounds.bottom());
+        result.setBottom(qBound(rect.top(), rect.bottom() + delta.y(), maxBottom));
+    }
+    return result;
+}

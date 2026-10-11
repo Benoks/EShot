@@ -203,6 +203,9 @@ void drawShortcutSheet(QPainter &painter, const QRect &monitorRect)
     addShortcut(selection.rows, "actionSave", "Ctrl+S", TM::captureHintSave());
     addShortcut(selection.rows, "actionPin", "Ctrl+P", plainName(TM::actionPin()));
     addShortcut(selection.rows, "actionLock", "K", plainName(TM::actionLock()));
+    const QString arrows = QStringLiteral("\u2190\u2191\u2193\u2192");
+    selection.rows.append({{arrows}, TM::tr("sheetNudgeSelection")});
+    selection.rows.append({{QStringLiteral("Ctrl+") + arrows}, TM::tr("sheetResizeSelection")});
     selection.rows.append({{QStringLiteral("Esc")}, TM::tr("sheetCancel")});
 
     Section more{TM::tr("sheetSectionMore"), {}};
@@ -232,6 +235,7 @@ void drawShortcutSheet(QPainter &painter, const QRect &monitorRect)
     addShortcut(editing.rows, "actionRedo", "Ctrl+Shift+Z", plainName(TM::toolRedo()));
     editing.rows.append({{QStringLiteral("Del")}, TM::tr("sheetDeleteSelected")});
     editing.rows.append({{TM::tr("keyCtrlClick")}, TM::tr("sheetMoveObject")});
+    editing.rows.append({{arrows}, TM::tr("sheetNudgeObject")});
     editing.rows.append({{TM::tr("keyShiftDrag")}, TM::tr("sheetStraight")});
     editing.rows.append({{TM::tr("keyDoubleClick"), QStringLiteral("F2")}, TM::tr("sheetEditText")});
 
