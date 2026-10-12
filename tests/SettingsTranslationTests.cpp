@@ -12,6 +12,7 @@ private slots:
     void hotkeyFailureTextExistsInEveryLanguage();
     void linuxRemovalTextExistsInEveryLanguage();
     void formerlyBilingualTextExistsInEveryLanguage();
+    void recordingUxTextExistsInEveryLanguage();
 };
 
 void SettingsTranslationTests::issue15SettingsTextExistsInEveryLanguage()
@@ -151,6 +152,46 @@ void SettingsTranslationTests::linuxRemovalTextExistsInEveryLanguage()
                                     .arg(key).arg(language)));
         }
     }
+}
+
+void SettingsTranslationTests::recordingUxTextExistsInEveryLanguage()
+{
+    struct Key {
+        const char *key;
+        int placeholders;
+    };
+    static const Key keys[] = {
+        {"recModeGif", 0}, {"recModeVideo", 0}, {"recSaving", 0}, {"recConvertingGif", 0},
+        {"recPause", 0}, {"recResume", 0}, {"recTimeLimitTip", 1},
+        {"recordingAccessibleControls", 0}, {"recordingAccessibleStatus", 0},
+        {"recControlsHidden", 2}, {"trayStopAndSave", 0}, {"trayPauseRecording", 0},
+        {"trayResumeRecording", 0}, {"trayRecordGif", 0}, {"trayRecordVideo", 0},
+        {"trayRecordingTooltip", 1}, {"trayRecordingPausedTooltip", 1},
+        {"trayLastRecording", 0}, {"recOpenFile", 0}, {"recShowInFolder", 0},
+        {"recCopyFile", 0}, {"recGifSavedSize", 1}, {"recVideoSavedSize", 1},
+        {"recFailRegionTooSmall", 0}, {"recFailNoFrames", 0}, {"recFailNoVideo", 0},
+        {"recFailOutputDir", 0}, {"recFailOutputFile", 0}, {"recFailFfmpegStart", 0},
+        {"recFailAudioMux", 0}, {"recFailAacEncoder", 0}, {"recFailCaptureInit", 0},
+        {"recFailAlreadyRecording", 0}, {"recFailProcessExited", 2},
+        {"recFailUnexpected", 1}, {"recFailMissingGstElements", 1},
+        {"recFailGifConvert", 0}, {"recFailGstStartup", 0},
+    };
+    for (int language = 0; language < TranslationManager::LangCount; ++language) {
+        TranslationManager::setLanguage(static_cast<TranslationManager::Language>(language), false);
+        for (const Key &key : keys) {
+            const QString translated = TranslationManager::tr(key.key);
+            QVERIFY2(translated != QString::fromLatin1(key.key) && !translated.isEmpty(),
+                     qPrintable(QStringLiteral("Missing translation for %1 in language %2")
+                                    .arg(QString::fromLatin1(key.key)).arg(language)));
+            for (int placeholder = 1; placeholder <= key.placeholders; ++placeholder) {
+                QVERIFY2(translated.contains(QStringLiteral("%%1").arg(placeholder)),
+                         qPrintable(QStringLiteral("%1 lost %%2 in language %3")
+                                        .arg(QString::fromLatin1(key.key)).arg(placeholder)
+                                        .arg(language)));
+            }
+        }
+    }
+    TranslationManager::setLanguage(TranslationManager::English, false);
 }
 
 void SettingsTranslationTests::formerlyBilingualTextExistsInEveryLanguage()

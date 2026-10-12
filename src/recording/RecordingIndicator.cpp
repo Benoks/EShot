@@ -1,5 +1,6 @@
 #include "RecordingIndicator.h"
 
+#include "RecordingCaptureExclusion.h"
 #include "../core/TranslationManager.h"
 
 #include <QAction>
@@ -23,13 +24,6 @@
 #if defined(Q_OS_LINUX) && defined(ESHOT_HAVE_X11)
 #include <X11/Xatom.h>
 #include <X11/Xlib.h>
-#endif
-
-#ifdef Q_OS_WIN
-#include <windows.h>
-#ifndef WDA_EXCLUDEFROMCAPTURE
-#define WDA_EXCLUDEFROMCAPTURE 0x00000011
-#endif
 #endif
 
 namespace {
@@ -169,6 +163,11 @@ QString controlBarStyle()
             background-color: #3a3a3a;
             border: 1px solid #505050;
         }
+        QToolButton:disabled, QPushButton#recordingStopButton:disabled {
+            background-color: #333333;
+            border-color: #404040;
+            color: #8a8a8a;
+        }
         QToolButton#recordingBorderLockButton:checked {
             background-color: #244c70;
             border-color: #3f98d5;
@@ -231,12 +230,17 @@ public:
         if (recordingBorderStaysOnTop(locked))
             flags |= Qt::WindowStaysOnTopHint;
         setWindowFlags(flags);
+        // setWindowFlags() recreates the native window, which drops its
+        // display affinity; exclude the new window before it is shown.
+        m_excludedFromCapture = excludeRecordingWindowFromCapture(this);
         if (wasVisible) {
             show();
             if (locked)
                 raise();
         }
     }
+
+    bool excludedFromCapture() const { return m_excludedFromCapture; }
 
 protected:
     void paintEvent(QPaintEvent *event) override
@@ -258,7 +262,21 @@ protected:
 private:
     QRect m_borderRect;
     int m_borderWidth = 2;
+    bool m_excludedFromCapture = false;
 };
+
+QList<QRect> alternativeRecordingWorkAreas(QScreen *captureScreen)
+{
+    QList<QRect> areas;
+    for (QScreen *screen : QGuiApplication::screens()) {
+        if (!screen || screen == captureScreen)
+            continue;
+        const QRect area = recordingScreenWorkArea(screen);
+        if (area.isValid())
+            areas.append(area);
+    }
+    return areas;
+}
 }
 
 RecordingIndicator::RecordingIndicator(const QRect &captureRect, QWidget *parent,
@@ -270,25 +288,30 @@ RecordingIndicator::RecordingIndicator(const QRect &captureRect, QWidget *parent
       m_supportsPause(supportsPause),
       m_borderWidth(qMax(1, borderWidth))
 {
-    Qt::WindowFlags windowFlags = Qt::Tool | Qt::FramelessWindowHint
-        | Qt::WindowDoesNotAcceptFocus;
-    setWindowFlags(windowFlags);
+    setObjectName(QStringLiteral("recordingIndicator"));
     setAttribute(Qt::WA_TranslucentBackground);
     setAttribute(Qt::WA_NoSystemBackground);
     setAttribute(Qt::WA_DeleteOnClose);
+    setAccessibleName(TranslationManager::tr("recordingAccessibleControls"));
+    // Exclude the control window from the capture before it is ever shown;
+    // whether Windows confirms that decides where the controls may live.
+    applyControlWindowFlags(false);
     setProperty("recordingBorderWidth", m_borderWidth);
 
     // Keep controls inside the desktop work area. Plasma panels are
     // always-on-top surfaces on Wayland and can cover a Qt tool window placed
     // at the physical bottom edge of the screen.
-    QRect screenRect = QGuiApplication::primaryScreen()
-        ? recordingScreenWorkArea(QGuiApplication::primaryScreen())
-        : captureRect;
-    if (QScreen *screen = QGuiApplication::screenAt(captureRect.center()))
-        screenRect = recordingScreenWorkArea(screen);
+    QScreen *captureScreen = QGuiApplication::screenAt(captureRect.center());
+    if (!captureScreen)
+        captureScreen = QGuiApplication::primaryScreen();
+    const QRect screenRect = captureScreen ? recordingScreenWorkArea(captureScreen)
+                                           : captureRect;
+    // A capture that fills its monitor has no room for the controls there;
+    // another monitor keeps them reachable and out of the video.
     m_layout = recordingControlLayout(captureRect, screenRect,
                                       QSize(PreferredControlWidth, ControlHeight),
-                                      QSize(CompactControlWidth, ControlHeight));
+                                      QSize(CompactControlWidth, ControlHeight),
+                                      alternativeRecordingWorkAreas(captureScreen));
     m_screenRect = m_layout.controlScreenRect;
     m_compact = m_layout.compact;
     const RecordingCaptureBackend captureBackend =
@@ -297,21 +320,28 @@ RecordingIndicator::RecordingIndicator(const QRect &captureRect, QWidget *parent
 #else
         RecordingCaptureBackend::LinuxPortal;
 #endif
-    m_platformCanExcludeOverlay = recordingCaptureBackendCanExcludeOverlay(captureBackend);
-    // A full-screen capture has no outside edge where the border can live.
-    // Backends that cannot exclude individual windows would therefore record
-    // the blue border itself, even when it is locked.
-    m_hideFullscreenBorderForCapture = !m_platformCanExcludeOverlay
-        && isFullScreenRecordingRect(m_captureRect);
+    m_platformCanExcludeOverlay = recordingCaptureBackendCanExcludeOverlay(
+        captureBackend, recordingWindowsBuildNumber(), m_controlExcludedFromCapture);
 #ifdef Q_OS_LINUX
-    // Linux portals cannot exclude an individual overlay window. Keep the
-    // controls as an ordinary, non-always-on-top tool window so other apps can
-    // cover them; the capture hint exposes the actual recording shortcuts.
+    // Linux portals cannot exclude an individual overlay window. Controls
+    // inside the capture stay an ordinary, non-always-on-top tool window so
+    // other apps can cover them; the capture hint exposes the actual
+    // recording shortcuts. Controls outside the capture stay on top.
     m_visibilityPolicy = RecordingOverlayVisibility::AlwaysVisible;
 #else
     m_visibilityPolicy = recordingOverlayVisibilityPolicy(
         m_layout.controlRect, m_captureRect, m_platformCanExcludeOverlay);
 #endif
+    if (recordingControlBarStaysOnTop(m_layout.controlRect, m_captureRect,
+                                      m_platformCanExcludeOverlay)) {
+        applyControlWindowFlags(true);
+        if (!m_controlExcludedFromCapture && m_platformCanExcludeOverlay) {
+            // The recreated window lost its exclusion: fall back to the
+            // capture-safe behaviour for this recording.
+            m_platformCanExcludeOverlay = false;
+            updateCaptureSafetyPolicy();
+        }
+    }
     setProperty("captureSafeInside", requiresCaptureSafePresentation());
     setProperty("recordingControlGlobalRect", m_layout.controlRect);
 
@@ -324,8 +354,15 @@ RecordingIndicator::RecordingIndicator(const QRect &captureRect, QWidget *parent
     m_borderOverlay = new RecordingBorderOverlay(m_captureRect, m_borderWidth);
     setBorderLocked(true);
     createControlBar();
-    // Windows GDI capture cannot reliably exclude this window. Hide
-    // overlapping controls before the first mapped frame there.
+    // A full-screen capture has no outside edge where the border can live.
+    // Unless the border window is excluded from the capture, the video would
+    // show the blue border itself, even when it is locked.
+    m_hideFullscreenBorderForCapture =
+        !(m_platformCanExcludeOverlay
+          && static_cast<RecordingBorderOverlay *>(m_borderOverlay)->excludedFromCapture())
+        && isFullScreenRecordingRect(m_captureRect);
+    // Without a confirmed capture exclusion, hide overlapping controls
+    // before the first mapped frame.
     if (requiresCaptureSafePresentation())
         setOverlayVisible(false);
     updateControlMask();
@@ -340,14 +377,44 @@ RecordingIndicator::RecordingIndicator(const QRect &captureRect, QWidget *parent
                 << "control=" << m_layout.controlRect
                 << "window-requested=" << globalWindowRect
                 << "window-actual=" << geometry()
-                << "platform=" << QGuiApplication::platformName();
+                << "platform=" << QGuiApplication::platformName()
+                << "excluded=" << m_controlExcludedFromCapture
+                << "canExclude=" << m_platformCanExcludeOverlay
+                << "onTop=" << m_controlStaysOnTop
+                << "hiddenWhileRecording=" << requiresCaptureSafePresentation();
     });
-#ifdef Q_OS_WIN
-    SetWindowDisplayAffinity(reinterpret_cast<HWND>(winId()), WDA_EXCLUDEFROMCAPTURE);
-    if (m_borderOverlay)
-        SetWindowDisplayAffinity(reinterpret_cast<HWND>(m_borderOverlay->winId()),
-                                 WDA_EXCLUDEFROMCAPTURE);
-#endif
+}
+
+void RecordingIndicator::applyControlWindowFlags(bool staysOnTop)
+{
+    const bool wasVisible = isVisible();
+    Qt::WindowFlags flags = Qt::Tool | Qt::FramelessWindowHint
+        | Qt::WindowDoesNotAcceptFocus;
+    if (staysOnTop)
+        flags |= Qt::WindowStaysOnTopHint;
+    setWindowFlags(flags);
+    m_controlStaysOnTop = staysOnTop;
+    // setWindowFlags() recreates the native window and drops its display
+    // affinity; exclude the new window before it is mapped again.
+    m_controlExcludedFromCapture = excludeRecordingWindowFromCapture(this);
+    if (wasVisible) {
+        show();
+        raise();
+    }
+}
+
+void RecordingIndicator::updateControlStaysOnTop()
+{
+    const bool staysOnTop = recordingControlBarStaysOnTop(
+        m_layout.controlRect, m_captureRect, m_platformCanExcludeOverlay);
+    if (staysOnTop == m_controlStaysOnTop)
+        return;
+    applyControlWindowFlags(staysOnTop);
+    if (!m_controlExcludedFromCapture && m_platformCanExcludeOverlay) {
+        m_platformCanExcludeOverlay = false;
+        updateCaptureSafetyPolicy();
+        updateControlMask();
+    }
 }
 
 RecordingIndicator::~RecordingIndicator()
@@ -373,6 +440,7 @@ void RecordingIndicator::createControlBar()
     m_statusLabel->setAlignment(Qt::AlignVCenter | Qt::AlignLeft);
     m_statusLabel->setCursor(Qt::SizeAllCursor);
     m_statusLabel->setToolTip(TranslationManager::recordingDrag());
+    m_statusLabel->setAccessibleName(TranslationManager::tr("recordingAccessibleStatus"));
     m_statusLabel->installEventFilter(this);
     m_controlBar->installEventFilter(this);
     layout->addWidget(m_statusLabel, 1);
@@ -384,6 +452,7 @@ void RecordingIndicator::createControlBar()
     m_borderLockButton->setCheckable(true);
     m_borderLockButton->setCursor(Qt::PointingHandCursor);
     m_borderLockButton->setToolTip(TranslationManager::actionLock());
+    m_borderLockButton->setAccessibleName(TranslationManager::actionLock());
     connect(m_borderLockButton, &QToolButton::toggled, this,
             &RecordingIndicator::setBorderLocked);
     layout->addWidget(m_borderLockButton);
@@ -395,8 +464,11 @@ void RecordingIndicator::createControlBar()
     m_pauseButton->setIconSize(QSize(18, 18));
     m_pauseButton->setCursor(Qt::PointingHandCursor);
     m_pauseButton->setToolTip(TranslationManager::recordingPauseResume());
+    m_pauseButton->setAccessibleName(TranslationManager::tr("recPause"));
     m_pauseButton->setVisible(m_supportsPause);
     connect(m_pauseButton, &QToolButton::clicked, this, [this]() {
+        if (m_finalizing)
+            return;
         if (m_paused) {
             if (requiresCaptureSafePresentation()) {
                 setOverlayVisible(false);
@@ -420,7 +492,11 @@ void RecordingIndicator::createControlBar()
     m_stopButton->setText(m_compact ? QString() : TranslationManager::recordingStopShort());
     m_stopButton->setCursor(Qt::PointingHandCursor);
     m_stopButton->setToolTip(TranslationManager::recordingStop());
-    connect(m_stopButton, &QPushButton::clicked, this, &RecordingIndicator::stopRequested);
+    m_stopButton->setAccessibleName(TranslationManager::recordingStop());
+    connect(m_stopButton, &QPushButton::clicked, this, [this]() {
+        if (!m_finalizing)
+            emit stopRequested();
+    });
     layout->addWidget(m_stopButton);
 
     m_cancelButton = new QToolButton(m_controlBar);
@@ -430,7 +506,12 @@ void RecordingIndicator::createControlBar()
     m_cancelButton->setIconSize(QSize(17, 17));
     m_cancelButton->setCursor(Qt::PointingHandCursor);
     m_cancelButton->setToolTip(TranslationManager::recordingCancel());
-    connect(m_cancelButton, &QToolButton::clicked, this, &RecordingIndicator::cancelRequested);
+    m_cancelButton->setAccessibleName(TranslationManager::tr("trayCancelRecording"));
+    connect(m_cancelButton, &QToolButton::clicked, this, [this]() {
+        // Cancelling while the file is written would delete the recording.
+        if (!m_finalizing)
+            emit cancelRequested();
+    });
     layout->addWidget(m_cancelButton);
 
     m_detailsMenu = new QMenu(m_controlBar);
@@ -441,6 +522,7 @@ void RecordingIndicator::createControlBar()
     m_detailsButton->setIconSize(QSize(18, 18));
     m_detailsButton->setCursor(Qt::PointingHandCursor);
     m_detailsButton->setToolTip(TranslationManager::recordingDetails());
+    m_detailsButton->setAccessibleName(TranslationManager::recordingDetails());
     m_detailsButton->setPopupMode(QToolButton::InstantPopup);
     m_detailsButton->setMenu(m_detailsMenu);
     layout->addWidget(m_detailsButton);
@@ -454,9 +536,15 @@ void RecordingIndicator::setFrameCount(int count)
     updateStatusLabel();
 }
 
+void RecordingIndicator::setTimeLimitSeconds(int seconds)
+{
+    m_timeLimitSeconds = qMax(0, seconds);
+    updateStatusLabel();
+}
+
 void RecordingIndicator::setRemainingSeconds(int seconds)
 {
-    Q_UNUSED(seconds)
+    m_remainingSeconds = seconds;
     updateStatusLabel();
 }
 
@@ -505,6 +593,24 @@ void RecordingIndicator::setShortcutHints(const QString &pauseResume, const QStr
         m_cancelButton->setToolTip(tooltip(TranslationManager::recordingCancel(), cancel));
 }
 
+void RecordingIndicator::setFinalizing(bool finalizing)
+{
+    if (m_finalizing == finalizing)
+        return;
+    m_finalizing = finalizing;
+    updateButtonStates();
+    updateStatusLabel();
+}
+
+void RecordingIndicator::updateButtonStates()
+{
+    const QList<QWidget *> buttons = {m_pauseButton, m_stopButton, m_cancelButton};
+    for (QWidget *button : buttons) {
+        if (button)
+            button->setEnabled(!m_finalizing);
+    }
+}
+
 void RecordingIndicator::stop()
 {
     m_running = false;
@@ -533,20 +639,41 @@ void RecordingIndicator::updateStatusLabel()
 {
     if (!m_statusLabel)
         return;
-    const int minutes = m_elapsedSeconds / 60;
-    const int seconds = m_elapsedSeconds % 60;
-    const QString time = QStringLiteral("%1:%2")
-        .arg(minutes, 2, 10, QLatin1Char('0'))
-        .arg(seconds, 2, 10, QLatin1Char('0'));
+    if (m_finalizing) {
+        const QString saving = m_mode == RecordingIndicatorMode::Gif
+            ? TranslationManager::tr("recConvertingGif")
+            : TranslationManager::tr("recSaving");
+        m_statusLabel->setText(QStringLiteral("<span style='color:#A3A9B3'>●</span>&nbsp; %1")
+                                   .arg(saving.toHtmlEscaped()));
+        m_statusLabel->setProperty("recordingStatusPlain", saving);
+        return;
+    }
+    // A time limit is shown as "elapsed / limit" so the automatic stop never
+    // comes as a surprise; the time turns amber in the last five seconds.
+    const QString time = recordingStatusTimeText(m_elapsedSeconds, m_timeLimitSeconds);
+    const bool nearLimit = recordingTimeLimitWarning(m_elapsedSeconds, m_timeLimitSeconds,
+                                                     m_remainingSeconds);
     const QString mode = m_mode == RecordingIndicatorMode::Video
-        ? QStringLiteral("VIDEO") : QStringLiteral("GIF");
+        ? TranslationManager::tr("recModeVideo") : TranslationManager::tr("recModeGif");
     const bool visiblyPaused = m_paused;
     const QString dotColor = visiblyPaused ? QStringLiteral("#A3A9B3") : QStringLiteral("#FF525D");
+    const QString timeHtml = nearLimit
+        ? QStringLiteral("<span style='color:#FFB224'>%1</span>").arg(time)
+        : time;
     const QString text = m_compact
-        ? QStringLiteral("<span style='color:%1'>●</span>&nbsp; %2").arg(dotColor, time)
+        ? QStringLiteral("<span style='color:%1'>●</span>&nbsp; %2").arg(dotColor, timeHtml)
         : QStringLiteral("<span style='color:%1'>●</span>&nbsp; %2&nbsp;&nbsp;%3")
-              .arg(dotColor, mode, time);
+              .arg(dotColor, mode.toHtmlEscaped(), timeHtml);
     m_statusLabel->setText(text);
+    m_statusLabel->setProperty("recordingStatusPlain",
+                               m_compact ? time : QStringLiteral("%1 %2").arg(mode, time));
+    m_statusLabel->setProperty("recordingTimeLimitWarning", nearLimit);
+    m_statusLabel->setToolTip(m_timeLimitSeconds > 0
+        ? QStringLiteral("%1\n%2").arg(
+              TranslationManager::recordingDrag(),
+              TranslationManager::tr("recTimeLimitTip")
+                  .arg(recordingStatusTimeText(m_timeLimitSeconds, 0)))
+        : TranslationManager::recordingDrag());
 }
 
 void RecordingIndicator::updatePauseButton()
@@ -559,6 +686,8 @@ void RecordingIndicator::updatePauseButton()
         : QStringLiteral(":/icons/pause.svg")));
     m_pauseButton->setProperty("recordingState", visiblyPaused ? QStringLiteral("resume")
                                                                 : QStringLiteral("pause"));
+    m_pauseButton->setAccessibleName(TranslationManager::tr(visiblyPaused ? "recResume"
+                                                                          : "recPause"));
     m_pauseButton->style()->unpolish(m_pauseButton);
     m_pauseButton->style()->polish(m_pauseButton);
 }
@@ -692,6 +821,9 @@ bool RecordingIndicator::eventFilter(QObject *watched, QEvent *event)
             if (auto *widget = qobject_cast<QWidget *>(watched))
                 widget->releaseMouse();
         }
+        // Changing the window flags recreates the window, so only do it once
+        // the drag is over.
+        updateControlStaysOnTop();
         return true;
     }
     return QWidget::eventFilter(watched, event);

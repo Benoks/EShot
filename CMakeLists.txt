@@ -104,6 +104,8 @@ set(SOURCES
     src/recording/RecordingStartCountdown.cpp
     src/recording/RecordingStartCountdownPolicy.cpp
     src/recording/PortalRecordingSource.cpp
+    src/recording/RecordingFailureMessages.cpp
+    src/recording/RecordingSavedNotification.cpp
 )
 
 set(HEADERS
@@ -180,9 +182,12 @@ set(HEADERS
     src/recording/AudioDevices.h
     src/recording/VideoRecorder.h
     src/recording/RecordingIndicator.h
+    src/recording/RecordingCaptureExclusion.h
     src/recording/RecordingStartCountdown.h
     src/recording/RecordingStartCountdownPolicy.h
     src/recording/PortalRecordingSource.h
+    src/recording/RecordingFailureMessages.h
+    src/recording/RecordingSavedNotification.h
 )
 
 set(RESOURCES
@@ -757,11 +762,22 @@ if(BUILD_TESTING)
         LIBS Qt6::Core
     )
 
+    eshot_add_test(eshot_recording_messages_tests recording_messages
+        SOURCES
+            tests/RecordingMessagesTests.cpp
+            src/recording/RecordingFailureMessages.cpp
+            src/recording/RecordingFailureMessages.h
+            src/recording/RecordingSavedNotification.cpp
+            src/recording/RecordingSavedNotification.h
+        LIBS Qt6::Core
+    )
+
     eshot_add_test(eshot_recording_indicator_tests recording_indicator
         SOURCES
             tests/RecordingIndicatorTests.cpp
             src/recording/RecordingIndicator.cpp
             src/recording/RecordingIndicator.h
+            src/recording/RecordingCaptureExclusion.h
             src/recording/RecordingControlLayout.cpp
             src/recording/RecordingControlLayout.h
             resources/icons.qrc

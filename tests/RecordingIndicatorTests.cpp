@@ -265,6 +265,110 @@ private slots:
         QVERIFY(!border->isVisible());
     }
 
+    void finalizingDisablesStopPauseAndCancel()
+    {
+        TranslationManager::setLanguage(TranslationManager::English, false);
+        RecordingIndicator indicator(QRect(120, 120, 640, 360), nullptr, 2, true,
+                                     RecordingIndicatorMode::Video);
+        auto *status = indicator.findChild<QLabel *>(QStringLiteral("recordingStatusLabel"));
+        auto *pause = indicator.findChild<QToolButton *>(QStringLiteral("recordingPauseButton"));
+        auto *stop = indicator.findChild<QPushButton *>(QStringLiteral("recordingStopButton"));
+        auto *cancel = indicator.findChild<QToolButton *>(QStringLiteral("recordingCancelButton"));
+        QVERIFY(status && pause && stop && cancel);
+
+        indicator.setFinalizing(true);
+        QVERIFY(indicator.isFinalizing());
+        QVERIFY(!pause->isEnabled());
+        QVERIFY(!stop->isEnabled());
+        QVERIFY(!cancel->isEnabled());
+        QCOMPARE(status->property("recordingStatusPlain").toString(), QString::fromUtf8("Saving…"));
+
+        QSignalSpy stopSpy(&indicator, &RecordingIndicator::stopRequested);
+        QSignalSpy cancelSpy(&indicator, &RecordingIndicator::cancelRequested);
+        QSignalSpy pauseSpy(&indicator, &RecordingIndicator::pauseRequested);
+        stop->click();
+        cancel->click();
+        pause->click();
+        QCOMPARE(stopSpy.count(), 0);
+        QCOMPARE(cancelSpy.count(), 0);
+        QCOMPARE(pauseSpy.count(), 0);
+    }
+
+    void gifFinalizingSaysConverting()
+    {
+        TranslationManager::setLanguage(TranslationManager::English, false);
+        RecordingIndicator indicator(QRect(120, 120, 640, 360), nullptr, 2, true,
+                                     RecordingIndicatorMode::Gif);
+        auto *status = indicator.findChild<QLabel *>(QStringLiteral("recordingStatusLabel"));
+        QVERIFY(status);
+        indicator.setFinalizing(true);
+        QCOMPARE(status->property("recordingStatusPlain").toString(),
+                 QString::fromUtf8("Converting GIF…"));
+    }
+
+    void showsTheTimeLimitAndWarnsNearTheEnd()
+    {
+        TranslationManager::setLanguage(TranslationManager::English, false);
+        RecordingIndicator indicator(QRect(120, 120, 640, 360), nullptr, 2, true,
+                                     RecordingIndicatorMode::Gif);
+        auto *status = indicator.findChild<QLabel *>(QStringLiteral("recordingStatusLabel"));
+        QVERIFY(status);
+
+        indicator.setElapsedSeconds(12);
+        QCOMPARE(status->property("recordingStatusPlain").toString(), QStringLiteral("GIF 00:12"));
+
+        indicator.setTimeLimitSeconds(30);
+        indicator.setRemainingSeconds(18);
+        QCOMPARE(status->property("recordingStatusPlain").toString(),
+                 QStringLiteral("GIF 00:12 / 00:30"));
+        QVERIFY(!status->property("recordingTimeLimitWarning").toBool());
+
+        indicator.setElapsedSeconds(26);
+        indicator.setRemainingSeconds(4);
+        QVERIFY(status->property("recordingTimeLimitWarning").toBool());
+        QVERIFY(status->text().contains(QStringLiteral("#FFB224")));
+    }
+
+    void translatesTheModeLabel()
+    {
+        TranslationManager::setLanguage(TranslationManager::Turkish, false);
+        RecordingIndicator indicator(QRect(120, 120, 640, 360), nullptr, 2, true,
+                                     RecordingIndicatorMode::Video);
+        auto *status = indicator.findChild<QLabel *>(QStringLiteral("recordingStatusLabel"));
+        QVERIFY(status);
+        QCOMPARE(status->property("recordingStatusPlain").toString(),
+                 QString::fromUtf8("VİDEO 00:00"));
+        TranslationManager::setLanguage(TranslationManager::English, false);
+    }
+
+    void buttonsHaveAccessibleNames()
+    {
+        TranslationManager::setLanguage(TranslationManager::English, false);
+        RecordingIndicator indicator(QRect(120, 120, 640, 360), nullptr, 2, true);
+        auto *pause = indicator.findChild<QToolButton *>(QStringLiteral("recordingPauseButton"));
+        auto *stop = indicator.findChild<QPushButton *>(QStringLiteral("recordingStopButton"));
+        auto *cancel = indicator.findChild<QToolButton *>(QStringLiteral("recordingCancelButton"));
+        auto *details = indicator.findChild<QToolButton *>(QStringLiteral("recordingDetailsButton"));
+        auto *lock = indicator.findChild<QToolButton *>(QStringLiteral("recordingBorderLockButton"));
+        QVERIFY(pause && stop && cancel && details && lock);
+        QCOMPARE(pause->accessibleName(), QStringLiteral("Pause"));
+        QCOMPARE(stop->accessibleName(), QStringLiteral("Stop Recording"));
+        QCOMPARE(cancel->accessibleName(), QStringLiteral("Cancel Recording"));
+        QVERIFY(!details->accessibleName().isEmpty());
+        QVERIFY(!lock->accessibleName().isEmpty());
+        indicator.setPaused(true);
+        QCOMPARE(pause->accessibleName(), QStringLiteral("Resume"));
+    }
+
+    void keepsOutsideControlsOnTop()
+    {
+        RecordingIndicator indicator(QRect(120, 120, 640, 360), nullptr, 2, true);
+        const QRect control = indicator.property("recordingControlGlobalRect").toRect();
+        QVERIFY(!control.intersects(QRect(120, 120, 640, 360)));
+        QVERIFY(indicator.controlStaysOnTop());
+        QVERIFY(indicator.windowFlags() & Qt::WindowStaysOnTopHint);
+    }
+
 };
 
 QTEST_MAIN(RecordingIndicatorTests)

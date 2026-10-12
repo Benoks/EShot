@@ -31,10 +31,10 @@ private slots:
         QVERIFY(initialAudioEnabled(false, false, true, QStringLiteral("both"), RecordingAudioSource::Microphone));
     }
 
-    void enablesBothAudioSourcesForNewUsers()
+    void enablesOnlyDesktopAudioForNewUsers()
     {
         QVERIFY(initialAudioEnabled(false, false, false, {}, RecordingAudioSource::Desktop));
-        QVERIFY(initialAudioEnabled(false, false, false, {}, RecordingAudioSource::Microphone));
+        QVERIFY(!initialAudioEnabled(false, false, false, {}, RecordingAudioSource::Microphone));
     }
 
     void persistsNewDefaultsAndLegacyMigrationAsExplicitSettings()
@@ -44,7 +44,7 @@ private slots:
         QSettings settings(directory.filePath(QStringLiteral("settings.ini")), QSettings::IniFormat);
 
         QVERIFY(loadRecordingAudioEnabled(settings, RecordingAudioSource::Desktop));
-        QVERIFY(loadRecordingAudioEnabled(settings, RecordingAudioSource::Microphone));
+        QVERIFY(!loadRecordingAudioEnabled(settings, RecordingAudioSource::Microphone));
         QVERIFY(settings.contains(QStringLiteral("videoDesktopAudioEnabled")));
         QVERIFY(settings.contains(QStringLiteral("videoMicrophoneEnabled")));
 

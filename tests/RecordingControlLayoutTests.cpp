@@ -97,14 +97,63 @@ private slots:
                  RecordingOverlayVisibility::AlwaysVisible);
     }
 
-    void doesNotTrustDisplayAffinityWithTheGdiRecorder()
+    void trustsDisplayAffinityWithGdiOnlyWhenConfirmedOnANewBuild()
     {
         QVERIFY(!recordingCaptureBackendCanExcludeOverlay(
             RecordingCaptureBackend::WindowsGdiGrab));
         QVERIFY(!recordingCaptureBackendCanExcludeOverlay(
-            RecordingCaptureBackend::LinuxPortal));
+            RecordingCaptureBackend::WindowsGdiGrab, 22631, false));
+        QVERIFY(!recordingCaptureBackendCanExcludeOverlay(
+            RecordingCaptureBackend::WindowsGdiGrab, 18363, true));
+        QVERIFY(recordingCaptureBackendCanExcludeOverlay(
+            RecordingCaptureBackend::WindowsGdiGrab, 19041, true));
+        QVERIFY(recordingCaptureBackendCanExcludeOverlay(
+            RecordingCaptureBackend::WindowsGdiGrab, 26100, true));
+        QVERIFY(!recordingCaptureBackendCanExcludeOverlay(
+            RecordingCaptureBackend::LinuxPortal, 0, true));
         QVERIFY(recordingCaptureBackendCanExcludeOverlay(
             RecordingCaptureBackend::WindowsGraphicsCapture));
+    }
+
+    void keepsControlsOnTopOnlyWhenTheyCannotEnterTheVideo()
+    {
+        const QRect capture(100, 100, 800, 450);
+        QVERIFY(recordingControlBarStaysOnTop(QRect(300, 560, 310, 42), capture, false));
+        QVERIFY(!recordingControlBarStaysOnTop(QRect(300, 500, 310, 42), capture, false));
+        QVERIFY(recordingControlBarStaysOnTop(QRect(300, 500, 310, 42), capture, true));
+    }
+
+    void exclusionKeepsFullscreenControlsVisible()
+    {
+        const QRect screen(0, 0, 1920, 1080);
+        const RecordingControlLayout layout = recordingControlLayout(
+            screen, screen, QSize(310, 42), QSize(206, 42));
+        QCOMPARE(layout.placement, RecordingControlPlacement::Inside);
+        QCOMPARE(recordingOverlayVisibilityPolicy(layout.controlRect, screen, true),
+                 RecordingOverlayVisibility::AlwaysVisible);
+        QVERIFY(!recordingControlsNeedHiddenHint(RecordingOverlayVisibility::AlwaysVisible));
+        QCOMPARE(recordingOverlayVisibilityPolicy(layout.controlRect, screen, false),
+                 RecordingOverlayVisibility::RevealWhilePaused);
+        QVERIFY(recordingControlsNeedHiddenHint(RecordingOverlayVisibility::RevealWhilePaused));
+    }
+
+    void formatsElapsedTimeWithAnOptionalLimit()
+    {
+        QCOMPARE(recordingStatusTimeText(0, 0), QStringLiteral("00:00"));
+        QCOMPARE(recordingStatusTimeText(75, 0), QStringLiteral("01:15"));
+        QCOMPARE(recordingStatusTimeText(12, 30), QStringLiteral("00:12 / 00:30"));
+        QCOMPARE(recordingStatusTimeText(31, 30), QStringLiteral("00:30 / 00:30"));
+        QCOMPARE(recordingStatusTimeText(-4, -1), QStringLiteral("00:00"));
+    }
+
+    void warnsInTheLastFiveSecondsOfALimitedRecording()
+    {
+        QVERIFY(!recordingTimeLimitWarning(100, 0));
+        QVERIFY(!recordingTimeLimitWarning(24, 30));
+        QVERIFY(recordingTimeLimitWarning(25, 30));
+        QVERIFY(recordingTimeLimitWarning(30, 30));
+        QVERIFY(!recordingTimeLimitWarning(25, 30, 6));
+        QVERIFY(recordingTimeLimitWarning(20, 30, 5));
     }
 
     void detectsCaptureOverlapAfterTheControlsAreDragged()

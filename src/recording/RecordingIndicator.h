@@ -29,6 +29,8 @@ public:
     ~RecordingIndicator() override;
 
     void setFrameCount(int count);
+    // Recording time limit in seconds; 0 or less means unlimited.
+    void setTimeLimitSeconds(int seconds);
     void setRemainingSeconds(int seconds);
     void setElapsedSeconds(int seconds);
     void setPaused(bool paused);
@@ -36,8 +38,14 @@ public:
     void setShortcutHints(const QString &pauseResume, const QString &stop,
                           const QString &cancel);
     void stop();
+    // Stop was requested and the file is being written: the controls can no
+    // longer stop, pause or cancel, and the status shows the saving step.
+    void setFinalizing(bool finalizing);
+    bool isFinalizing() const { return m_finalizing; }
 
     bool requiresCaptureSafePresentation() const;
+    bool canExcludeFromCapture() const { return m_platformCanExcludeOverlay; }
+    bool controlStaysOnTop() const { return m_controlStaysOnTop; }
     void startCaptureSafePresentation();
 
 signals:
@@ -58,6 +66,9 @@ private:
     void setBorderLocked(bool locked);
     void moveControlBar(const QPoint &requestedTopLeft);
     void updateCaptureSafetyPolicy();
+    void applyControlWindowFlags(bool staysOnTop);
+    void updateControlStaysOnTop();
+    void updateButtonStates();
 
     QRect m_captureRect;
     QRect m_screenRect;
@@ -77,6 +88,11 @@ private:
     QMenu *m_detailsMenu = nullptr;
     int m_frameCount = 0;
     int m_elapsedSeconds = 0;
+    int m_timeLimitSeconds = 0;
+    int m_remainingSeconds = -1;
+    bool m_finalizing = false;
+    bool m_controlStaysOnTop = false;
+    bool m_controlExcludedFromCapture = false;
     bool m_running = true;
     bool m_supportsPause = true;
     bool m_paused = false;

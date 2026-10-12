@@ -35,6 +35,19 @@ QStringList LinuxDesktopNotification::actions(const QString &actionLabel)
     return {QStringLiteral("open-folder"), actionLabel};
 }
 
+QStringList LinuxDesktopNotification::actions(const QList<Action> &actions)
+{
+    QStringList list;
+    for (const Action &action : actions) {
+        if (action.key.isEmpty() || action.label.isEmpty()
+            || action.key == QStringLiteral("default")) {
+            continue;
+        }
+        list << action.key << action.label;
+    }
+    return list;
+}
+
 QVariantMap LinuxDesktopNotification::hintsForPath(const QString &path)
 {
     QVariantMap hints;
@@ -48,6 +61,21 @@ bool LinuxDesktopNotification::show(const QString &title, const QString &body,
                                     const QString &path, const QString &actionLabel,
                                     int timeoutMs)
 {
+    return notify(title, body, path, actions(actionLabel), timeoutMs);
+}
+
+bool LinuxDesktopNotification::showWithActions(const QString &title, const QString &body,
+                                               const QString &path,
+                                               const QList<Action> &actionList,
+                                               int timeoutMs)
+{
+    return notify(title, body, path, actions(actionList), timeoutMs);
+}
+
+bool LinuxDesktopNotification::notify(const QString &title, const QString &body,
+                                      const QString &path, QStringList actionList,
+                                      int timeoutMs)
+{
     QDBusInterface notifications(QString::fromLatin1(NotificationsService),
                                  QString::fromLatin1(NotificationsPath),
                                  QString::fromLatin1(NotificationsInterface),
@@ -55,7 +83,6 @@ bool LinuxDesktopNotification::show(const QString &title, const QString &body,
     if (!notifications.isValid())
         return false;
 
-    QStringList actionList = actions(actionLabel);
     // The implicit "default" action fires when the notification body itself
     // is activated, so a click always opens the captured file.
     actionList << QStringLiteral("default") << title;
@@ -82,12 +109,15 @@ bool LinuxDesktopNotification::show(const QString &title, const QString &body,
 
 void LinuxDesktopNotification::onActionInvoked(uint id, const QString &actionKey)
 {
-    if (actionKey != QStringLiteral("open-folder")
-        && actionKey != QStringLiteral("default"))
+    if (!m_paths.contains(id))
         return;
     const QString path = m_paths.take(id);
-    if (!path.isEmpty())
+    if (path.isEmpty())
+        return;
+    if (actionKey == QStringLiteral("open-folder") || actionKey == QStringLiteral("default"))
         emit pathActivated(path);
+    else
+        emit actionInvoked(path, actionKey);
 }
 
 void LinuxDesktopNotification::onNotificationClosed(uint id, uint reason)

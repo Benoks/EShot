@@ -5,6 +5,8 @@
         <file alias="icons/pen_tray_update.svg">../icons/pen_tray_update.svg</file>
         <file alias="icons/pen_tray_black.svg">../icons/pen_tray_black.svg</file>
         <file alias="icons/pen_tray_update_black.svg">../icons/pen_tray_update_black.svg</file>
+        <file alias="icons/pen_tray_recording.svg">../icons/pen_tray_recording.svg</file>
+        <file alias="icons/pen_tray_recording_black.svg">../icons/pen_tray_recording_black.svg</file>
         <file alias="icons/arrow.svg">../icons/arrow.svg</file>
         <file alias="icons/rectangle.svg">../icons/rectangle.svg</file>
         <file alias="icons/circle.svg">../icons/circle.svg</file>

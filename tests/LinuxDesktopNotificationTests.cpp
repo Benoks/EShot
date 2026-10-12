@@ -13,6 +13,23 @@ private slots:
         QCOMPARE(actions, QStringList({QStringLiteral("open-folder"), QStringLiteral("Open Folder")}));
     }
 
+    void savedRecordingNotificationListsEveryActionInOrder()
+    {
+        const QStringList actions = LinuxDesktopNotification::actions(
+            QList<LinuxDesktopNotification::Action>{
+                {QStringLiteral("open-file"), QStringLiteral("Open")},
+                {QStringLiteral("show-in-folder"), QStringLiteral("Show in Folder")},
+                {QStringLiteral("copy-file"), QStringLiteral("Copy File")},
+                {QStringLiteral("default"), QStringLiteral("ignored")},
+                {QStringLiteral("empty-label"), QString()},
+            });
+        QCOMPARE(actions, QStringList({QStringLiteral("open-file"), QStringLiteral("Open"),
+                                       QStringLiteral("show-in-folder"),
+                                       QStringLiteral("Show in Folder"),
+                                       QStringLiteral("copy-file"),
+                                       QStringLiteral("Copy File")}));
+    }
+
     void failureNotificationHasNoFileAction()
     {
         QCOMPARE(LinuxDesktopNotification::actions(QString()), QStringList());

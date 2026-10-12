@@ -20,8 +20,10 @@ bool initialAudioEnabled(bool hasExplicitSetting,
 {
     if (hasExplicitSetting)
         return explicitEnabled;
+    // New users record desktop audio only: an always-on microphone would
+    // capture room noise and private conversations without being asked for.
     if (!hasLegacyMode)
-        return true;
+        return source == RecordingAudioSource::Desktop;
 
     const QString normalizedMode = legacyMode.trimmed().toLower();
     if (normalizedMode == QStringLiteral("both"))

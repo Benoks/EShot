@@ -92,16 +92,65 @@ RecordingOverlayVisibility recordingOverlayVisibilityPolicy(
     return RecordingOverlayVisibility::AlwaysVisible;
 }
 
-bool recordingCaptureBackendCanExcludeOverlay(RecordingCaptureBackend backend)
+bool recordingCaptureBackendCanExcludeOverlay(RecordingCaptureBackend backend,
+                                              int windowsBuild,
+                                              bool displayAffinityConfirmed)
 {
-    // WDA_EXCLUDEFROMCAPTURE is not honored by FFmpeg's GDI BitBlt capture.
-    // Keep the positive case explicit for a future Windows Graphics Capture backend.
-    return backend == RecordingCaptureBackend::WindowsGraphicsCapture;
+    switch (backend) {
+    case RecordingCaptureBackend::WindowsGraphicsCapture:
+        return true;
+    case RecordingCaptureBackend::WindowsGdiGrab:
+        // Since Windows 10 2004 the compositor also removes excluded windows
+        // from desktop-DC BitBlt reads. Older builds turn the flag into
+        // WDA_MONITOR (a black box), and the call can fail for some window
+        // types, so only trust a confirmed affinity on a new enough build.
+        return displayAffinityConfirmed
+            && windowsBuild >= RecordingWindowsCaptureExclusionMinimumBuild;
+    case RecordingCaptureBackend::LinuxPortal:
+        return false;
+    }
+    return false;
 }
 
 bool recordingBorderStaysOnTop(bool locked)
 {
     return locked;
+}
+
+bool recordingControlBarStaysOnTop(const QRect &controlRect,
+                                   const QRect &captureRect,
+                                   bool platformCanExcludeOverlay)
+{
+    return platformCanExcludeOverlay || !controlRect.intersects(captureRect);
+}
+
+bool recordingControlsNeedHiddenHint(RecordingOverlayVisibility visibility)
+{
+    return visibility == RecordingOverlayVisibility::RevealWhilePaused;
+}
+
+QString recordingStatusTimeText(int elapsedSeconds, int limitSeconds)
+{
+    auto format = [](int totalSeconds) {
+        totalSeconds = qMax(0, totalSeconds);
+        return QStringLiteral("%1:%2")
+            .arg(totalSeconds / 60, 2, 10, QLatin1Char('0'))
+            .arg(totalSeconds % 60, 2, 10, QLatin1Char('0'));
+    };
+    if (limitSeconds <= 0)
+        return format(elapsedSeconds);
+    return QStringLiteral("%1 / %2").arg(format(qMin(elapsedSeconds, limitSeconds)),
+                                         format(limitSeconds));
+}
+
+bool recordingTimeLimitWarning(int elapsedSeconds, int limitSeconds, int remainingSeconds)
+{
+    if (limitSeconds <= 0)
+        return false;
+    const int remaining = remainingSeconds >= 0
+        ? remainingSeconds
+        : limitSeconds - qMax(0, elapsedSeconds);
+    return remaining <= 5;
 }
 
 QRect movedRecordingControlRect(const QRect &currentControlRect,

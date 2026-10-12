@@ -4,6 +4,7 @@
 #include <QRect>
 #include <QList>
 #include <QSize>
+#include <QString>
 
 enum class RecordingControlPlacement {
     Below,
@@ -42,10 +43,34 @@ RecordingOverlayVisibility recordingOverlayVisibilityPolicy(
     const QRect &controlRect,
     const QRect &captureRect,
     bool platformCanExcludeOverlay);
-bool recordingCaptureBackendCanExcludeOverlay(RecordingCaptureBackend backend);
+// First Windows build (10 2004) where WDA_EXCLUDEFROMCAPTURE removes a
+// window from desktop-DC BitBlt captures such as FFmpeg's gdigrab.
+constexpr int RecordingWindowsCaptureExclusionMinimumBuild = 19041;
+
+// windowsBuild and displayAffinityConfirmed describe the running system:
+// the Windows build number (0 elsewhere) and whether GetWindowDisplayAffinity
+// reported WDA_EXCLUDEFROMCAPTURE for the control window.
+bool recordingCaptureBackendCanExcludeOverlay(RecordingCaptureBackend backend,
+                                              int windowsBuild = 0,
+                                              bool displayAffinityConfirmed = false);
 bool recordingBorderStaysOnTop(bool locked);
+// Controls outside the recorded area, or excluded from the capture, can stay
+// above other windows without ending up in the video.
+bool recordingControlBarStaysOnTop(const QRect &controlRect,
+                                   const QRect &captureRect,
+                                   bool platformCanExcludeOverlay);
+// Controls hidden for the whole recording need another way to stop it.
+bool recordingControlsNeedHiddenHint(RecordingOverlayVisibility visibility);
 QRect movedRecordingControlRect(const QRect &currentControlRect,
                                 const QPoint &requestedTopLeft,
                                 const QRect &screenRect);
+
+
+// "mm:ss", or "mm:ss / mm:ss" when the recording has a time limit.
+QString recordingStatusTimeText(int elapsedSeconds, int limitSeconds);
+// True in the last five seconds before the time limit stops the recording.
+// remainingSeconds < 0 means "unknown"; it is then derived from the limit.
+bool recordingTimeLimitWarning(int elapsedSeconds, int limitSeconds,
+                               int remainingSeconds = -1);
 
 #endif

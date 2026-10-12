@@ -1,5 +1,6 @@
 #include "RecordingStartCountdown.h"
 
+#include "RecordingCaptureExclusion.h"
 #include "RecordingStartCountdownPolicy.h"
 #include "../core/TranslationManager.h"
 
@@ -13,13 +14,6 @@
 #include <QScreen>
 #include <QTimer>
 #include <QVBoxLayout>
-
-#ifdef Q_OS_WIN
-#include <windows.h>
-#ifndef WDA_EXCLUDEFROMCAPTURE
-#define WDA_EXCLUDEFROMCAPTURE 0x00000011
-#endif
-#endif
 
 namespace {
 constexpr int CountdownWidth = 236;
@@ -79,6 +73,11 @@ RecordingStartCountdown::RecordingStartCountdown(const QRect &captureRect, int d
     setAttribute(Qt::WA_TranslucentBackground);
     setAttribute(Qt::WA_NoSystemBackground);
     setFocusPolicy(Qt::StrongFocus);
+    setObjectName(QStringLiteral("recordingStartCountdownWindow"));
+    setAccessibleName(TranslationManager::recordingStartsIn());
+    // Exclude the countdown from screen captures before it is first shown,
+    // so a fast recorder start can never grab it.
+    excludeRecordingWindowFromCapture(this);
 
     QScreen *screen = QGuiApplication::screenAt(captureRect.center());
     if (!screen)
@@ -105,6 +104,7 @@ RecordingStartCountdown::RecordingStartCountdown(const QRect &captureRect, int d
     m_secondsLabel = new QLabel(frame);
     m_secondsLabel->setObjectName(QStringLiteral("recordingStartCountdownSeconds"));
     m_secondsLabel->setAlignment(Qt::AlignCenter);
+    m_secondsLabel->setAccessibleName(TranslationManager::recordingStartsIn());
     layout->addWidget(m_secondsLabel, 1);
 
     auto *bottom = new QHBoxLayout();
@@ -121,6 +121,7 @@ RecordingStartCountdown::RecordingStartCountdown(const QRect &captureRect, int d
     cancelButton->setIconSize(QSize(14, 14));
     cancelButton->setCursor(Qt::PointingHandCursor);
     cancelButton->setFocusPolicy(Qt::NoFocus);
+    cancelButton->setAccessibleName(TranslationManager::tr("trayCancelRecording"));
     connect(cancelButton, &QPushButton::clicked, this, &RecordingStartCountdown::cancelRequested);
     bottom->addWidget(cancelButton);
     layout->addLayout(bottom);
@@ -140,9 +141,6 @@ RecordingStartCountdown::RecordingStartCountdown(const QRect &captureRect, int d
         // focus; the cancel button and the cancel hotkey work regardless.
         activateWindow();
         setFocus(Qt::ActiveWindowFocusReason);
-#ifdef Q_OS_WIN
-        SetWindowDisplayAffinity(reinterpret_cast<HWND>(winId()), WDA_EXCLUDEFROMCAPTURE);
-#endif
     }
 }
 
