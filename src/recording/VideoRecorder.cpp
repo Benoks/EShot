@@ -9,6 +9,7 @@
 #include "RecordingSettingsPolicy.h"
 #include "VideoRecordingCompletionPolicy.h"
 #include "RecordingFinalizationPolicy.h"
+#include "WindowsRecordingSupport.h"
 
 #include <QCoreApplication>
 #include <QGuiApplication>
@@ -42,6 +43,7 @@
 #endif
 
 namespace {
+#ifndef Q_OS_WIN
 bool containsDevice(const QStringList &devices, const QString &name)
 {
     for (const QString &device : devices) {
@@ -51,12 +53,8 @@ bool containsDevice(const QStringList &devices, const QString &name)
     return false;
 }
 
-QStringList platformAudioDevices(const QString &ffmpegPath)
+QStringList platformAudioDevices()
 {
-#ifdef Q_OS_WIN
-    return dshowAudioDevices(ffmpegPath);
-#else
-    Q_UNUSED(ffmpegPath);
     QStringList devices;
     devices << QStringLiteral("default")
             << QStringLiteral("@DEFAULT_SOURCE@")
@@ -64,8 +62,8 @@ QStringList platformAudioDevices(const QString &ffmpegPath)
     for (const auto &device : discoverLinuxMicrophoneDevices()) devices << device.second;
     devices.removeDuplicates();
     return devices;
-#endif
 }
+#endif
 
 QString ffmpegMissingReason()
 {
@@ -106,20 +104,104 @@ void stopRecorderWhenParentExits(QProcess *process)
 }
 #endif
 
-#ifdef Q_OS_WIN
-void writeLe32(QFile &file, quint32 value)
+// Hides `.eshot_*` intermediates on Windows (dot files are hidden elsewhere
+// already) and unhides a file once it has been renamed to a visible name.
+void syncHiddenAttribute(const QString &path)
 {
-    char b[4] = {
-        static_cast<char>(value & 0xff),
-        static_cast<char>((value >> 8) & 0xff),
-        static_cast<char>((value >> 16) & 0xff),
-        static_cast<char>((value >> 24) & 0xff)
-    };
-    file.write(b, 4);
+#ifdef Q_OS_WIN
+    if (path.isEmpty())
+        return;
+    const bool hide = QFileInfo(path).fileName().startsWith(QStringLiteral(".eshot_"));
+    const std::wstring native = QDir::toNativeSeparators(path).toStdWString();
+    const DWORD attributes = GetFileAttributesW(native.c_str());
+    if (attributes == INVALID_FILE_ATTRIBUTES)
+        return;
+    const DWORD wanted = hide ? (attributes | FILE_ATTRIBUTE_HIDDEN)
+                              : (attributes & ~static_cast<DWORD>(FILE_ATTRIBUTE_HIDDEN));
+    if (wanted != attributes)
+        SetFileAttributesW(native.c_str(), wanted);
+#else
+    Q_UNUSED(path);
+#endif
+}
+
+bool renameRecordingFile(const QString &from, const QString &to)
+{
+    if (!QFile::rename(from, to))
+        return false;
+    syncHiddenAttribute(to);
+    return true;
+}
+
+#ifdef Q_OS_WIN
+// Every recording FFmpeg process joins this job; the handle is never closed,
+// so Windows kills the encoders when EShot exits or crashes instead of
+// leaving them running (Linux uses PR_SET_PDEATHSIG for the same purpose).
+HANDLE recordingJobObject()
+{
+    static HANDLE job = []() -> HANDLE {
+        HANDLE handle = CreateJobObjectW(nullptr, nullptr);
+        if (!handle)
+            return nullptr;
+        JOBOBJECT_EXTENDED_LIMIT_INFORMATION info;
+        ZeroMemory(&info, sizeof(info));
+        info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+        if (!SetInformationJobObject(handle, JobObjectExtendedLimitInformation, &info, sizeof(info))) {
+            CloseHandle(handle);
+            return nullptr;
+        }
+        return handle;
+    }();
+    return job;
+}
+#endif
+
+void stopWithRecorder(QProcess *process)
+{
+#ifdef Q_OS_WIN
+    HANDLE job = recordingJobObject();
+    if (!job || !process)
+        return;
+    const qint64 pid = process->processId();
+    if (pid <= 0)
+        return;
+    HANDLE child = OpenProcess(PROCESS_SET_QUOTA | PROCESS_TERMINATE, FALSE, static_cast<DWORD>(pid));
+    if (!child)
+        return;
+    if (!AssignProcessToJobObject(job, child))
+        qWarning() << "VideoRecorder: could not tie ffmpeg to the EShot process lifetime" << GetLastError();
+    CloseHandle(child);
+#else
+    Q_UNUSED(process);
+#endif
+}
+
+#ifdef Q_OS_WIN
+// Removes `.eshot_*` intermediates a crashed recording left behind.
+void sweepStaleRecordingIntermediates(const QString &directory)
+{
+    const QDateTime now = QDateTime::currentDateTime();
+    const QFileInfoList entries = QDir(directory).entryInfoList(
+        {QStringLiteral(".eshot_*")}, QDir::Files | QDir::Hidden | QDir::System);
+    for (const QFileInfo &entry : entries) {
+        if (isStaleRecordingIntermediate(entry.fileName(), entry.lastModified(), now))
+            QFile::remove(entry.absoluteFilePath());
+    }
+}
+
+void writeSilence(QFile &file, quint64 bytes)
+{
+    static const QByteArray zeros(64 * 1024, '\0');
+    while (bytes > 0) {
+        const qint64 chunk = static_cast<qint64>(qMin<quint64>(bytes, static_cast<quint64>(zeros.size())));
+        if (file.write(zeros.constData(), chunk) != chunk)
+            return;
+        bytes -= static_cast<quint64>(chunk);
+    }
 }
 
 void recordWasapiLoopback(const QString &path, std::atomic_bool *stopFlag,
-                          std::atomic_bool *pauseFlag)
+                          std::atomic_bool *pauseFlag, std::atomic<qint64> *startedEpochMs)
 {
     HRESULT init = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     if (FAILED(init) && init != RPC_E_CHANGED_MODE)
@@ -131,7 +213,8 @@ void recordWasapiLoopback(const QString &path, std::atomic_bool *stopFlag,
     IAudioCaptureClient *capture = nullptr;
     WAVEFORMATEX *format = nullptr;
     QFile file(path);
-    quint32 dataBytes = 0;
+    // 64-bit: a 32-bit count wrapped after about three hours of float audio.
+    quint64 dataBytes = 0;
 
     auto cleanup = [&]() {
         if (client) client->Stop();
@@ -156,18 +239,18 @@ void recordWasapiLoopback(const QString &path, std::atomic_bool *stopFlag,
         return;
     }
 
-    const quint16 fmtSize = static_cast<quint16>(sizeof(WAVEFORMATEX) + format->cbSize);
-    file.write("RIFF", 4); writeLe32(file, 0); file.write("WAVE", 4);
-    file.write("fmt ", 4); writeLe32(file, fmtSize);
-    file.write(reinterpret_cast<const char *>(format), fmtSize);
-    file.write("data", 4); writeLe32(file, 0);
-    const qint64 riffSizePos = 4;
-    const qint64 dataSizePos = 24 + fmtSize;
+    const QByteArray waveFormat(reinterpret_cast<const char *>(format),
+                                static_cast<int>(sizeof(WAVEFORMATEX) + format->cbSize));
+    // The header is rewritten with the final size when capture ends; it
+    // switches to RF64 past 4 GiB, which FFmpeg reads as well.
+    file.write(wavFileHeader(waveFormat, 0));
+    syncHiddenAttribute(path);
 
     if (FAILED(client->Start())) {
         cleanup();
         return;
     }
+    startedEpochMs->store(QDateTime::currentMSecsSinceEpoch());
 
     // Loopback capture delivers no packets while nothing is playing. Pad those
     // gaps with silence based on elapsed time so the WAV stays as long as (and
@@ -205,8 +288,7 @@ void recordWasapiLoopback(const QString &path, std::atomic_bool *stopFlag,
             // endpoint buffer cannot overflow.
             if (!paused) {
                 if (flags & AUDCLNT_BUFFERFLAGS_SILENT) {
-                    QByteArray zeros(bytes, 0);
-                    file.write(zeros);
+                    writeSilence(file, bytes);
                 } else {
                     file.write(reinterpret_cast<const char *>(data), bytes);
                 }
@@ -218,17 +300,19 @@ void recordWasapiLoopback(const QString &path, std::atomic_bool *stopFlag,
             const ULONGLONG activeTicks = GetTickCount64() - startTick - pausedTicks;
             const quint64 expectedBytes = activeTicks * bytesPerSecond / 1000;
             if (expectedBytes > dataBytes + gapToleranceBytes) {
-                quint64 missing = expectedBytes - dataBytes;
+                // Written in chunks and at most a second per pass: a long
+                // stall (e.g. after sleep) must not allocate gigabytes or
+                // keep the stop request waiting.
+                quint64 missing = qMin<quint64>(expectedBytes - dataBytes, bytesPerSecond);
                 missing -= missing % format->nBlockAlign;
-                QByteArray zeros(static_cast<qsizetype>(missing), 0);
-                file.write(zeros);
-                dataBytes += static_cast<quint32>(missing);
+                writeSilence(file, missing);
+                dataBytes += missing;
             }
         }
     }
 
-    file.seek(riffSizePos); writeLe32(file, 36 + fmtSize - 16 + dataBytes);
-    file.seek(dataSizePos); writeLe32(file, dataBytes);
+    file.seek(0);
+    file.write(wavFileHeader(waveFormat, dataBytes));
     file.close();
     cleanup();
 }
@@ -238,6 +322,11 @@ void recordWasapiLoopback(const QString &path, std::atomic_bool *stopFlag,
 VideoRecorder::VideoRecorder(QObject *parent)
     : QObject(parent)
 {
+#ifdef Q_OS_WIN
+    // Fill the DirectShow device cache in the background so start() does not
+    // have to wait for the enumeration.
+    refreshDshowAudioDevices(ffmpegPath(), true);
+#endif
 }
 
 VideoRecorder::~VideoRecorder()
@@ -276,14 +365,11 @@ void VideoRecorder::start(const QRect &captureRect, int fps, int maxSeconds, int
         return;
     }
 #endif
+#ifndef Q_OS_WIN
     const bool discoverAudioDevices = shouldDiscoverAudioDevices(
         microphoneEnabled, microphoneDevice);
-#ifdef Q_OS_WIN
     const QStringList audioDevices = discoverAudioDevices
-        ? platformAudioDevices(m_ffmpegPath) : QStringList();
-#else
-    const QStringList audioDevices = discoverAudioDevices
-        ? platformAudioDevices(QString()) : QStringList();
+        ? platformAudioDevices() : QStringList();
 #endif
 
     m_warnings.clear();
@@ -308,6 +394,9 @@ void VideoRecorder::start(const QRect &captureRect, int fps, int maxSeconds, int
     m_microphoneEnabled = microphoneEnabled;
     m_microphoneVolume = qBound(0, microphoneVolume, 100);
     m_microphoneDevice = microphoneDevice.trimmed();
+#ifdef Q_OS_WIN
+    resolveWindowsAudioInputs();
+#else
     if (m_microphoneDevice.isEmpty() || m_microphoneDevice == QStringLiteral("default")) {
         m_microphoneDevice = audioDevices.isEmpty() ? QString() : audioDevices.first();
     }
@@ -319,8 +408,10 @@ void VideoRecorder::start(const QRect &captureRect, int fps, int maxSeconds, int
             qWarning() << "VideoRecorder: default microphone could not be resolved; recording without it";
         }
     }
+#endif
     m_lastElapsedSeconds = -1;
     m_outputPath = outputPath.trimmed().isEmpty() ? makeDefaultOutputPath() : outputPath;
+    clearStartupState();
     m_pausedMs = 0;
     m_pauseStartedMs = 0;
     m_recordedMs = 0;
@@ -366,6 +457,17 @@ void VideoRecorder::start(const QRect &captureRect, int fps, int maxSeconds, int
     }
 
     QString error;
+#ifdef Q_OS_WIN
+    sweepStaleRecordingIntermediates(m_segmentDirectory);
+    // recordingStarted() follows once FFmpeg reports progress (see
+    // markCaptureStarted()); a failure before that is reported instead.
+    if (!startWindowsCapture(&error)) {
+        stopSystemAudioCapture();
+        cleanupProcess();
+        removeRecordingFiles();
+        emit recordingFailed(error.isEmpty() ? QStringLiteral("cannot start ffmpeg") : error);
+    }
+#else
     if (!startFfmpegSegment(segmentTargetPath(), &error)) {
         stopSystemAudioCapture();
         cleanupProcess();
@@ -374,18 +476,217 @@ void VideoRecorder::start(const QRect &captureRect, int fps, int maxSeconds, int
         return;
     }
 
+    startCountdown();
+#endif
+}
+
+void VideoRecorder::clearStartupState()
+{
+    m_starting = false;
+    m_stopAfterStart = false;
+    m_startupRetried = false;
+    if (m_startupTimer) {
+        m_startupTimer->stop();
+        m_startupTimer->deleteLater();
+        m_startupTimer = nullptr;
+    }
+    m_ffmpegOutputBuffer.clear();
+    m_ffmpegLogTail.clear();
+    m_videoStartEpochMs = -1;
+    m_audioStartEpochMs.store(-1);
+}
+
+void VideoRecorder::resolveWindowsAudioInputs()
+{
 #ifdef Q_OS_WIN
-    if (m_systemAudioLoopback) {
-        // Start loopback capture only once ffmpeg is running so no failure
-        // path can leave the thread behind. Assigning to a still-joinable
-        // std::thread would call std::terminate, so join any previous one.
-        stopSystemAudioCapture();
-        m_audioStop.store(false);
-        m_audioThread = std::thread(recordWasapiLoopback, m_audioPath, &m_audioStop, &m_audioPaused);
+    m_desktopDshowInput.clear();
+    m_microphoneDshowInput.clear();
+    const bool wantMicrophone = m_microphoneEnabled && m_microphoneVolume > 0;
+    const bool wantDesktopDshow = m_desktopAudioEnabled && m_desktopVolume > 0 && !m_systemAudioLoopback;
+    if (!wantMicrophone && !wantDesktopDshow)
+        return;
+
+    // Normally warm (filled in the background); only a cold cache waits, and
+    // only briefly. A device that cannot be resolved is left out with a
+    // warning: a wrong dshow name would make FFmpeg fail the whole recording.
+    const QList<DshowAudioDevice> devices = cachedDshowAudioDevices(m_ffmpegPath, 2500);
+    if (wantMicrophone) {
+        const bool useDefault = m_microphoneDevice.isEmpty()
+            || m_microphoneDevice.compare(QStringLiteral("default"), Qt::CaseInsensitive) == 0;
+        const int index = resolveDshowAudioDevice(
+            devices, m_microphoneDevice, useDefault ? windowsDefaultCaptureDeviceName() : QString());
+        if (index >= 0) {
+            m_microphoneDshowInput = dshowAudioInputName(devices.at(index));
+        } else {
+            m_microphoneEnabled = false;
+            m_warnings << TranslationManager::tr("recWarnMicMissing");
+            qWarning() << "VideoRecorder: microphone" << m_microphoneDevice
+                       << "is not a DirectShow device; recording without it";
+        }
+    }
+    if (wantDesktopDshow) {
+        const int index = resolveDshowAudioDevice(devices, m_desktopAudioDevice);
+        if (index >= 0) {
+            m_desktopDshowInput = dshowAudioInputName(devices.at(index));
+        } else {
+            m_desktopAudioEnabled = false;
+            m_warnings << TranslationManager::tr("recWarnDesktopAudioMissing");
+            qWarning() << "VideoRecorder: desktop audio source" << m_desktopAudioDevice
+                       << "is not a DirectShow device; recording without it";
+        }
     }
 #endif
+}
 
+bool VideoRecorder::startWindowsCapture(QString *error)
+{
+#ifdef Q_OS_WIN
+    m_starting = false;
+    m_ffmpegOutputBuffer.clear();
+    m_ffmpegLogTail.clear();
+    m_videoStartEpochMs = -1;
+    m_audioStartEpochMs.store(-1);
+    m_segmentCount = 0;
+    if (!startFfmpegSegment(segmentTargetPath(), error))
+        return false;
+
+    if (m_systemAudioLoopback) {
+        // Loopback capture starts with FFmpeg so no audio is missed; the mux
+        // step trims it to the first video frame using gdigrab's wall-clock
+        // start time. Assigning to a still-joinable std::thread would call
+        // std::terminate, so join any previous one.
+        stopSystemAudioCapture();
+        m_audioStop.store(false);
+        m_audioThread = std::thread(recordWasapiLoopback, m_audioPath, &m_audioStop, &m_audioPaused,
+                                    &m_audioStartEpochMs);
+    }
+
+    m_starting = true;
+    if (m_startupTimer) {
+        m_startupTimer->stop();
+        m_startupTimer->deleteLater();
+    }
+    m_startupTimer = new QTimer(this);
+    m_startupTimer->setSingleShot(true);
+    m_startupTimer->setInterval(8000);
+    connect(m_startupTimer, &QTimer::timeout, this, [this]() {
+        // Still running but silent (e.g. an FFmpeg without progress output):
+        // treat it as started rather than waiting forever.
+        if (m_starting && m_process) {
+            qWarning() << "VideoRecorder: ffmpeg reported no progress yet; assuming capture is running";
+            markCaptureStarted();
+        }
+    });
+    m_startupTimer->start();
+    return true;
+#else
+    Q_UNUSED(error);
+    return false;
+#endif
+}
+
+void VideoRecorder::readFfmpegOutput(QProcess *process)
+{
+    if (!process)
+        return;
+    const QByteArray chunk = process->readAll();
+    if (process != m_process)
+        return;
+    m_ffmpegOutputBuffer += chunk;
+    qsizetype newline = -1;
+    while ((newline = m_ffmpegOutputBuffer.indexOf('\n')) >= 0) {
+        const QString line = QString::fromUtf8(m_ffmpegOutputBuffer.left(newline)).trimmed();
+        m_ffmpegOutputBuffer.remove(0, newline + 1);
+        handleFfmpegLine(line);
+    }
+    if (m_ffmpegOutputBuffer.size() > 64 * 1024)
+        m_ffmpegOutputBuffer.clear();
+}
+
+void VideoRecorder::handleFfmpegLine(const QString &line)
+{
+    if (line.isEmpty())
+        return;
+    if (isFfmpegProgressBlockEnd(line)) {
+        if (m_starting)
+            markCaptureStarted();
+        return;
+    }
+    if (isFfmpegProgressLine(line))
+        return;
+    // The first input dump is gdigrab's (input #0).
+    if (m_starting && m_videoStartEpochMs < 0) {
+        const qint64 start = ffmpegInputStartEpochMs(line);
+        if (start > 0)
+            m_videoStartEpochMs = start;
+    }
+    m_ffmpegLogTail.append(line);
+    while (m_ffmpegLogTail.size() > 40)
+        m_ffmpegLogTail.removeFirst();
+}
+
+void VideoRecorder::markCaptureStarted()
+{
+    if (!m_starting)
+        return;
+    m_starting = false;
+    if (m_startupTimer) {
+        m_startupTimer->stop();
+        m_startupTimer->deleteLater();
+        m_startupTimer = nullptr;
+    }
+    syncHiddenAttribute(m_segmentPath);
     startCountdown();
+    if (m_stopAfterStart) {
+        m_stopAfterStart = false;
+        stop();
+    }
+}
+
+void VideoRecorder::handleWindowsStartupFailure(QString reason, const QString &segment)
+{
+#ifdef Q_OS_WIN
+    m_starting = false;
+    if (m_startupTimer) {
+        m_startupTimer->stop();
+        m_startupTimer->deleteLater();
+        m_startupTimer = nullptr;
+    }
+    stopSystemAudioCapture();
+    QFile::remove(segment);
+    if (!m_audioPath.isEmpty())
+        QFile::remove(m_audioPath);
+
+    // A dshow device that is listed but cannot be opened (in use, unplugged,
+    // driver error) fails FFmpeg as a whole. Record without it instead.
+    const bool microphoneInput = m_microphoneEnabled && !m_microphoneDshowInput.isEmpty();
+    const bool desktopInput = m_desktopAudioEnabled && !m_systemAudioLoopback && !m_desktopDshowInput.isEmpty();
+    if (!m_startupRetried && (microphoneInput || desktopInput)) {
+        m_startupRetried = true;
+        qWarning() << "VideoRecorder: ffmpeg failed to start with DirectShow audio; retrying without it:" << reason;
+        if (microphoneInput) {
+            m_microphoneEnabled = false;
+            m_microphoneDshowInput.clear();
+        }
+        if (desktopInput) {
+            m_desktopAudioEnabled = false;
+            m_desktopDshowInput.clear();
+        }
+        m_warnings << TranslationManager::tr("recWarnAudioInputFailed");
+        QString error;
+        if (startWindowsCapture(&error))
+            return;
+        if (!error.isEmpty())
+            reason = error;
+    }
+
+    removeRecordingFiles();
+    cleanupProcess();
+    emit recordingFailed(reason.isEmpty() ? QStringLiteral("ffmpeg exited during startup") : reason);
+#else
+    Q_UNUSED(reason);
+    Q_UNUSED(segment);
+#endif
 }
 
 QString VideoRecorder::segmentTargetPath() const
@@ -395,20 +696,26 @@ QString VideoRecorder::segmentTargetPath() const
 
 QStringList VideoRecorder::ffmpegCaptureArguments(const QString &outputPath) const
 {
+#ifdef Q_OS_WIN
+    WindowsCaptureOptions options;
+    options.captureRect = m_captureRect;
+    options.fps = m_fps;
+    options.crf = m_crf;
+    if (m_desktopAudioEnabled && !m_systemAudioLoopback) {
+        options.desktopDshowInput = m_desktopDshowInput;
+        options.desktopVolume = m_desktopVolume;
+    }
+    if (m_microphoneEnabled) {
+        options.microphoneDshowInput = m_microphoneDshowInput;
+        options.microphoneVolume = m_microphoneVolume;
+    }
+    return windowsFfmpegCaptureArguments(options, outputPath);
+#else
     const QRect &captureRect = m_captureRect;
     QStringList args;
     args << QStringLiteral("-y")
          << QStringLiteral("-hide_banner")
          << QStringLiteral("-loglevel") << QStringLiteral("error");
-#ifdef Q_OS_WIN
-    args << QStringLiteral("-f") << QStringLiteral("gdigrab")
-         << QStringLiteral("-draw_mouse") << QStringLiteral("1")
-         << QStringLiteral("-framerate") << QString::number(m_fps)
-         << QStringLiteral("-offset_x") << QString::number(captureRect.x())
-         << QStringLiteral("-offset_y") << QString::number(captureRect.y())
-         << QStringLiteral("-video_size") << QStringLiteral("%1x%2").arg(captureRect.width()).arg(captureRect.height())
-         << QStringLiteral("-i") << QStringLiteral("desktop");
-#else
     QString display = QProcessEnvironment::systemEnvironment().value(QStringLiteral("DISPLAY"));
     if (display.trimmed().isEmpty())
         display = QStringLiteral(":0.0");
@@ -417,40 +724,18 @@ QStringList VideoRecorder::ffmpegCaptureArguments(const QString &outputPath) con
          << QStringLiteral("-framerate") << QString::number(m_fps)
          << QStringLiteral("-video_size") << QStringLiteral("%1x%2").arg(captureRect.width()).arg(captureRect.height())
          << QStringLiteral("-i") << QStringLiteral("%1+%2,%3").arg(display).arg(captureRect.x()).arg(captureRect.y());
-#endif
 
-    struct AudioInput {
-        int inputIndex;
-        int volume;
-    };
-    QVector<AudioInput> audioInputs;
+    QList<QPair<int, int>> audioInputs;
     int nextInputIndex = 1;
     if (m_desktopAudioEnabled && !m_systemAudioLoopback && m_desktopVolume > 0) {
-#ifdef Q_OS_WIN
-        if (m_desktopAudioDevice == QStringLiteral("__wasapi__")) {
-            args << QStringLiteral("-f") << QStringLiteral("wasapi")
-                 << QStringLiteral("-i") << QStringLiteral("default");
-        } else {
-            args << QStringLiteral("-f") << QStringLiteral("dshow")
-                 << QStringLiteral("-i") << QStringLiteral("audio=%1").arg(m_desktopAudioDevice);
-        }
-        audioInputs.append({nextInputIndex++, m_desktopVolume});
-#else
         args << QStringLiteral("-f") << QStringLiteral("pulse")
              << QStringLiteral("-i") << m_desktopAudioDevice;
-        audioInputs.append({nextInputIndex++, m_desktopVolume});
-#endif
+        audioInputs.append(qMakePair(nextInputIndex++, m_desktopVolume));
     }
     if (m_microphoneEnabled && m_microphoneVolume > 0) {
-#ifdef Q_OS_WIN
-        args << QStringLiteral("-f") << QStringLiteral("dshow")
-             << QStringLiteral("-i") << QStringLiteral("audio=%1").arg(m_microphoneDevice);
-        audioInputs.append({nextInputIndex++, m_microphoneVolume});
-#else
         args << QStringLiteral("-f") << QStringLiteral("pulse")
              << QStringLiteral("-i") << m_microphoneDevice;
-        audioInputs.append({nextInputIndex++, m_microphoneVolume});
-#endif
+        audioInputs.append(qMakePair(nextInputIndex++, m_microphoneVolume));
     }
 
     args
@@ -459,30 +744,10 @@ QStringList VideoRecorder::ffmpegCaptureArguments(const QString &outputPath) con
          << QStringLiteral("-preset") << QStringLiteral("veryfast")
          << QStringLiteral("-crf") << QString::number(m_crf)
          << QStringLiteral("-pix_fmt") << QStringLiteral("yuv420p");
-    if (audioInputs.size() == 1) {
-        const AudioInput input = audioInputs.first();
-        args << QStringLiteral("-filter_complex")
-             << QStringLiteral("[%1:a]volume=%2[aout]")
-                    .arg(input.inputIndex)
-                    .arg(QString::number(input.volume / 100.0, 'f', 2))
-             << QStringLiteral("-map") << QStringLiteral("0:v")
-             << QStringLiteral("-map") << QStringLiteral("[aout]")
-             << QStringLiteral("-c:a") << QStringLiteral("aac")
-             << QStringLiteral("-b:a") << QStringLiteral("160k");
-    } else if (audioInputs.size() == 2) {
-        args << QStringLiteral("-filter_complex")
-             << QStringLiteral("[%1:a]volume=%2[a1];[%3:a]volume=%4[a2];[a1][a2]amix=inputs=2:duration=longest[aout]")
-                    .arg(audioInputs[0].inputIndex)
-                    .arg(QString::number(audioInputs[0].volume / 100.0, 'f', 2))
-                    .arg(audioInputs[1].inputIndex)
-                    .arg(QString::number(audioInputs[1].volume / 100.0, 'f', 2))
-             << QStringLiteral("-map") << QStringLiteral("0:v")
-             << QStringLiteral("-map") << QStringLiteral("[aout]")
-             << QStringLiteral("-c:a") << QStringLiteral("aac")
-             << QStringLiteral("-b:a") << QStringLiteral("160k");
-    }
+    args << ffmpegAudioMixArguments(audioInputs);
     args << outputPath;
     return args;
+#endif
 }
 
 bool VideoRecorder::startFfmpegSegment(const QString &outputPath, QString *error)
@@ -494,6 +759,10 @@ bool VideoRecorder::startFfmpegSegment(const QString &outputPath, QString *error
 #if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
     stopRecorderWhenParentExits(process);
 #endif
+#ifdef Q_OS_WIN
+    // Windows refuses to overwrite a hidden file in place.
+    QFile::remove(outputPath);
+#endif
     process->start();
     if (!process->waitForStarted(3000)) {
         if (error)
@@ -503,6 +772,16 @@ bool VideoRecorder::startFfmpegSegment(const QString &outputPath, QString *error
         QFile::remove(outputPath);
         return false;
     }
+#ifdef Q_OS_WIN
+    stopWithRecorder(process);
+    // Progress lines arrive every half second; read them as they come so the
+    // output buffer stays small and startup is detected.
+    m_ffmpegOutputBuffer.clear();
+    m_ffmpegLogTail.clear();
+    connect(process, &QProcess::readyReadStandardOutput, this, [this, process]() {
+        readFfmpegOutput(process);
+    });
+#endif
     connect(process, &QProcess::finished, this, &VideoRecorder::onProcessFinished);
     m_process = process;
     m_segmentPath = outputPath;
@@ -561,6 +840,18 @@ void VideoRecorder::requestEncoderStop()
     // Track the process itself so these deferred timers can never tear down
     // the encoder of a later segment or recording.
     const QPointer<QProcess> process(m_process);
+#ifdef Q_OS_WIN
+    // terminate() only posts WM_CLOSE, which console FFmpeg ignores, so the
+    // encoder gets a long grace period to drain after "q". If it still has
+    // to be killed, the fragmented segment keeps everything up to its last
+    // fragment.
+    QTimer::singleShot(windowsEncoderStopGraceMs(m_captureRect.size(), m_fps), this, [process]() {
+        if (process && process->state() != QProcess::NotRunning) {
+            qWarning() << "VideoRecorder: ffmpeg did not finish after stop; killing it";
+            process->kill();
+        }
+    });
+#else
     QTimer::singleShot(2500, this, [process]() {
         if (process && process->state() != QProcess::NotRunning)
             process->terminate();
@@ -569,12 +860,18 @@ void VideoRecorder::requestEncoderStop()
         if (process && process->state() != QProcess::NotRunning)
             process->kill();
     });
+#endif
 }
 
 void VideoRecorder::stop()
 {
     // Stop only once: the countdown keeps firing at 0 and users may press Stop
     // repeatedly.
+    if (m_starting) {
+        // Nothing has been reported as started yet; stop right after it is.
+        m_stopAfterStart = true;
+        return;
+    }
     if (!m_recording || m_stopping)
         return;
     m_stopping = true;
@@ -591,7 +888,7 @@ void VideoRecorder::stop()
 
 void VideoRecorder::cancel()
 {
-    if (!m_recording && !isFinalizing())
+    if (!m_recording && !m_starting && !isFinalizing())
         return;
     if (isFinalizing()) {
         cleanupMuxProcess();
@@ -671,7 +968,18 @@ void VideoRecorder::onProcessFinished(int exitCode, QProcess::ExitStatus status)
     if (!process || process != m_process)
         return;
 
+#ifdef Q_OS_WIN
+    readFfmpegOutput(process);
+    if (!m_ffmpegOutputBuffer.isEmpty()) {
+        handleFfmpegLine(QString::fromUtf8(m_ffmpegOutputBuffer).trimmed());
+        m_ffmpegOutputBuffer.clear();
+    }
+    const QString stderrText = ffmpegFailureReason(m_ffmpegLogTail);
+    const bool fragmentedOutput = true;
+#else
     const QString stderrText = gstFailureReason(QString::fromLocal8Bit(process->readAll()));
+    const bool fragmentedOutput = false;
+#endif
     const QString segment = m_segmentPath;
     m_process->deleteLater();
     m_process = nullptr;
@@ -684,12 +992,25 @@ void VideoRecorder::onProcessFinished(int exitCode, QProcess::ExitStatus status)
         return;
     }
 
+    if (m_starting) {
+        // FFmpeg exited before it reported any progress.
+        handleWindowsStartupFailure(stderrText, segment);
+        return;
+    }
+
     const bool expectedStop = m_stopping || m_paused
         || (m_maxSeconds > 0 && activeElapsedMs() / 1000 >= m_maxSeconds);
     const bool ok = videoRecordingProcessSucceeded(m_usesGStreamer, expectedStop,
-                                                   status, exitCode, QFileInfo(segment).size());
+                                                   status, exitCode, QFileInfo(segment).size(),
+                                                   fragmentedOutput && !m_usesGStreamer);
     if (ok) {
         m_segmentPaths.append(segment);
+        syncHiddenAttribute(segment);
+        if (fragmentedOutput && !expectedStop && !(status == QProcess::NormalExit && exitCode == 0)) {
+            // Kept, but cut short by an encoder failure, not a stop request.
+            m_warnings << TranslationManager::tr("recWarnEndNotSaved");
+            qWarning() << "VideoRecorder: encoder ended unexpectedly; keeping what was written" << stderrText;
+        }
     } else {
         QFile::remove(segment);
         qWarning() << "VideoRecorder: dropped unusable recording segment" << segment << stderrText;
@@ -729,7 +1050,14 @@ void VideoRecorder::finishRecording()
         emit recordingFailed(QStringLiteral("no video was recorded"));
         return;
     }
-    if (m_segmentPaths.size() > 1) {
+#ifdef Q_OS_WIN
+    // Segments are fragmented MP4s: rewrite even a single one as a regular
+    // MP4 with +faststart. With system audio the mux step does that instead.
+    const bool remuxSingleSegment = !m_systemAudioLoopback;
+#else
+    const bool remuxSingleSegment = false;
+#endif
+    if (m_segmentPaths.size() > 1 || remuxSingleSegment) {
         if (!startSegmentConcat())
             keepSegmentsAfterFailedConcat(QStringLiteral("cannot start the join step"));
         return;
@@ -739,7 +1067,7 @@ void VideoRecorder::finishRecording()
     const QString segment = m_segmentPaths.takeFirst();
     if (segment != target) {
         QFile::remove(target);
-        if (!QFile::rename(segment, target)) {
+        if (!renameRecordingFile(segment, target)) {
             m_segmentPaths.append(segment);
             keepSegmentsAfterFailedConcat(QStringLiteral("cannot rename the recording"));
             return;
@@ -757,7 +1085,7 @@ bool VideoRecorder::startSegmentConcat()
     if (m_segmentPaths.first() == target) {
         const QString firstSegment = recordingSegmentPath(m_segmentDirectory, m_segmentStamp, 0);
         QFile::remove(firstSegment);
-        if (!QFile::rename(target, firstSegment))
+        if (!renameRecordingFile(target, firstSegment))
             return false;
         m_segmentPaths[0] = firstSegment;
     }
@@ -778,6 +1106,7 @@ bool VideoRecorder::startSegmentConcat()
             return false;
         list.write(ffmpegConcatList(m_segmentPaths));
         list.close();
+        syncHiddenAttribute(m_concatListPath);
         program = m_ffmpegPath;
         args = ffmpegConcatArguments(m_concatListPath, target);
     }
@@ -787,6 +1116,9 @@ bool VideoRecorder::startSegmentConcat()
     m_concatProcess->setArguments(args);
     m_concatProcess->setProcessChannelMode(QProcess::MergedChannels);
     connect(m_concatProcess, &QProcess::finished, this, &VideoRecorder::onConcatFinished);
+    connect(m_concatProcess, &QProcess::started, this, [process = m_concatProcess]() {
+        stopWithRecorder(process);
+    });
     connect(m_concatProcess, &QProcess::errorOccurred, this,
             [this](QProcess::ProcessError error) {
         if (error != QProcess::FailedToStart || !m_concatProcess)
@@ -832,11 +1164,30 @@ void VideoRecorder::onConcatFinished(int exitCode, QProcess::ExitStatus status)
         QFile::remove(m_concatListPath);
         m_concatListPath.clear();
     }
+    syncHiddenAttribute(segmentTargetPath());
     finishVideo();
 }
 
 void VideoRecorder::keepSegmentsAfterFailedConcat(const QString &reason)
 {
+    // A single segment only needed a remux; the unremuxed file is still a
+    // playable (fragmented) MP4, so use it as the result.
+    if (m_segmentPaths.size() == 1) {
+        const QString segment = m_segmentPaths.first();
+        const QString target = segmentTargetPath();
+        if (segment != target)
+            QFile::remove(target);
+        if (segment == target || renameRecordingFile(segment, target)) {
+            qWarning() << "VideoRecorder: kept the recording without the final remux:" << reason;
+            m_segmentPaths.clear();
+            if (!m_concatListPath.isEmpty()) {
+                QFile::remove(m_concatListPath);
+                m_concatListPath.clear();
+            }
+            finishVideo();
+            return;
+        }
+    }
     // Never throw away recorded footage: keep each part next to the output.
     if (!m_segmentPaths.contains(segmentTargetPath()))
         QFile::remove(segmentTargetPath());
@@ -850,7 +1201,7 @@ void VideoRecorder::keepSegmentsAfterFailedConcat(const QString &reason)
     int partNumber = 1;
     for (const QString &segment : std::as_const(m_segmentPaths)) {
         const QString part = recordingPartPath(m_outputPath, partNumber++);
-        if (!QFileInfo::exists(part) && QFile::rename(segment, part))
+        if (!QFileInfo::exists(part) && renameRecordingFile(segment, part))
             kept << QDir::toNativeSeparators(part);
         else
             kept << QDir::toNativeSeparators(segment);
@@ -902,7 +1253,7 @@ void VideoRecorder::finishVideo()
 void VideoRecorder::useVideoWithoutSystemAudio(const QString &warning)
 {
     QFile::remove(m_outputPath);
-    const bool fallbackOk = QFile::rename(m_videoOnlyPath, m_outputPath);
+    const bool fallbackOk = renameRecordingFile(m_videoOnlyPath, m_outputPath);
     QFile::remove(m_audioPath);
     if (!fallbackOk) {
         emit recordingFailed(QStringLiteral("failed to mux system audio"));
@@ -946,36 +1297,15 @@ bool VideoRecorder::startSystemAudioMux()
     QFile::remove(m_outputPath);
     m_muxProcess = new QProcess(this);
     m_muxProcess->setProgram(m_ffmpegPath);
-    QStringList args = {
-        QStringLiteral("-y"),
-        QStringLiteral("-hide_banner"),
-        QStringLiteral("-loglevel"), QStringLiteral("error"),
-        QStringLiteral("-i"), m_videoOnlyPath,
-        QStringLiteral("-i"), m_audioPath
-    };
-
     const bool videoHasAudio = m_microphoneEnabled && m_microphoneVolume > 0;
-    const QString desktopVolume = QString::number(m_desktopVolume / 100.0, 'f', 2);
-
-    // apad makes the audio endless so -shortest always ends on the video:
-    // a short system-audio track must never truncate the recording.
-    if (videoHasAudio) {
-        args << QStringLiteral("-filter_complex")
-             << QStringLiteral("[1:a]volume=%1[desk];[0:a][desk]amix=inputs=2:duration=longest,apad[aout]")
-                    .arg(desktopVolume);
-    } else {
-        args << QStringLiteral("-filter_complex")
-             << QStringLiteral("[1:a]volume=%1,apad[aout]").arg(desktopVolume);
-    }
-    args << QStringLiteral("-map") << QStringLiteral("0:v")
-         << QStringLiteral("-map") << QStringLiteral("[aout]")
-         << QStringLiteral("-c:v") << QStringLiteral("copy")
-         << QStringLiteral("-c:a") << QStringLiteral("aac")
-         << QStringLiteral("-shortest")
-         << m_outputPath;
-    m_muxProcess->setArguments(args);
+    const qint64 audioLeadMs = systemAudioLeadMs(m_audioStartEpochMs.load(), m_videoStartEpochMs);
+    m_muxProcess->setArguments(systemAudioMuxArguments(m_videoOnlyPath, m_audioPath, m_desktopVolume,
+                                                       videoHasAudio, audioLeadMs, m_outputPath));
     m_muxProcess->setProcessChannelMode(QProcess::SeparateChannels);
     connect(m_muxProcess, &QProcess::finished, this, &VideoRecorder::onMuxFinished);
+    connect(m_muxProcess, &QProcess::started, this, [process = m_muxProcess]() {
+        stopWithRecorder(process);
+    });
     connect(m_muxProcess, &QProcess::errorOccurred, this,
             [this](QProcess::ProcessError error) {
         if (error != QProcess::FailedToStart || !m_muxProcess)
@@ -1259,6 +1589,7 @@ QString VideoRecorder::gstLaunchPath() const
 
 QString VideoRecorder::makeDefaultOutputPath() const
 {
+    const auto fileExists = [](const QString &path) { return QFileInfo::exists(path); };
     QSettings s("EShot", "EShot");
     QStringList candidates;
     QString configuredDir = s.contains("videoSavePath")
@@ -1287,9 +1618,9 @@ QString VideoRecorder::makeDefaultOutputPath() const
             continue;
         probe.close();
         QFile::remove(probePath);
-        return dir.filePath(fileName);
+        return uniqueRecordingOutputPath(dir.filePath(fileName), fileExists);
     }
-    return QDir(QDir::tempPath()).filePath(fileName);
+    return uniqueRecordingOutputPath(QDir(QDir::tempPath()).filePath(fileName), fileExists);
 }
 
 qint64 VideoRecorder::activeElapsedMs() const
@@ -1313,6 +1644,13 @@ void VideoRecorder::cleanupProcess()
     m_resumePending = false;
     m_stopping = false;
     m_canceling = false;
+    m_starting = false;
+    m_stopAfterStart = false;
+    if (m_startupTimer) {
+        m_startupTimer->stop();
+        m_startupTimer->deleteLater();
+        m_startupTimer = nullptr;
+    }
     m_audioPaused.store(false);
     if (m_countdownTimer) {
         m_countdownTimer->stop();

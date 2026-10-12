@@ -21,7 +21,8 @@ public:
     explicit VideoRecorder(QObject *parent = nullptr);
     ~VideoRecorder() override;
 
-    bool isRecording() const { return m_recording || isFinalizing(); }
+    // Also true while the encoder is starting up (before recordingStarted()).
+    bool isRecording() const { return m_recording || m_starting || isFinalizing(); }
     bool isPaused() const { return m_paused; }
     bool isFinalizing() const { return m_muxProcess != nullptr || m_concatProcess != nullptr; }
     QRect captureRect() const { return m_displayRect.isValid() ? m_displayRect : m_captureRect; }
@@ -86,6 +87,15 @@ private:
     bool startWaylandPortalRecording(const QRect &captureRect);
     QString gstLaunchPath() const;
     void discardPreparedSource();
+    // Windows backend: resolves the dshow inputs, starts the first segment
+    // and waits (asynchronously) for FFmpeg to report progress.
+    void resolveWindowsAudioInputs();
+    bool startWindowsCapture(QString *error);
+    void readFfmpegOutput(QProcess *process);
+    void handleFfmpegLine(const QString &line);
+    void markCaptureStarted();
+    void handleWindowsStartupFailure(QString reason, const QString &segment);
+    void clearStartupState();
 
     QProcess *m_process = nullptr;
     QProcess *m_muxProcess = nullptr;
@@ -114,6 +124,17 @@ private:
     bool m_microphoneEnabled = false;
     int m_microphoneVolume = 80;
     QString m_microphoneDevice;
+    // `audio=` names passed to dshow (Windows); empty when not recorded.
+    QString m_desktopDshowInput;
+    QString m_microphoneDshowInput;
+    bool m_starting = false;
+    bool m_stopAfterStart = false;
+    bool m_startupRetried = false;
+    QTimer *m_startupTimer = nullptr;
+    QByteArray m_ffmpegOutputBuffer;
+    QStringList m_ffmpegLogTail;
+    qint64 m_videoStartEpochMs = -1;
+    std::atomic<qint64> m_audioStartEpochMs { -1 };
     QString m_portalSessionHandle;
     LinuxPortalScreenCast::Stream m_preparedStream;
     QString m_gstPath;

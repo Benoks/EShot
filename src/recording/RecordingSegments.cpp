@@ -1,5 +1,6 @@
 #include "RecordingSegments.h"
 
+#include <QDateTime>
 #include <QDir>
 #include <QFileInfo>
 
@@ -48,6 +49,9 @@ QStringList ffmpegConcatArguments(const QString &listPath, const QString &output
         QStringLiteral("-i"), listPath,
         QStringLiteral("-map"), QStringLiteral("0"),
         QStringLiteral("-c"), QStringLiteral("copy"),
+        // Moves the index to the front; also turns fragmented segments back
+        // into a regular MP4.
+        QStringLiteral("-movflags"), QStringLiteral("+faststart"),
         outputPath
     };
 }
@@ -83,4 +87,31 @@ QStringList gstConcatArguments(const QString &segmentPattern, const QString &out
              << QStringLiteral("mux.");
     }
     return args;
+}
+
+QString uniqueRecordingOutputPath(const QString &path,
+                                  const std::function<bool(const QString &)> &exists)
+{
+    if (path.isEmpty() || !exists || !exists(path))
+        return path;
+    const QFileInfo info(path);
+    const QString suffix = info.suffix();
+    const QString base = info.completeBaseName();
+    for (int n = 2; n < 10000; ++n) {
+        const QString name = suffix.isEmpty()
+            ? QStringLiteral("%1_%2").arg(base).arg(n)
+            : QStringLiteral("%1_%2.%3").arg(base).arg(n).arg(suffix);
+        const QString candidate = info.dir().filePath(name);
+        if (!exists(candidate))
+            return candidate;
+    }
+    return path;
+}
+
+bool isStaleRecordingIntermediate(const QString &fileName, const QDateTime &lastModified,
+                                  const QDateTime &now)
+{
+    if (!fileName.startsWith(QStringLiteral(".eshot_")) || !lastModified.isValid())
+        return false;
+    return lastModified.secsTo(now) > 24 * 60 * 60;
 }

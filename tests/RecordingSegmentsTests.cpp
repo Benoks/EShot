@@ -37,6 +37,42 @@ private slots:
                                   "file '/videos/it'\\''s here.mp4'\n"));
     }
 
+    void concatRemuxesWithFaststart()
+    {
+        const QStringList args = ffmpegConcatArguments(QStringLiteral("/v/list.txt"), QStringLiteral("/v/out.mp4"));
+        QCOMPARE(args.at(args.indexOf(QStringLiteral("-movflags")) + 1), QStringLiteral("+faststart"));
+        QVERIFY(args.indexOf(QStringLiteral("-movflags")) < args.size() - 1);
+    }
+
+    void uniqueOutputPathAppendsCounterWhenTaken()
+    {
+        QSet<QString> taken = {QStringLiteral("/v/EShot_Video_1.mp4")};
+        auto exists = [&taken](const QString &path) { return taken.contains(path); };
+        QCOMPARE(uniqueRecordingOutputPath(QStringLiteral("/v/free.mp4"), exists),
+                 QStringLiteral("/v/free.mp4"));
+        QCOMPARE(uniqueRecordingOutputPath(QStringLiteral("/v/EShot_Video_1.mp4"), exists),
+                 QStringLiteral("/v/EShot_Video_1_2.mp4"));
+        taken.insert(QStringLiteral("/v/EShot_Video_1_2.mp4"));
+        QCOMPARE(uniqueRecordingOutputPath(QStringLiteral("/v/EShot_Video_1.mp4"), exists),
+                 QStringLiteral("/v/EShot_Video_1_3.mp4"));
+        taken.insert(QStringLiteral("/g/EShot_GIF_1.gif"));
+        QCOMPARE(uniqueRecordingOutputPath(QStringLiteral("/g/EShot_GIF_1.gif"), exists),
+                 QStringLiteral("/g/EShot_GIF_1_2.gif"));
+    }
+
+    void onlyDayOldIntermediatesAreStale()
+    {
+        const QDateTime now(QDate(2026, 10, 12), QTime(12, 0));
+        QVERIFY(isStaleRecordingIntermediate(QStringLiteral(".eshot_segment_x_000.mp4"),
+                                             now.addDays(-2), now));
+        QVERIFY(!isStaleRecordingIntermediate(QStringLiteral(".eshot_audio_x.wav"),
+                                              now.addSecs(-3600), now));
+        QVERIFY(!isStaleRecordingIntermediate(QStringLiteral("EShot_Video_1.mp4"),
+                                              now.addDays(-30), now));
+        QVERIFY(!isStaleRecordingIntermediate(QStringLiteral(".eshot_video_x.mp4"),
+                                              QDateTime(), now));
+    }
+
     void concatListKeepsNonAsciiPathsAsUtf8()
     {
         const QByteArray list = ffmpegConcatList({QStringLiteral("/home/u/Masaüstü/a.mp4")});

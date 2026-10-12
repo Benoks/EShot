@@ -270,6 +270,7 @@ private:
     void hideRecordingDrawer(bool restoreToolbar = true);
     void startRecordingFromDrawer();
     void ensureAudioDevicesLoaded();
+    void populateAudioDeviceCombos();
 
     // Resize and move
     enum ResizeMode {

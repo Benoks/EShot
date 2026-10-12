@@ -1039,6 +1039,10 @@ private:
         {"quickCounterSize", {"Numara boyutu", "Counter size", "Zählergröße", "Taille du compteur", "Tamaño del contador", "カウンターのサイズ", "计数器大小", "Размер счётчика"}},
         {"descCounterPointer", {"Adımları numarala; sürükleyerek ok ekle", "Number the steps; drag to add a pointer", "Schritte nummerieren; Ziehen fügt einen Zeiger hinzu", "Numéroter les étapes ; glisser ajoute une flèche", "Numerar los pasos; arrastra para añadir una flecha", "手順に番号を付ける。ドラッグで矢印を追加", "为步骤编号；拖动可添加指针", "Пронумеровать шаги; перетащите, чтобы добавить указатель"}},
         {"sheetCounterPointer", {"Numara: ok ekle", "Counter: add a pointer", "Zähler: Zeiger hinzufügen", "Compteur : ajouter une flèche", "Contador: añadir una flecha", "カウンター: 矢印を追加", "计数器：添加指针", "Счётчик: добавить указатель"}},
+
+        // ─── Windows recording audio sources ───
+        {"recWarnDesktopAudioMissing", {"Seçilen ses kaynağı bulunamadığı için masaüstü sesi kaydedilmedi.", "Desktop audio was not recorded because the selected audio source could not be found.", "Der Desktop-Ton wurde nicht aufgenommen, weil die ausgewählte Audioquelle nicht gefunden wurde.", "Le son du bureau n'a pas été enregistré car la source audio sélectionnée est introuvable.", "No se grabó el audio del escritorio porque no se encontró la fuente de audio seleccionada.", "選択した音声ソースが見つからなかったため、デスクトップ音声は録音されませんでした。", "未找到所选音频源，因此未录制桌面音频。", "Звук рабочего стола не записан: выбранный источник звука не найден."}},
+        {"recWarnAudioInputFailed", {"Bir ses cihazı açılamadığı için kayıt o cihaz olmadan yapıldı.", "An audio device could not be opened, so the recording was made without it.", "Ein Audiogerät konnte nicht geöffnet werden, daher wurde ohne es aufgenommen.", "Un périphérique audio n'a pas pu être ouvert ; l'enregistrement a été fait sans lui.", "No se pudo abrir un dispositivo de audio, así que se grabó sin él.", "オーディオデバイスを開けなかったため、そのデバイスなしで録画しました。", "无法打开某个音频设备，因此录制时未包含该设备。", "Не удалось открыть аудиоустройство, поэтому запись сделана без него."}},
     };
 
     static constexpr int s_transCount = sizeof(s_trans) / sizeof(s_trans[0]);

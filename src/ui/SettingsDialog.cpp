@@ -999,9 +999,28 @@ QWidget* SettingsDialog::createRecordingTab()
 
     m_videoMicrophoneDeviceCombo = new QComboBox(videoGroup);
     m_videoMicrophoneDeviceCombo->addItem(TranslationManager::tr("defaultAudioDevice"), QStringLiteral("default"));
+#ifdef Q_OS_WIN
+    // DirectShow names (what FFmpeg accepts), enumerated off the GUI thread;
+    // the list fills in from the cache and again once the refresh finishes.
+    requestDshowAudioDevices(ComponentPaths::ffmpegPath(), m_videoMicrophoneDeviceCombo,
+                             [combo = m_videoMicrophoneDeviceCombo](const QList<DshowAudioDevice> &devices) {
+        QSignalBlocker blocker(combo);
+        for (const auto &device : dshowMicrophoneDevices(devices)) {
+            if (combo->findData(device.second) < 0)
+                combo->addItem(device.first, device.second);
+        }
+        if (combo->currentIndex() <= 0) {
+            const QSettings settings("EShot", "EShot");
+            const int saved = combo->findData(settings.value("videoMicrophoneDevice", "default").toString());
+            if (saved > 0)
+                combo->setCurrentIndex(saved);
+        }
+    });
+#else
     for (const auto &device : microphoneAudioDevices()) {
         m_videoMicrophoneDeviceCombo->addItem(device.first, device.second);
     }
+#endif
     m_videoMicrophoneDeviceCombo->setToolTip(TranslationManager::tr("tipVideoMicrophoneDevice"));
     auto *microphoneDeviceLabel = new QLabel(TranslationManager::audioMicrophoneDevice(), videoGroup);
     videoForm->addRow(microphoneDeviceLabel, m_videoMicrophoneDeviceCombo);

@@ -357,23 +357,12 @@ private:
     }
 };
 
+#ifndef Q_OS_WIN
 QStringList desktopAudioDevices()
 {
-#ifdef Q_OS_WIN
-    const QString ffmpeg = ComponentPaths::ffmpegPath();
-    if (ffmpeg.isEmpty())
-        return windowsAudioInputDevices();
-
-    QStringList devices = dshowAudioDevices(ffmpeg);
-    for (const QString &name : windowsAudioInputDevices()) {
-        if (!devices.contains(name))
-            devices.append(name);
-    }
-    return devices;
-#else
     return {QStringLiteral("@DEFAULT_SINK@.monitor")};
-#endif
 }
+#endif
 
 }
 
@@ -409,6 +398,11 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
     setFocusPolicy(Qt::StrongFocus);
     setMouseTracking(true);
     setCursor(Qt::CrossCursor);
+#ifdef Q_OS_WIN
+    // Warm the DirectShow device cache in the background (FFmpeg enumeration
+    // takes seconds) so the recording drawer and recording start find it ready.
+    refreshDshowAudioDevices(ComponentPaths::ffmpegPath(), true);
+#endif
 
 #ifdef Q_OS_LINUX
     if (qEnvironmentVariableIntValue("ESHOT_WAYLAND_XWAYLAND_OVERLAY") == 1) {
@@ -1371,47 +1365,67 @@ void CaptureOverlay::ensureAudioDevicesLoaded()
 {
     if (!m_audioDevicesLoaded) {
         m_audioDevicesLoaded = true;
+#ifdef Q_OS_WIN
+        // DirectShow enumeration runs FFmpeg, so it never blocks the GUI
+        // thread: the combos fill from the cache now (when there is one) and
+        // again once the refreshed list arrives.
+        requestDshowAudioDevices(ComponentPaths::ffmpegPath(), this,
+                                 [this](const QList<DshowAudioDevice> &devices) {
+            m_cachedDesktopAudioDevices = dshowDesktopAudioDevices(devices);
+            m_cachedMicrophoneAudioDevices = dshowMicrophoneDevices(devices);
+            populateAudioDeviceCombos();
+        });
+#else
         m_cachedDesktopAudioDevices = desktopAudioDevices();
         m_cachedMicrophoneAudioDevices = microphoneAudioDevices();
+#endif
     }
+    populateAudioDeviceCombos();
+}
 
-    const QString defaultInput = m_cachedMicrophoneAudioDevices.isEmpty()
-        ? QStringLiteral("default")
-        : m_cachedMicrophoneAudioDevices.first().second;
+void CaptureOverlay::populateAudioDeviceCombos()
+{
+    QSettings settings("EShot", "EShot");
+    const QString savedMicrophone = settings.value("videoMicrophoneDevice", "default").toString();
     const QList<QComboBox *> microphoneCombos = {
         m_quickMicrophoneDeviceCombo, m_recordingMicrophoneDeviceCombo
     };
     for (QComboBox *combo : microphoneCombos) {
         if (!combo)
             continue;
+        QSignalBlocker blocker(combo);
+        // "default" follows the system default microphone; the recorder
+        // resolves it when recording starts.
         if (combo->count() == 0)
-            combo->addItem(TranslationManager::tr("defaultAudioDevice"), defaultInput);
+            combo->addItem(TranslationManager::tr("defaultAudioDevice"), QStringLiteral("default"));
         else
-            combo->setItemData(0, defaultInput);
+            combo->setItemData(0, QStringLiteral("default"));
         for (const auto &device : m_cachedMicrophoneAudioDevices) {
             if (combo->findData(device.second) < 0)
                 combo->addItem(device.first, device.second);
         }
-#ifdef Q_OS_WIN
-        for (const QString &device : m_cachedDesktopAudioDevices) {
-            if (combo->findData(device) < 0)
-                combo->addItem(device, device);
+        // The saved device may only have arrived with this list.
+        if (combo->currentIndex() <= 0) {
+            const int saved = combo->findData(savedMicrophone);
+            if (saved > 0)
+                combo->setCurrentIndex(saved);
         }
-#endif
     }
 
 #ifdef Q_OS_WIN
+    // Only loopback sources (system loopback, Stereo Mix, ...); microphones
+    // belong in the microphone list.
     if (m_quickDesktopAudioDeviceCombo) {
-        for (const QString &device : m_cachedDesktopAudioDevices) {
-            const QString lower = device.toLower();
-            const bool looksLikeDesktop =
-                lower.contains(QStringLiteral("virtual-audio-capturer"))
-                || lower.contains(QStringLiteral("stereo mix"))
-                || lower.contains(QStringLiteral("what u hear"))
-                || lower.contains(QStringLiteral("loopback"))
-                || lower.contains(QStringLiteral("wave out"));
-            if (looksLikeDesktop && m_quickDesktopAudioDeviceCombo->findData(device) < 0)
+        QSignalBlocker blocker(m_quickDesktopAudioDeviceCombo);
+        for (const QString &device : std::as_const(m_cachedDesktopAudioDevices)) {
+            if (m_quickDesktopAudioDeviceCombo->findData(device) < 0)
                 m_quickDesktopAudioDeviceCombo->addItem(device, device);
+        }
+        if (m_quickDesktopAudioDeviceCombo->currentIndex() <= 0) {
+            const int saved = m_quickDesktopAudioDeviceCombo->findData(
+                settings.value("videoDesktopAudioDevice", defaultDesktopAudioDevice()).toString());
+            if (saved > 0)
+                m_quickDesktopAudioDeviceCombo->setCurrentIndex(saved);
         }
     }
 #endif

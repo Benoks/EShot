@@ -183,6 +183,8 @@ QString ScreenRecorder::makeDefaultOutputPath() const
 
     const QString fileName = QStringLiteral("EShot_GIF_%1.gif")
         .arg(QDateTime::currentDateTime().toString("yyyyMMdd_hhmmss"));
+    // Names have one-second resolution; never overwrite an earlier GIF.
+    const auto fileExists = [](const QString &path) { return QFileInfo::exists(path); };
 
     for (const QString &candidate : candidates) {
         if (candidate.trimmed().isEmpty()) {
@@ -201,10 +203,10 @@ QString ScreenRecorder::makeDefaultOutputPath() const
         }
         probe.close();
         QFile::remove(probePath);
-        return dir.filePath(fileName);
+        return uniqueRecordingOutputPath(dir.filePath(fileName), fileExists);
     }
 
-    return QDir(QDir::tempPath()).filePath(fileName);
+    return uniqueRecordingOutputPath(QDir(QDir::tempPath()).filePath(fileName), fileExists);
 }
 
 void ScreenRecorder::stop()

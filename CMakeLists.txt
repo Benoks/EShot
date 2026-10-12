@@ -96,6 +96,7 @@ set(SOURCES
     src/recording/RecordingTimeline.cpp
     src/recording/RecordingFinalizationPolicy.cpp
     src/recording/RecordingSegments.cpp
+    src/recording/WindowsRecordingSupport.cpp
     src/recording/ScreenRecorder.cpp
     src/recording/AudioDevices.cpp
     src/recording/VideoRecorder.cpp
@@ -174,6 +175,7 @@ set(HEADERS
     src/recording/RecordingTimeline.h
     src/recording/RecordingFinalizationPolicy.h
     src/recording/RecordingSegments.h
+    src/recording/WindowsRecordingSupport.h
     src/recording/ScreenRecorder.h
     src/recording/AudioDevices.h
     src/recording/VideoRecorder.h
@@ -486,6 +488,14 @@ if(BUILD_TESTING)
             tests/RecordingSegmentsTests.cpp
             src/recording/RecordingSegments.cpp
             src/recording/RecordingSegments.h
+        LIBS Qt6::Core
+    )
+
+    eshot_add_test(eshot_windows_recording_support_tests windows_recording_support
+        SOURCES
+            tests/WindowsRecordingSupportTests.cpp
+            src/recording/WindowsRecordingSupport.cpp
+            src/recording/WindowsRecordingSupport.h
         LIBS Qt6::Core
     )
 
