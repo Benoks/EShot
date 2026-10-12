@@ -17,10 +17,10 @@ class QProcess;
 // QSettings keys (no UI yet):
 // "recordingWindowsCaptureBackend": "auto" (default) prefers ddagrab where
 //     it works, "gdigrab" always records with GDI.
-// "recordingHardwareEncoding": bool, default true; false keeps libx264 for
+// "videoHardwareEncoding": bool, default true; false keeps libx264 for
 //     ddagrab captures.
 inline constexpr char RecordingWindowsCaptureBackendKey[] = "recordingWindowsCaptureBackend";
-inline constexpr char RecordingHardwareEncodingKey[] = "recordingHardwareEncoding";
+inline constexpr char RecordingHardwareEncodingKey[] = "videoHardwareEncoding";
 
 // Starts the probe on a worker thread unless a result is cached (in memory
 // or in QSettings) or a probe is running. Safe to call often.
