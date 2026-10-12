@@ -1498,8 +1498,8 @@ private:
             m_trayMenu->addSeparator();
             QAction *stopAction = m_trayMenu->addAction(
                 trayIcon(":/icons/stop.svg"),
-                withShortcut(finalizing ? TranslationManager::tr(gifRecording ? "recConvertingGif" : "recSaving")
-                                        : TranslationManager::tr("trayStopAndSave"),
+                // While saving, the status line above says so; Stop is disabled.
+                withShortcut(TranslationManager::tr("trayStopAndSave"),
                              finalizing ? QString()
                                         : HotkeyManager::instance().recordingStopShortcutText()));
             stopAction->setEnabled(!finalizing);
