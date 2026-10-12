@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(EShot VERSION 4.5.1 LANGUAGES CXX)
+project(EShot VERSION 4.7.0 LANGUAGES CXX)
 
 include(CTest)
 
