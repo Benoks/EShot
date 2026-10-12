@@ -576,6 +576,10 @@ public slots:
 
     void handleRecordingFileAction(const QString &path, const QString &action)
     {
+        if (action == QStringLiteral("dismiss-recording-tray-tip")) {
+            OnboardingTips::markSeen(OnboardingTips::RecordingTrayTip);
+            return;
+        }
         if (action == QStringLiteral("open-file"))
             openRecordingFile(path);
         else if (action == QStringLiteral("show-in-folder"))
@@ -919,25 +923,14 @@ public slots:
         m_recordingStartPending = false;
         if (m_screenRecorder) {
             beginRecordingUi(true, m_screenRecorder->maxSeconds());
-            m_recordingIndicator = new RecordingIndicator(
-                m_screenRecorder->captureRect(), nullptr, 2, true,
-                RecordingIndicatorMode::Gif, m_screenRecorder->captureBackend());
-            m_recordingIndicator->setTimeLimitSeconds(m_recordingTimeLimitSeconds);
             QSettings settings(QStringLiteral("EShot"), QStringLiteral("EShot"));
-            m_recordingIndicator->setDetails({
-                QStringLiteral("%1 × %2")
-                    .arg(m_screenRecorder->captureRect().width())
-                    .arg(m_screenRecorder->captureRect().height()),
-                QStringLiteral("%1 FPS").arg(settings.value("recordingFps", DefaultGifFps).toInt())
-            });
-            m_recordingIndicator->setShortcutHints(
-                HotkeyManager::instance().recordingPauseShortcutText(),
-                HotkeyManager::instance().recordingStopShortcutText(),
-                HotkeyManager::instance().recordingCancelShortcutText());
-            connectRecordingIndicator();
-            m_recordingIndicator->startCaptureSafePresentation();
-            if (m_recordingIndicator->requiresCaptureSafePresentation())
-                showRecordingControlsHiddenHint();
+            showRecordingIndicator(
+                m_screenRecorder->captureRect(), RecordingIndicatorMode::Gif,
+                m_screenRecorder->captureBackend(),
+                {QStringLiteral("%1 × %2")
+                     .arg(m_screenRecorder->captureRect().width())
+                     .arg(m_screenRecorder->captureRect().height()),
+                 QStringLiteral("%1 FPS").arg(settings.value("recordingFps", DefaultGifFps).toInt())});
         }
         rebuildTrayMenu();
     }
@@ -979,10 +972,6 @@ public slots:
         m_recordingStartPending = false;
         if (m_videoRecorder) {
             beginRecordingUi(false, m_videoRecorder->maxSeconds());
-            m_recordingIndicator = new RecordingIndicator(
-                m_videoRecorder->captureRect(), nullptr, 2, true,
-                RecordingIndicatorMode::Video, m_videoRecorder->captureBackend());
-            m_recordingIndicator->setTimeLimitSeconds(m_recordingTimeLimitSeconds);
             QSettings settings(QStringLiteral("EShot"), QStringLiteral("EShot"));
             const bool desktopAudio = settings.value("videoDesktopAudioEnabled", false).toBool();
             const bool microphone = settings.value("videoMicrophoneEnabled", false).toBool();
@@ -991,21 +980,14 @@ public slots:
                 : desktopAudio ? TranslationManager::audioDesktop()
                                : microphone ? TranslationManager::audioMicrophone()
                                             : TranslationManager::audioNone();
-            m_recordingIndicator->setDetails({
-                QStringLiteral("%1 × %2")
-                    .arg(m_videoRecorder->captureRect().width())
-                    .arg(m_videoRecorder->captureRect().height()),
-                QStringLiteral("%1 FPS").arg(settings.value("videoRecordingFps", DefaultVideoFps).toInt()),
-                audio
-            });
-            m_recordingIndicator->setShortcutHints(
-                HotkeyManager::instance().recordingPauseShortcutText(),
-                HotkeyManager::instance().recordingStopShortcutText(),
-                HotkeyManager::instance().recordingCancelShortcutText());
-            connectRecordingIndicator();
-            m_recordingIndicator->startCaptureSafePresentation();
-            if (m_recordingIndicator->requiresCaptureSafePresentation())
-                showRecordingControlsHiddenHint();
+            showRecordingIndicator(
+                m_videoRecorder->captureRect(), RecordingIndicatorMode::Video,
+                m_videoRecorder->captureBackend(),
+                {QStringLiteral("%1 × %2")
+                     .arg(m_videoRecorder->captureRect().width())
+                     .arg(m_videoRecorder->captureRect().height()),
+                 QStringLiteral("%1 FPS").arg(settings.value("videoRecordingFps", DefaultVideoFps).toInt()),
+                 audio});
         }
         rebuildTrayMenu();
     }
@@ -1076,6 +1058,89 @@ private:
         updateRecordingTrayToolTip();
         // Pause may come from a tray action; never rebuild its menu inside it.
         QTimer::singleShot(0, this, &EShotApp::rebuildTrayMenu);
+    }
+
+    // With a tray icon the recording is controlled from the tray menu and
+    // only the border is drawn; without one the floating bar is the only
+    // way to stop it.
+    RecordingControlsPresentation currentRecordingControlsPresentation() const
+    {
+        return recordingControlsPresentation(QSystemTrayIcon::isSystemTrayAvailable(),
+                                             m_trayIcon && m_trayIcon->isVisible());
+    }
+
+    void showRecordingIndicator(const QRect &captureRect, RecordingIndicatorMode mode,
+                                RecordingCaptureBackend backend, const QStringList &details)
+    {
+        const RecordingControlsPresentation presentation = currentRecordingControlsPresentation();
+        m_recordingDetails = details;
+        m_recordingIndicator = new RecordingIndicator(captureRect, nullptr, 2, true, mode,
+                                                      backend, presentation);
+        m_recordingIndicator->setTimeLimitSeconds(m_recordingTimeLimitSeconds);
+        m_recordingIndicator->setDetails(details);
+        m_recordingIndicator->setShortcutHints(
+            HotkeyManager::instance().recordingPauseShortcutText(),
+            HotkeyManager::instance().recordingStopShortcutText(),
+            HotkeyManager::instance().recordingCancelShortcutText());
+        connectRecordingIndicator();
+        m_recordingIndicator->startCaptureSafePresentation();
+        if (presentation == RecordingControlsPresentation::TrayMenu)
+            showRecordingTrayTip();
+        else if (m_recordingIndicator->requiresCaptureSafePresentation())
+            showRecordingControlsHiddenHint();
+    }
+
+    // Once per session, for the first few sessions, until "Don't show again".
+    void showRecordingTrayTip()
+    {
+        if (!shouldShowRecordingTrayTip(m_recordingTrayTipShown,
+                                        OnboardingTips::isSeen(OnboardingTips::RecordingTrayTip),
+                                        OnboardingTips::count(OnboardingTips::RecordingTrayTipCount))) {
+            return;
+        }
+        m_recordingTrayTipShown = true;
+        OnboardingTips::increment(OnboardingTips::RecordingTrayTipCount);
+        const QString stopKey = HotkeyManager::instance().recordingStopShortcutText().trimmed();
+        const QString message = stopKey.isEmpty()
+            ? TranslationManager::tr("recTrayControlsTipNoHotkey")
+            : TranslationManager::tr("recTrayControlsTip").arg(stopKey);
+#if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
+        if (m_linuxNotification
+            && m_linuxNotification->showWithActions(
+                TranslationManager::notifCaptureTitle(), message, QString(),
+                {{QStringLiteral("dismiss-recording-tray-tip"),
+                  TranslationManager::tr("tipDontShowAgain")}},
+                8000)) {
+            return;
+        }
+#endif
+        if (m_trayIcon)
+            m_trayIcon->showMessage(TranslationManager::notifCaptureTitle(), message,
+                                    QSystemTrayIcon::Information, 8000);
+    }
+
+    void setRecordingBorderLocked(bool locked)
+    {
+        if (m_recordingIndicator)
+            m_recordingIndicator->setBorderLocked(locked);
+    }
+
+    // "● Recording · 00:12 / 00:30", "Recording paused · …" or "Saving…".
+    QString recordingTrayStatusText() const
+    {
+        if (recordingFinalizing())
+            return TranslationManager::tr(m_recordingIsGif ? "recConvertingGif" : "recSaving");
+        const QString time = recordingStatusTimeText(m_recordingElapsedSeconds,
+                                                     m_recordingTimeLimitSeconds);
+        if (activeRecordingPaused())
+            return QStringLiteral("○ ") + TranslationManager::tr("trayRecordingPausedTooltip").arg(time);
+        return QStringLiteral("● ") + TranslationManager::tr("trayRecordingTooltip").arg(time);
+    }
+
+    void updateRecordingTrayStatus()
+    {
+        if (m_trayRecordingStatusAction)
+            m_trayRecordingStatusAction->setText(recordingTrayStatusText());
     }
 
     void connectRecordingIndicator()
@@ -1409,6 +1474,73 @@ private:
         if (!m_trayMenu) return;
         m_trayMenu->clear();
 
+        auto withShortcut = [](const QString &label, const QString &shortcut) {
+            return shortcut.trimmed().isEmpty()
+                ? label : QStringLiteral("%1 (%2)").arg(label, shortcut);
+        };
+        const bool videoRecording = m_videoRecorder && m_videoRecorder->isRecording();
+        const bool gifRecording = m_screenRecorder && m_screenRecorder->isRecording();
+        // Every action below is deferred: rebuilding the tray menu deletes the
+        // action whose triggered() handler is still running.
+        if (videoRecording || gifRecording) {
+            // The tray is where a running recording is controlled: state and
+            // controls come first.
+            const bool finalizing = recordingFinalizing();
+            const bool paused = activeRecordingPaused();
+            QAction *statusAction = m_trayMenu->addAction(recordingTrayStatusText());
+            statusAction->setEnabled(false);
+            m_trayRecordingStatusAction = statusAction;
+            if (!m_recordingDetails.isEmpty()) {
+                QAction *detailsAction = m_trayMenu->addAction(
+                    m_recordingDetails.join(QStringLiteral(" · ")));
+                detailsAction->setEnabled(false);
+            }
+            m_trayMenu->addSeparator();
+            QAction *stopAction = m_trayMenu->addAction(
+                trayIcon(":/icons/stop.svg"),
+                withShortcut(finalizing ? TranslationManager::tr(gifRecording ? "recConvertingGif" : "recSaving")
+                                        : TranslationManager::tr("trayStopAndSave"),
+                             finalizing ? QString()
+                                        : HotkeyManager::instance().recordingStopShortcutText()));
+            stopAction->setEnabled(!finalizing);
+            connect(stopAction, &QAction::triggered, this, [this]() {
+                QTimer::singleShot(0, this, &EShotApp::stopActiveRecording);
+            });
+            if (!finalizing) {
+                const QString pauseLabel = TranslationManager::tr(
+                    paused ? "trayResumeRecording" : "trayPauseRecording");
+                QAction *pauseAction = m_trayMenu->addAction(
+                    trayIcon(paused ? ":/icons/resume.svg" : ":/icons/pause.svg"),
+                    withShortcut(pauseLabel, HotkeyManager::instance().recordingPauseShortcutText()));
+                connect(pauseAction, &QAction::triggered, this, [this]() {
+                    QTimer::singleShot(0, this, &EShotApp::toggleActiveRecordingPause);
+                });
+            }
+            QAction *cancelRecordingAction = m_trayMenu->addAction(
+                trayIcon(":/icons/close.svg"),
+                withShortcut(TranslationManager::trayCancelRecording(),
+                             finalizing ? QString()
+                                        : HotkeyManager::instance().recordingCancelShortcutText()));
+            cancelRecordingAction->setEnabled(!finalizing);
+            connect(cancelRecordingAction, &QAction::triggered, this, [this]() {
+                QTimer::singleShot(0, this, &EShotApp::cancelActiveRecording);
+            });
+            if (m_recordingIndicator && !finalizing) {
+                const bool locked = m_recordingIndicator->isBorderLocked();
+                QAction *lockAction = m_trayMenu->addAction(
+                    trayIcon(locked ? ":/icons/lock_open.svg" : ":/icons/lock.svg"),
+                    TranslationManager::tr(locked ? "trayUnlockFrame" : "trayLockFrame"));
+                lockAction->setToolTip(TranslationManager::tr("trayFrameLockTip"));
+                connect(lockAction, &QAction::triggered, this, [this, locked]() {
+                    QTimer::singleShot(0, this, [this, locked]() {
+                        setRecordingBorderLocked(!locked);
+                        rebuildTrayMenu();
+                    });
+                });
+            }
+            m_trayMenu->addSeparator();
+        }
+
         QAction *captureAction = m_trayMenu->addAction(trayIcon(":/icons/copy.svg"), TranslationManager::trayCapture());
         QSettings hotkeySettings("EShot", "EShot");
         // Show the key that is actually registered. Before hotkeys are set up
@@ -1437,47 +1569,7 @@ private:
                 this, &EShotApp::onWindowCaptureRequested);
 #endif
 
-        auto withShortcut = [](const QString &label, const QString &shortcut) {
-            return shortcut.trimmed().isEmpty()
-                ? label : QStringLiteral("%1 (%2)").arg(label, shortcut);
-        };
-        const bool videoRecording = m_videoRecorder && m_videoRecorder->isRecording();
-        const bool gifRecording = m_screenRecorder && m_screenRecorder->isRecording();
-        // Every action below is deferred: rebuilding the tray menu deletes the
-        // action whose triggered() handler is still running.
         if (videoRecording || gifRecording) {
-            const bool finalizing = recordingFinalizing();
-            const bool paused = activeRecordingPaused();
-            QAction *stopAction = m_trayMenu->addAction(
-                trayIcon(":/icons/stop.svg"),
-                finalizing ? TranslationManager::tr(gifRecording ? "recConvertingGif" : "recSaving")
-                           : TranslationManager::tr("trayStopAndSave"));
-            stopAction->setEnabled(!finalizing);
-            stopAction->setToolTip(withShortcut(TranslationManager::tr("trayStopAndSave"),
-                                                HotkeyManager::instance().recordingStopShortcutText()));
-            connect(stopAction, &QAction::triggered, this, [this]() {
-                QTimer::singleShot(0, this, &EShotApp::stopActiveRecording);
-            });
-            if (!finalizing) {
-                const QString pauseLabel = TranslationManager::tr(
-                    paused ? "trayResumeRecording" : "trayPauseRecording");
-                QAction *pauseAction = m_trayMenu->addAction(
-                    trayIcon(paused ? ":/icons/resume.svg" : ":/icons/pause.svg"), pauseLabel);
-                pauseAction->setToolTip(withShortcut(
-                    pauseLabel, HotkeyManager::instance().recordingPauseShortcutText()));
-                connect(pauseAction, &QAction::triggered, this, [this]() {
-                    QTimer::singleShot(0, this, &EShotApp::toggleActiveRecordingPause);
-                });
-            }
-            QAction *cancelRecordingAction = m_trayMenu->addAction(
-                trayIcon(":/icons/close.svg"), TranslationManager::trayCancelRecording());
-            cancelRecordingAction->setEnabled(!finalizing);
-            cancelRecordingAction->setToolTip(withShortcut(
-                TranslationManager::trayCancelRecording(),
-                HotkeyManager::instance().recordingCancelShortcutText()));
-            connect(cancelRecordingAction, &QAction::triggered, this, [this]() {
-                QTimer::singleShot(0, this, &EShotApp::cancelActiveRecording);
-            });
             m_trayMenu->addSeparator();
         } else if (m_recordingStartCountdown) {
             QAction *cancelRecordingAction = m_trayMenu->addAction(
@@ -1744,6 +1836,7 @@ private:
                         .arg(time);
         }
         m_trayIcon->setToolTip(QStringLiteral("%1 — %2").arg(TranslationManager::appTitle(), state));
+        updateRecordingTrayStatus();
     }
 
     void setTrayIconUpdate()
@@ -1810,6 +1903,9 @@ private:
     int m_recordingTimeLimitSeconds = 0;
     QString m_lastRecordingPath;
     QPointer<QMenu> m_lastRecordingMenu;
+    QPointer<QAction> m_trayRecordingStatusAction;
+    QStringList m_recordingDetails;
+    bool m_recordingTrayTipShown = false;
 };
 
 #include "main.moc"

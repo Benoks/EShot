@@ -10,6 +10,10 @@ inline constexpr const char *TextToolTip = "textTool";
 inline constexpr const char *CtrlMoveTip = "ctrlMove";
 inline constexpr const char *DrawerPeek = "drawerPeek";
 inline constexpr const char *TrayWelcome = "trayWelcome";
+// "Control the recording from the tray" notification: dismissed flag and the
+// number of sessions it was shown in.
+inline constexpr const char *RecordingTrayTip = "recordingTrayTip";
+inline constexpr const char *RecordingTrayTipCount = "recordingTrayTipCount";
 // Counters for hints shown during the first few captures.
 inline constexpr const char *SelectionHintCount = "selectionHintCount";
 inline constexpr const char *TabGlowCount = "tabGlowCount";

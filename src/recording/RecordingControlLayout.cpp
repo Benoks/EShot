@@ -172,3 +172,15 @@ QRect movedRecordingControlRect(const QRect &currentControlRect,
                                   - currentControlRect.height() + 1));
     return QRect(QPoint(x, y), currentControlRect.size());
 }
+
+RecordingControlsPresentation recordingControlsPresentation(bool systemTrayAvailable,
+                                                            bool trayIconVisible)
+{
+    return systemTrayAvailable && trayIconVisible ? RecordingControlsPresentation::TrayMenu
+                                                  : RecordingControlsPresentation::ControlBar;
+}
+
+bool shouldShowRecordingTrayTip(bool shownThisSession, bool dismissed, int sessionsShown)
+{
+    return !shownThisSession && !dismissed && sessionsShown < RecordingTrayTipMaxSessions;
+}

@@ -26,7 +26,9 @@ public:
     explicit RecordingIndicator(const QRect &captureRect, QWidget *parent = nullptr,
                                 int borderWidth = 2, bool supportsPause = true,
                                 RecordingIndicatorMode mode = RecordingIndicatorMode::Gif,
-                                RecordingCaptureBackend captureBackend = defaultRecordingCaptureBackend());
+                                RecordingCaptureBackend captureBackend = defaultRecordingCaptureBackend(),
+                                RecordingControlsPresentation presentation
+                                    = RecordingControlsPresentation::ControlBar);
     ~RecordingIndicator() override;
 
     void setFrameCount(int count);
@@ -43,6 +45,13 @@ public:
     // longer stop, pause or cancel, and the status shows the saving step.
     void setFinalizing(bool finalizing);
     bool isFinalizing() const { return m_finalizing; }
+
+    // With RecordingControlsPresentation::TrayMenu there is no control
+    // window, only the border; the tray menu drives the recording.
+    bool hasControlBar() const { return m_controlBar != nullptr; }
+    // A locked border stays above other windows; unlocked, they may cover it.
+    void setBorderLocked(bool locked);
+    bool isBorderLocked() const { return m_borderLocked; }
 
     bool requiresCaptureSafePresentation() const;
     bool canExcludeFromCapture() const { return m_platformCanExcludeOverlay; }
@@ -64,7 +73,6 @@ private:
     void updateStatusLabel();
     void updatePauseButton();
     void setOverlayVisible(bool visible);
-    void setBorderLocked(bool locked);
     void moveControlBar(const QPoint &requestedTopLeft);
     void updateCaptureSafetyPolicy();
     void applyControlWindowFlags(bool staysOnTop);
@@ -92,6 +100,7 @@ private:
     int m_timeLimitSeconds = 0;
     int m_remainingSeconds = -1;
     bool m_finalizing = false;
+    bool m_borderLocked = true;
     bool m_controlStaysOnTop = false;
     bool m_controlExcludedFromCapture = false;
     bool m_running = true;

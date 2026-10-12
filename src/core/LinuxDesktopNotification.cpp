@@ -53,8 +53,10 @@ QVariantMap LinuxDesktopNotification::hintsForPath(const QString &path)
 {
     QVariantMap hints;
     hints.insert(QStringLiteral("desktop-entry"), QStringLiteral("io.github.benoks.EShot"));
-    hints.insert(QStringLiteral("x-kde-urls"),
-                 QStringList({QUrl::fromLocalFile(path).toString()}));
+    if (!path.isEmpty()) {
+        hints.insert(QStringLiteral("x-kde-urls"),
+                     QStringList({QUrl::fromLocalFile(path).toString()}));
+    }
     return hints;
 }
 
@@ -125,12 +127,14 @@ void LinuxDesktopNotification::onActionInvoked(uint id, const QString &actionKey
     if (!m_paths.contains(id))
         return;
     const QString path = m_paths.take(id);
-    if (path.isEmpty())
+    // Body clicks and "open folder" need a file; other buttons (e.g. "Don't
+    // show again" on a tip) also work on notifications without one.
+    if (actionKey == QStringLiteral("open-folder") || actionKey == QStringLiteral("default")) {
+        if (!path.isEmpty())
+            emit pathActivated(path);
         return;
-    if (actionKey == QStringLiteral("open-folder") || actionKey == QStringLiteral("default"))
-        emit pathActivated(path);
-    else
-        emit actionInvoked(path, actionKey);
+    }
+    emit actionInvoked(path, actionKey);
 }
 
 void LinuxDesktopNotification::onNotificationClosed(uint id, uint reason)

@@ -45,6 +45,14 @@ private slots:
                  QStringList({QStringLiteral("file:///tmp/EShot/video.mp4")}));
     }
 
+    void notificationWithoutFileHasNoKdeFileUrl()
+    {
+        const QVariantMap hints = LinuxDesktopNotification::hintsForPath(QString());
+        QVERIFY(!hints.contains(QStringLiteral("x-kde-urls")));
+        QCOMPARE(hints.value(QStringLiteral("desktop-entry")).toString(),
+                 QStringLiteral("io.github.benoks.EShot"));
+    }
+
     // Regression: a saved-recording notification reused the id of the
     // previous EShot notification. Plasma keeps expired notifications in its
     // history and replaces them silently, so no popup appeared.

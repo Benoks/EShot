@@ -282,7 +282,8 @@ QList<QRect> alternativeRecordingWorkAreas(QScreen *captureScreen)
 RecordingIndicator::RecordingIndicator(const QRect &captureRect, QWidget *parent,
                                        int borderWidth, bool supportsPause,
                                        RecordingIndicatorMode mode,
-                                       RecordingCaptureBackend captureBackend)
+                                       RecordingCaptureBackend captureBackend,
+                                       RecordingControlsPresentation presentation)
     : QWidget(parent),
       m_captureRect(captureRect),
       m_mode(mode),
@@ -317,6 +318,7 @@ RecordingIndicator::RecordingIndicator(const QRect &captureRect, QWidget *parent
     m_compact = m_layout.compact;
     m_platformCanExcludeOverlay = recordingCaptureBackendCanExcludeOverlay(
         captureBackend, recordingWindowsBuildNumber(), m_controlExcludedFromCapture);
+    const bool controlBar = presentation == RecordingControlsPresentation::ControlBar;
 #ifdef Q_OS_LINUX
     // Linux portals cannot exclude an individual overlay window. Controls
     // inside the capture stay an ordinary, non-always-on-top tool window so
@@ -324,10 +326,14 @@ RecordingIndicator::RecordingIndicator(const QRect &captureRect, QWidget *parent
     // recording shortcuts. Controls outside the capture stay on top.
     m_visibilityPolicy = RecordingOverlayVisibility::AlwaysVisible;
 #else
-    m_visibilityPolicy = recordingOverlayVisibilityPolicy(
-        m_layout.controlRect, m_captureRect, m_platformCanExcludeOverlay);
+    // Without a control bar only the border is drawn, which lies outside the
+    // captured area; there is nothing to hide while recording.
+    m_visibilityPolicy = controlBar
+        ? recordingOverlayVisibilityPolicy(m_layout.controlRect, m_captureRect,
+                                           m_platformCanExcludeOverlay)
+        : RecordingOverlayVisibility::AlwaysVisible;
 #endif
-    if (recordingControlBarStaysOnTop(m_layout.controlRect, m_captureRect,
+    if (controlBar && recordingControlBarStaysOnTop(m_layout.controlRect, m_captureRect,
                                       m_platformCanExcludeOverlay)) {
         applyControlWindowFlags(true);
         if (!m_controlExcludedFromCapture && m_platformCanExcludeOverlay) {
@@ -348,7 +354,8 @@ RecordingIndicator::RecordingIndicator(const QRect &captureRect, QWidget *parent
 
     m_borderOverlay = new RecordingBorderOverlay(m_captureRect, m_borderWidth);
     setBorderLocked(true);
-    createControlBar();
+    if (controlBar)
+        createControlBar();
     // A full-screen capture has no outside edge where the border can live.
     // Unless the border window is excluded from the capture, the video would
     // show the blue border itself, even when it is locked.
@@ -364,11 +371,14 @@ RecordingIndicator::RecordingIndicator(const QRect &captureRect, QWidget *parent
     updateStatusLabel();
     updatePauseButton();
 
-    show();
+    // The tray-menu presentation keeps this (empty) control window hidden.
+    if (controlBar)
+        show();
     if (m_borderOverlay && !m_hideFullscreenBorderForCapture)
         m_borderOverlay->show();
     QTimer::singleShot(100, this, [this, globalWindowRect]() {
         qInfo() << "[RecordingIndicator] capture=" << m_captureRect
+                << "controls=" << (m_controlBar ? "bar" : "tray")
                 << "control=" << m_layout.controlRect
                 << "window-requested=" << globalWindowRect
                 << "window-actual=" << geometry()
@@ -451,7 +461,7 @@ void RecordingIndicator::createControlBar()
     connect(m_borderLockButton, &QToolButton::toggled, this,
             &RecordingIndicator::setBorderLocked);
     layout->addWidget(m_borderLockButton);
-    setBorderLocked(true);
+    setBorderLocked(m_borderLocked);
 
     m_pauseButton = new QToolButton(m_controlBar);
     m_pauseButton->setObjectName(QStringLiteral("recordingPauseButton"));
@@ -718,6 +728,7 @@ void RecordingIndicator::setOverlayVisible(bool visible)
 
 void RecordingIndicator::setBorderLocked(bool locked)
 {
+    m_borderLocked = locked;
     if (m_borderOverlay)
         static_cast<RecordingBorderOverlay *>(m_borderOverlay)->setLocked(locked);
     if (m_borderLockButton) {
@@ -731,6 +742,11 @@ void RecordingIndicator::setBorderLocked(bool locked)
 
 void RecordingIndicator::updateCaptureSafetyPolicy()
 {
+    if (!m_controlBar) {
+        m_visibilityPolicy = RecordingOverlayVisibility::AlwaysVisible;
+        setProperty("captureSafeInside", false);
+        return;
+    }
 #ifdef Q_OS_LINUX
     m_visibilityPolicy = RecordingOverlayVisibility::AlwaysVisible;
 #else

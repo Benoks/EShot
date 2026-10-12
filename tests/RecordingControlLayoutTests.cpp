@@ -195,6 +195,28 @@ private slots:
         QVERIFY(recordingBorderStaysOnTop(true));
         QVERIFY(!recordingBorderStaysOnTop(false));
     }
+
+    void controlsMoveToTheTrayOnlyWhenATrayIconIsShown()
+    {
+        QCOMPARE(recordingControlsPresentation(true, true),
+                 RecordingControlsPresentation::TrayMenu);
+        // Stock GNOME without the AppIndicator extension: keep the bar.
+        QCOMPARE(recordingControlsPresentation(false, true),
+                 RecordingControlsPresentation::ControlBar);
+        QCOMPARE(recordingControlsPresentation(true, false),
+                 RecordingControlsPresentation::ControlBar);
+        QCOMPARE(recordingControlsPresentation(false, false),
+                 RecordingControlsPresentation::ControlBar);
+    }
+
+    void trayTipIsShownOncePerSessionForTheFirstFewSessions()
+    {
+        QVERIFY(shouldShowRecordingTrayTip(false, false, 0));
+        QVERIFY(shouldShowRecordingTrayTip(false, false, RecordingTrayTipMaxSessions - 1));
+        QVERIFY(!shouldShowRecordingTrayTip(true, false, 0));
+        QVERIFY(!shouldShowRecordingTrayTip(false, true, 0));
+        QVERIFY(!shouldShowRecordingTrayTip(false, false, RecordingTrayTipMaxSessions));
+    }
 };
 
 QTEST_APPLESS_MAIN(RecordingControlLayoutTests)
