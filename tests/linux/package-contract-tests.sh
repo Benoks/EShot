@@ -36,6 +36,16 @@ grep -F 'release-assets/EShot-linux-packages/EShot-${{ github.ref_name }}-x86_64
 grep -F 'body_path: packaging/release-notes/${{ github.ref_name }}.md' "${workflow}" >/dev/null
 grep -F 'https://img.shields.io/github/v/tag/Benoks/EShot?label=release&sort=semver' "${repo_root}/README.md" >/dev/null
 grep -F "TESSERACT_RUNTIME_RELEASE: 'v4.1.2'" "${workflow}" >/dev/null
+# FFmpeg comes from a pinned, checksummed BtbN release, and only ffmpeg.exe is bundled.
+if grep -F 'master-latest' "${workflow}" >/dev/null; then
+  echo 'the bundled FFmpeg must be a pinned release, not master-latest' >&2
+  exit 1
+fi
+grep -F 'BtbN/FFmpeg-Builds/releases/download/autobuild-2026-09-30-13-08/ffmpeg-n8.1.3-9-g29e619e767-win64-gpl-8.1.zip' "${workflow}" >/dev/null
+grep -F 'BtbN/FFmpeg-Builds/releases/download/autobuild-2026-09-30-13-08/ffmpeg-n8.1.3-9-g29e619e767-winarm64-gpl-8.1.zip' "${workflow}" >/dev/null
+test "$(grep -cE "ffmpeg_sha256: '[0-9a-f]{64}'" "${workflow}")" -eq 2
+grep -F 'Get-FileHash ffmpeg.zip -Algorithm SHA256' "${workflow}" >/dev/null
+grep -F 'third_party/ffmpeg/bin/ffmpeg.exe -Force' "${workflow}" >/dev/null
 grep -F 'releases/download/$release/$archive' "${workflow}" >/dev/null
 grep -F 'EShot-$release-${{ matrix.arch }}-portable.zip' "${workflow}" >/dev/null
 if grep -F 'vcpkg.exe" install tesseract' "${workflow}" >/dev/null; then

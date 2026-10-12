@@ -161,14 +161,19 @@ jobs:
             runner: windows-latest
             cmake_arch: x64
             qt_arch: win64_msvc2022_64
-            ffmpeg_url: 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip'
+            # Pinned FFmpeg 8.1 GPL build (BtbN month-end autobuild, kept long
+            # term); includes ddagrab, libx264, NVENC, AMF and oneVPL (QSV).
+            ffmpeg_url: 'https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-09-30-13-08/ffmpeg-n8.1.3-9-g29e619e767-win64-gpl-8.1.zip'
+            ffmpeg_sha256: '7b801cdd3a1a0bb54ae6f572187e68b4ed54f52086cfee133fab2180bfb429fa'
 
           # ARM64 build on the native Windows 11 Arm runner (FFmpeg is native Arm)
           - arch: arm64
             runner: windows-11-arm
             cmake_arch: ARM64
             qt_arch: win64_msvc2022_arm64_cross_compiled
-            ffmpeg_url: 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-winarm64-gpl.zip'
+            # Same release; Arm64 has ddagrab, libx264 and AMF (no NVENC/QSV).
+            ffmpeg_url: 'https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-09-30-13-08/ffmpeg-n8.1.3-9-g29e619e767-winarm64-gpl-8.1.zip'
+            ffmpeg_sha256: '061a770557c30bbf8e0b6ca3810288a60f72b85088378b84be03277746f34f17'
 
     env:
       BUILD_DIR: ${{ github.workspace }}/build
@@ -229,11 +234,21 @@ jobs:
       # EXISTS() checks look for, so they get copied + installed automatically.
       # tessdata/*.traineddata is already committed under third_party/tesseract.
       - name: Stage FFmpeg (${{ matrix.arch }}, native)
+        shell: pwsh
         run: |
-          curl -L -o ffmpeg.zip "${{ matrix.ffmpeg_url }}"
+          curl.exe -L --fail --retry 3 --retry-delay 5 -o ffmpeg.zip "${{ matrix.ffmpeg_url }}"
+          if ($LASTEXITCODE -ne 0) { throw "Could not download FFmpeg" }
+          $hash = (Get-FileHash ffmpeg.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($hash -ne '${{ matrix.ffmpeg_sha256 }}') {
+            throw "FFmpeg archive checksum mismatch: $hash"
+          }
           Expand-Archive ffmpeg.zip -DestinationPath ffmpeg_extract -Force
+          $ffmpeg = @(Get-ChildItem -Recurse -File ffmpeg_extract -Filter ffmpeg.exe |
+            Where-Object { $_.Directory.Name -eq 'bin' })
+          if ($ffmpeg.Count -ne 1) { throw "Expected one bin/ffmpeg.exe in the FFmpeg archive" }
           New-Item -ItemType Directory -Force third_party/ffmpeg/bin | Out-Null
-          Copy-Item (Get-ChildItem -Recurse ffmpeg_extract/*/bin/*.exe) third_party/ffmpeg/bin/ -Force
+          # Only ffmpeg.exe is used; ffprobe/ffplay would just add size.
+          Copy-Item $ffmpeg[0].FullName third_party/ffmpeg/bin/ffmpeg.exe -Force
 
       # Reuse the architecture-specific runtime already validated in v4.1.2.
       # Actions caches created by tag builds are scoped to that tag, so compiling
