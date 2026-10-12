@@ -19,9 +19,21 @@ enum class RecordingOverlayVisibility {
 
 enum class RecordingCaptureBackend {
     WindowsGdiGrab,
+    // FFmpeg ddagrab (Desktop Duplication API).
+    WindowsDdaGrab,
     WindowsGraphicsCapture,
     LinuxPortal
 };
+
+// What a recording on this platform uses unless the recorder says otherwise.
+inline RecordingCaptureBackend defaultRecordingCaptureBackend()
+{
+#ifdef Q_OS_WIN
+    return RecordingCaptureBackend::WindowsGdiGrab;
+#else
+    return RecordingCaptureBackend::LinuxPortal;
+#endif
+}
 
 struct RecordingControlLayout {
     QRect controlRect;
@@ -44,7 +56,8 @@ RecordingOverlayVisibility recordingOverlayVisibilityPolicy(
     const QRect &captureRect,
     bool platformCanExcludeOverlay);
 // First Windows build (10 2004) where WDA_EXCLUDEFROMCAPTURE removes a
-// window from desktop-DC BitBlt captures such as FFmpeg's gdigrab.
+// window from desktop-DC BitBlt captures such as FFmpeg's gdigrab and from
+// Desktop Duplication (ddagrab).
 constexpr int RecordingWindowsCaptureExclusionMinimumBuild = 19041;
 
 // windowsBuild and displayAffinityConfirmed describe the running system:

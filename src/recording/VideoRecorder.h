@@ -3,9 +3,13 @@
 
 #include "core/LinuxPortalScreenCast.h"
 #include "LinuxRecordingSupport.h"
+#include "RecordingControlLayout.h"
+#include "WindowsRecordingSupport.h"
 
 #include <QObject>
 #include <QElapsedTimer>
+#include <QList>
+#include <QPair>
 #include <QProcess>
 #include <QRect>
 #include <QSharedPointer>
@@ -31,6 +35,9 @@ public:
     // Problems that did not stop the recording but changed what was saved
     // (e.g. a dropped audio source); valid once recordingStopped() is emitted.
     QStringList warnings() const { return m_warnings; }
+    // How the running recording captures the screen (for the indicator's
+    // capture exclusion); valid once recordingStarted() is emitted.
+    RecordingCaptureBackend captureBackend() const;
 
     void start(const QRect &captureRect, int fps, int maxSeconds, int crf,
                bool desktopAudioEnabled, int desktopVolume,
@@ -137,6 +144,21 @@ private:
     bool m_starting = false;
     bool m_stopAfterStart = false;
     bool m_startupRetried = false;
+    // Windows: capture source and encoder of this recording (all segments).
+    WindowsVideoPlan m_windowsPlan;
+    // Windows: last out_time_us of the running segment, and per started
+    // segment whether it was kept and how long it is (-1: unknown). Used
+    // to line the system audio up with each segment.
+    qint64 m_segmentOutTimeUs = -1;
+    struct SegmentRecord {
+        bool kept = false;
+        qint64 durationMs = -1;
+    };
+    QList<SegmentRecord> m_segmentRecords;
+    // Written by the WASAPI thread, read after it was joined: sample rate
+    // and the active spans of the WAV in sample frames.
+    int m_audioSampleRate = 0;
+    QList<QPair<qint64, qint64>> m_audioSpans;
     QTimer *m_startupTimer = nullptr;
     QByteArray m_ffmpegOutputBuffer;
     QStringList m_ffmpegLogTail;

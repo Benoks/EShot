@@ -25,7 +25,8 @@ class RecordingIndicator : public QWidget
 public:
     explicit RecordingIndicator(const QRect &captureRect, QWidget *parent = nullptr,
                                 int borderWidth = 2, bool supportsPause = true,
-                                RecordingIndicatorMode mode = RecordingIndicatorMode::Gif);
+                                RecordingIndicatorMode mode = RecordingIndicatorMode::Gif,
+                                RecordingCaptureBackend captureBackend = defaultRecordingCaptureBackend());
     ~RecordingIndicator() override;
 
     void setFrameCount(int count);

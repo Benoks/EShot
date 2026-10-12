@@ -88,6 +88,7 @@ set(SOURCES
     src/ui/OcrDialog.cpp
     src/ui/UploadDialog.cpp
     src/recording/GifEncoder.cpp
+    src/recording/GifEncodeWorker.cpp
     src/recording/LinuxRecordingSupport.cpp
     src/recording/RecordingSettingsPolicy.cpp
     src/recording/RecordingDrawerPolicy.cpp
@@ -97,6 +98,7 @@ set(SOURCES
     src/recording/RecordingFinalizationPolicy.cpp
     src/recording/RecordingSegments.cpp
     src/recording/WindowsRecordingSupport.cpp
+    src/recording/WindowsCaptureBackend.cpp
     src/recording/ScreenRecorder.cpp
     src/recording/AudioDevices.cpp
     src/recording/VideoRecorder.cpp
@@ -169,6 +171,7 @@ set(HEADERS
     src/ui/OcrDialog.h
     src/ui/UploadDialog.h
     src/recording/GifEncoder.h
+    src/recording/GifEncodeWorker.h
     src/recording/LinuxRecordingSupport.h
     src/recording/RecordingSettingsPolicy.h
     src/recording/RecordingDrawerPolicy.h
@@ -178,6 +181,7 @@ set(HEADERS
     src/recording/RecordingFinalizationPolicy.h
     src/recording/RecordingSegments.h
     src/recording/WindowsRecordingSupport.h
+    src/recording/WindowsCaptureBackend.h
     src/recording/ScreenRecorder.h
     src/recording/AudioDevices.h
     src/recording/VideoRecorder.h
@@ -255,6 +259,7 @@ if(WIN32)
         Advapi32
         Ole32
         OleAut32
+        Dxgi
     )
 endif()
 
@@ -818,6 +823,16 @@ if(BUILD_TESTING)
             src/recording/GifEncoder.cpp
             src/recording/GifEncoder.h
         LIBS Qt6::Core Qt6::Gui
+    )
+
+    eshot_add_test(eshot_gif_encode_worker_tests gif_encode_worker
+        SOURCES
+            tests/GifEncodeWorkerTests.cpp
+            src/recording/GifEncodeWorker.cpp
+            src/recording/GifEncodeWorker.h
+            src/recording/GifEncoder.cpp
+            src/recording/GifEncoder.h
+        LIBS Qt6::Core Qt6::Gui Threads::Threads
     )
 
     eshot_add_test(eshot_screen_recorder_pause_api_tests screen_recorder_pause_api

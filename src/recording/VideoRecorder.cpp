@@ -10,6 +10,7 @@
 #include "VideoRecordingCompletionPolicy.h"
 #include "RecordingFinalizationPolicy.h"
 #include "WindowsRecordingSupport.h"
+#include "WindowsCaptureBackend.h"
 
 #include <QCoreApplication>
 #include <QGuiApplication>
@@ -207,8 +208,12 @@ void writeSilence(QFile &file, quint64 bytes)
     }
 }
 
+// Writes the loopback audio of the active (not paused) time to `path` and
+// records where each active span starts and ends in the file, in sample
+// frames, so the mux step can line every span up with its video segment.
 void recordWasapiLoopback(const QString &path, std::atomic_bool *stopFlag,
-                          std::atomic_bool *pauseFlag, std::atomic<qint64> *startedEpochMs)
+                          std::atomic_bool *pauseFlag, std::atomic<qint64> *startedEpochMs,
+                          int *sampleRate, QList<QPair<qint64, qint64>> *spans)
 {
     HRESULT init = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     if (FAILED(init) && init != RPC_E_CHANGED_MODE)
@@ -270,16 +275,23 @@ void recordWasapiLoopback(const QString &path, std::atomic_bool *stopFlag,
     ULONGLONG pausedTicks = 0;
     ULONGLONG pauseStartedTick = 0;
     bool paused = false;
+    const quint64 blockAlign = qMax<quint64>(1, format->nBlockAlign);
+    *sampleRate = static_cast<int>(format->nSamplesPerSec);
+    qint64 spanStartFrame = 0;
 
     while (!stopFlag->load()) {
         Sleep(10);
         const bool pauseRequested = pauseFlag->load();
         if (pauseRequested != paused) {
             paused = pauseRequested;
-            if (paused)
+            const qint64 frame = static_cast<qint64>(dataBytes / blockAlign);
+            if (paused) {
                 pauseStartedTick = GetTickCount64();
-            else
+                spans->append(qMakePair(spanStartFrame, frame));
+            } else {
                 pausedTicks += GetTickCount64() - pauseStartedTick;
+                spanStartFrame = frame;
+            }
         }
         bool gotPacket = false;
         UINT32 packetFrames = 0;
@@ -318,6 +330,8 @@ void recordWasapiLoopback(const QString &path, std::atomic_bool *stopFlag,
         }
     }
 
+    if (!paused)
+        spans->append(qMakePair(spanStartFrame, static_cast<qint64>(dataBytes / blockAlign)));
     file.seek(0);
     file.write(wavFileHeader(waveFormat, dataBytes));
     file.close();
@@ -331,8 +345,10 @@ VideoRecorder::VideoRecorder(QObject *parent)
 {
 #ifdef Q_OS_WIN
     // Fill the DirectShow device cache in the background so start() does not
-    // have to wait for the enumeration.
-    refreshDshowAudioDevices(ffmpegPath(), true);
+    // have to wait for the enumeration; likewise the capture backend probe.
+    const QString ffmpeg = ffmpegPath();
+    refreshDshowAudioDevices(ffmpeg, true);
+    requestWindowsCaptureProbe(ffmpeg);
 #endif
 }
 
@@ -465,6 +481,8 @@ void VideoRecorder::start(const QRect &captureRect, int fps, int maxSeconds, int
     QString error;
 #ifdef Q_OS_WIN
     sweepStaleRecordingIntermediates(m_segmentDirectory);
+    // Kept for every segment of this recording, so they can be joined.
+    m_windowsPlan = windowsVideoPlanForRecording(m_ffmpegPath, m_captureRect, false);
     // recordingStarted() follows once FFmpeg reports progress (see
     // markCaptureStarted()); a failure before that is reported instead.
     if (!startWindowsCapture(&error)) {
@@ -491,6 +509,9 @@ void VideoRecorder::clearStartupState()
     m_starting = false;
     m_stopAfterStart = false;
     m_startupRetried = false;
+    m_windowsPlan = WindowsVideoPlan();
+    m_segmentRecords.clear();
+    m_segmentOutTimeUs = -1;
     if (m_startupTimer) {
         m_startupTimer->stop();
         m_startupTimer->deleteLater();
@@ -553,18 +574,22 @@ bool VideoRecorder::startWindowsCapture(QString *error)
     m_videoStartEpochMs = -1;
     m_audioStartEpochMs.store(-1);
     m_segmentCount = 0;
+    m_segmentRecords.clear();
+    m_audioPaused.store(false);
     if (!startFfmpegSegment(segmentTargetPath(), error))
         return false;
 
     if (m_systemAudioLoopback) {
         // Loopback capture starts with FFmpeg so no audio is missed; the mux
-        // step trims it to the first video frame using gdigrab's wall-clock
-        // start time. Assigning to a still-joinable std::thread would call
-        // std::terminate, so join any previous one.
+        // step trims every active span to its video segment (see
+        // startSystemAudioMux()). Assigning to a still-joinable std::thread
+        // would call std::terminate, so join any previous one first.
         stopSystemAudioCapture();
+        m_audioSampleRate = 0;
+        m_audioSpans.clear();
         m_audioStop.store(false);
         m_audioThread = std::thread(recordWasapiLoopback, m_audioPath, &m_audioStop, &m_audioPaused,
-                                    &m_audioStartEpochMs);
+                                    &m_audioStartEpochMs, &m_audioSampleRate, &m_audioSpans);
     }
 
     m_starting = true;
@@ -618,8 +643,12 @@ void VideoRecorder::handleFfmpegLine(const QString &line)
             markCaptureStarted();
         return;
     }
-    if (isFfmpegProgressLine(line))
+    if (isFfmpegProgressLine(line)) {
+        const qint64 outTimeUs = ffmpegProgressOutTimeUs(line);
+        if (outTimeUs >= 0)
+            m_segmentOutTimeUs = outTimeUs;
         return;
+    }
     // The first input dump is gdigrab's (input #0).
     if (m_starting && m_videoStartEpochMs < 0) {
         const qint64 start = ffmpegInputStartEpochMs(line);
@@ -662,6 +691,22 @@ void VideoRecorder::handleWindowsStartupFailure(QString reason, const QString &s
     QFile::remove(segment);
     if (!m_audioPath.isEmpty())
         QFile::remove(m_audioPath);
+
+    // Desktop Duplication or the hardware encoder can be unavailable even
+    // though the probe passed (remote session, protected content, encoder
+    // sessions in use): record this one, and the rest of this run, with GDI.
+    // A failing DirectShow input is handled below instead.
+    if (m_windowsPlan.source == WindowsCaptureSource::DdaGrab
+        && !reason.contains(QStringLiteral("dshow"), Qt::CaseInsensitive)) {
+        qWarning() << "VideoRecorder: ddagrab capture failed to start; retrying with gdigrab:" << reason;
+        disableWindowsDdaGrabForSession(m_ffmpegPath);
+        m_windowsPlan = WindowsVideoPlan();
+        QString error;
+        if (startWindowsCapture(&error))
+            return;
+        if (!error.isEmpty())
+            reason = error;
+    }
 
     // A dshow device that is listed but cannot be opened (in use, unplugged,
     // driver error) fails FFmpeg as a whole. Record without it instead.
@@ -707,6 +752,7 @@ QStringList VideoRecorder::ffmpegCaptureArguments(const QString &outputPath) con
     options.captureRect = m_captureRect;
     options.fps = m_fps;
     options.crf = m_crf;
+    options.plan = m_windowsPlan;
     if (m_desktopAudioEnabled && !m_systemAudioLoopback) {
         options.desktopDshowInput = m_desktopDshowInput;
         options.desktopVolume = m_desktopVolume;
@@ -791,6 +837,7 @@ bool VideoRecorder::startFfmpegSegment(const QString &outputPath, QString *error
     connect(process, &QProcess::finished, this, &VideoRecorder::onProcessFinished);
     m_process = process;
     m_segmentPath = outputPath;
+    m_segmentOutTimeUs = -1;
     ++m_segmentCount;
     return true;
 }
@@ -896,7 +943,9 @@ void VideoRecorder::stop()
     if (m_countdownTimer)
         m_countdownTimer->stop();
     if (m_process) {
-        // While paused the current segment is already being closed.
+        // While paused the current segment is already being closed. The
+        // system audio ends with the video, not when the encoder has drained.
+        m_audioPaused.store(true);
         requestEncoderStop();
         return;
     }
@@ -988,6 +1037,9 @@ void VideoRecorder::onProcessFinished(int exitCode, QProcess::ExitStatus status)
 #endif
 
 #ifdef Q_OS_WIN
+    // No video is captured any more, so no system audio either (for a pause
+    // or stop this already happened when it was requested).
+    m_audioPaused.store(true);
     readFfmpegOutput(process);
     if (!m_ffmpegOutputBuffer.isEmpty()) {
         handleFfmpegLine(QString::fromUtf8(m_ffmpegOutputBuffer).trimmed());
@@ -1022,6 +1074,7 @@ void VideoRecorder::onProcessFinished(int exitCode, QProcess::ExitStatus status)
     const bool ok = videoRecordingProcessSucceeded(m_usesGStreamer, expectedStop,
                                                    status, exitCode, QFileInfo(segment).size(),
                                                    fragmentedOutput && !m_usesGStreamer);
+    m_segmentRecords.append(SegmentRecord{ok, ok && m_segmentOutTimeUs >= 0 ? m_segmentOutTimeUs / 1000 : -1});
     if (ok) {
         m_segmentPaths.append(segment);
         syncHiddenAttribute(segment);
@@ -1318,8 +1371,31 @@ bool VideoRecorder::startSystemAudioMux()
     m_muxProcess->setProgram(m_ffmpegPath);
     const bool videoHasAudio = m_microphoneEnabled && m_microphoneVolume > 0;
     const qint64 audioLeadMs = systemAudioLeadMs(m_audioStartEpochMs.load(), m_videoStartEpochMs);
-    m_muxProcess->setArguments(systemAudioMuxArguments(m_videoOnlyPath, m_audioPath, m_desktopVolume,
-                                                       videoHasAudio, audioLeadMs, m_outputPath));
+    // Every started segment has one active audio span (the audio thread has
+    // been joined). If they do not pair up, only the start is aligned.
+    if (!m_segmentRecords.isEmpty() && m_audioSpans.size() == m_segmentRecords.size()
+        && m_audioSampleRate > 0) {
+        QList<SystemAudioSpan> spans;
+        for (int i = 0; i < m_segmentRecords.size(); ++i) {
+            if (!m_segmentRecords.at(i).kept)
+                continue;
+            SystemAudioSpan span;
+            span.startFrame = m_audioSpans.at(i).first;
+            span.endFrame = m_audioSpans.at(i).second;
+            span.videoDurationMs = m_segmentRecords.at(i).durationMs;
+            spans.append(span);
+        }
+        const qint64 firstLeadMs = m_segmentRecords.first().kept ? audioLeadMs : 0;
+        m_muxProcess->setArguments(systemAudioSpanMuxArguments(m_videoOnlyPath, m_audioPath, m_desktopVolume,
+                                                               videoHasAudio, spans, m_audioSampleRate,
+                                                               firstLeadMs, m_outputPath));
+    } else {
+        qWarning() << "VideoRecorder: system audio spans" << m_audioSpans.size()
+                   << "do not match the video segments" << m_segmentRecords.size()
+                   << "; aligning the start only";
+        m_muxProcess->setArguments(systemAudioMuxArguments(m_videoOnlyPath, m_audioPath, m_desktopVolume,
+                                                           videoHasAudio, audioLeadMs, m_outputPath));
+    }
     m_muxProcess->setProcessChannelMode(QProcess::SeparateChannels);
     connect(m_muxProcess, &QProcess::finished, this, &VideoRecorder::onMuxFinished);
     connect(m_muxProcess, &QProcess::started, this, [process = m_muxProcess]() {
@@ -1778,6 +1854,15 @@ void VideoRecorder::onPortalSessionClosed()
     qInfo() << "VideoRecorder: screen sharing was stopped from the desktop; saving the recording";
     m_warnings << TranslationManager::tr("recWarnSharingStopped");
     stop();
+}
+
+RecordingCaptureBackend VideoRecorder::captureBackend() const
+{
+#ifdef Q_OS_WIN
+    return recordingCaptureBackendForPlan(m_windowsPlan);
+#else
+    return defaultRecordingCaptureBackend();
+#endif
 }
 
 QString VideoRecorder::ffmpegPath() const

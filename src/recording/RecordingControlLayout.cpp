@@ -100,8 +100,9 @@ bool recordingCaptureBackendCanExcludeOverlay(RecordingCaptureBackend backend,
     case RecordingCaptureBackend::WindowsGraphicsCapture:
         return true;
     case RecordingCaptureBackend::WindowsGdiGrab:
+    case RecordingCaptureBackend::WindowsDdaGrab:
         // Since Windows 10 2004 the compositor also removes excluded windows
-        // from desktop-DC BitBlt reads. Older builds turn the flag into
+        // from desktop-DC BitBlt reads and from Desktop Duplication frames. Older builds turn the flag into
         // WDA_MONITOR (a black box), and the call can fail for some window
         // types, so only trust a confirmed affinity on a new enough build.
         return displayAffinityConfirmed

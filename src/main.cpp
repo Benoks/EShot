@@ -54,6 +54,7 @@
 #include "core/LinuxUninstaller.h"
 #endif
 #include "capture/CaptureOverlay.h"
+#include "core/ComponentPaths.h"
 #include "recording/ScreenRecorder.h"
 #include "recording/VideoRecorder.h"
 #include "recording/RecordingIndicator.h"
@@ -62,6 +63,7 @@
 #include "recording/RecordingSettingsPolicy.h"
 #include "recording/RecordingStartCountdown.h"
 #include "recording/RecordingStartCountdownPolicy.h"
+#include "recording/WindowsCaptureBackend.h"
 #include "ui/SettingsDialog.h"
 #include "ui/SettingsLayoutPolicy.h"
 #include "ui/ApplicationTheme.h"
@@ -243,6 +245,13 @@ public:
         checkForUpdates();
         if (prewarmOverlayAtStartup)
             QTimer::singleShot(100, this, [this]() { ensureOverlay(); });
+#ifdef Q_OS_WIN
+        // Find out once (cached per FFmpeg build) whether Desktop Duplication
+        // and a hardware encoder work, so the first recording can use them.
+        QTimer::singleShot(3000, this, []() {
+            requestWindowsCaptureProbe(ComponentPaths::ffmpegPath());
+        });
+#endif
     }
 
     ~EShotApp()
@@ -898,7 +907,7 @@ public slots:
             beginRecordingUi(true, m_screenRecorder->maxSeconds());
             m_recordingIndicator = new RecordingIndicator(
                 m_screenRecorder->captureRect(), nullptr, 2, true,
-                RecordingIndicatorMode::Gif);
+                RecordingIndicatorMode::Gif, m_screenRecorder->captureBackend());
             m_recordingIndicator->setTimeLimitSeconds(m_recordingTimeLimitSeconds);
             QSettings settings(QStringLiteral("EShot"), QStringLiteral("EShot"));
             m_recordingIndicator->setDetails({
@@ -957,7 +966,7 @@ public slots:
             beginRecordingUi(false, m_videoRecorder->maxSeconds());
             m_recordingIndicator = new RecordingIndicator(
                 m_videoRecorder->captureRect(), nullptr, 2, true,
-                RecordingIndicatorMode::Video);
+                RecordingIndicatorMode::Video, m_videoRecorder->captureBackend());
             m_recordingIndicator->setTimeLimitSeconds(m_recordingTimeLimitSeconds);
             QSettings settings(QStringLiteral("EShot"), QStringLiteral("EShot"));
             const bool desktopAudio = settings.value("videoDesktopAudioEnabled", false).toBool();

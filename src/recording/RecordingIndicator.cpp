@@ -281,7 +281,8 @@ QList<QRect> alternativeRecordingWorkAreas(QScreen *captureScreen)
 
 RecordingIndicator::RecordingIndicator(const QRect &captureRect, QWidget *parent,
                                        int borderWidth, bool supportsPause,
-                                       RecordingIndicatorMode mode)
+                                       RecordingIndicatorMode mode,
+                                       RecordingCaptureBackend captureBackend)
     : QWidget(parent),
       m_captureRect(captureRect),
       m_mode(mode),
@@ -314,12 +315,6 @@ RecordingIndicator::RecordingIndicator(const QRect &captureRect, QWidget *parent
                                       alternativeRecordingWorkAreas(captureScreen));
     m_screenRect = m_layout.controlScreenRect;
     m_compact = m_layout.compact;
-    const RecordingCaptureBackend captureBackend =
-#ifdef Q_OS_WIN
-        RecordingCaptureBackend::WindowsGdiGrab;
-#else
-        RecordingCaptureBackend::LinuxPortal;
-#endif
     m_platformCanExcludeOverlay = recordingCaptureBackendCanExcludeOverlay(
         captureBackend, recordingWindowsBuildNumber(), m_controlExcludedFromCapture);
 #ifdef Q_OS_LINUX

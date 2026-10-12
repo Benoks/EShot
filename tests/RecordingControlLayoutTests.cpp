@@ -115,6 +115,18 @@ private slots:
             RecordingCaptureBackend::WindowsGraphicsCapture));
     }
 
+    void trustsDisplayAffinityWithDesktopDuplicationLikeGdi()
+    {
+        QVERIFY(!recordingCaptureBackendCanExcludeOverlay(
+            RecordingCaptureBackend::WindowsDdaGrab));
+        QVERIFY(!recordingCaptureBackendCanExcludeOverlay(
+            RecordingCaptureBackend::WindowsDdaGrab, 22631, false));
+        QVERIFY(!recordingCaptureBackendCanExcludeOverlay(
+            RecordingCaptureBackend::WindowsDdaGrab, 18363, true));
+        QVERIFY(recordingCaptureBackendCanExcludeOverlay(
+            RecordingCaptureBackend::WindowsDdaGrab, 19041, true));
+    }
+
     void keepsControlsOnTopOnlyWhenTheyCannotEnterTheVideo()
     {
         const QRect capture(100, 100, 800, 450);

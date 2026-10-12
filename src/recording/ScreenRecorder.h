@@ -16,13 +16,16 @@
 #include <QElapsedTimer>
 
 #include "LinuxRecordingSupport.h"
+#include "RecordingControlLayout.h"
 #include "RecordingTimeline.h"
+#include "WindowsRecordingSupport.h"
 
 #ifdef Q_OS_WIN
 #include <windows.h>
 #endif
 
 class GifEncoder;
+class GifEncodeWorker;
 
 class ScreenRecorder : public QObject {
     Q_OBJECT
@@ -37,6 +40,9 @@ public:
     QRect captureRect() const { return m_displayRect.isValid() ? m_displayRect : m_captureRect; }
     int frameCount() const { return m_frameCount; }
     int maxSeconds() const { return m_maxSeconds; }
+    // How the running recording captures the screen (for the indicator's
+    // capture exclusion); valid once recordingStarted() is emitted.
+    RecordingCaptureBackend captureBackend() const;
 
     void start(const QRect &captureRect, int fps, int maxSeconds, int loopCount,
                const QString &outputPath, const QRect &displayRect = QRect());
@@ -98,8 +104,22 @@ private:
     void failPortalConversion(const QString &reason);
     void removePortalIntermediates();
     qint64 nowMs() const;
+    // Windows with FFmpeg: the GIF is recorded like a Wayland portal GIF, as
+    // a lossless intermediate video (one hidden segment per active span)
+    // that the two palette passes convert when the recording stops. The
+    // portal members (m_portal*) hold that state; m_windowsFfmpeg tells the
+    // two apart. Returns false when FFmpeg is missing or cannot be started,
+    // which leaves the in-process GifEncoder path.
+    bool startWindowsFfmpegRecording();
+    bool startWindowsFfmpegSegment(const QString &outputPath, QString *error);
+    void readWindowsFfmpegOutput(QProcess *process);
+    void handleWindowsFfmpegLine(const QString &line);
+    bool retryWindowsFfmpegWithGdiGrab(const QString &reason);
+    void updateWindowsGifScale();
 
     GifEncoder *m_encoder = nullptr;
+    // Encodes the in-process frames off the GUI thread.
+    GifEncodeWorker *m_encodeWorker = nullptr;
     QProcess *m_process = nullptr;
     QProcess *m_conversionProcess = nullptr;
     QTimer *m_conversionTimeout = nullptr;
@@ -154,6 +174,13 @@ private:
     LinuxPortalSessionWatcher *m_sessionWatcher = nullptr;
     RecordingTimeline m_timeline;
     QElapsedTimer m_monotonicClock;
+    bool m_windowsFfmpeg = false;
+    bool m_windowsStartupRetried = false;
+    WindowsVideoPlan m_windowsPlan;
+    QString m_windowsFfmpegPath;
+    QByteArray m_ffmpegOutputBuffer;
+    QStringList m_ffmpegLogTail;
+    int m_framesBeforeSegment = 0;
 
 #ifdef Q_OS_WIN
     HDC m_screenDC = nullptr;

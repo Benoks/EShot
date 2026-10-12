@@ -1,5 +1,8 @@
 #include "ScreenRecorder.h"
 #include "GifEncoder.h"
+#include "GifEncodeWorker.h"
+#include "WindowsCaptureBackend.h"
+#include "WindowsRecordingSupport.h"
 #include "core/TranslationManager.h"
 #include "core/ComponentPaths.h"
 #include "core/LinuxPortalScreenCast.h"
@@ -63,6 +66,9 @@ bool configurePipeWireRemote(QProcess *process, int fd)
 ScreenRecorder::ScreenRecorder(QObject *parent) : QObject(parent)
 {
     m_monotonicClock.start();
+#ifdef Q_OS_WIN
+    requestWindowsCaptureProbe(ffmpegPath());
+#endif
 }
 
 ScreenRecorder::~ScreenRecorder()
@@ -109,6 +115,9 @@ void ScreenRecorder::start(const QRect &captureRect, int fps, int maxSeconds, in
     m_stopping = false;
     m_hasPendingFrame = false;
     m_pendingFrame = QImage();
+    m_windowsFfmpeg = false;
+    m_windowsPlan = WindowsVideoPlan();
+    m_framesBeforeSegment = 0;
 
     if (m_outputPath.isEmpty()) {
         m_outputPath = makeDefaultOutputPath();
@@ -121,12 +130,18 @@ void ScreenRecorder::start(const QRect &captureRect, int fps, int maxSeconds, in
     }
 #endif
 
+#ifdef Q_OS_WIN
+    if (startWindowsFfmpegRecording())
+        return;
+#endif
+
     if (!initCaptureResources()) {
         emit recordingFailed(QStringLiteral("cannot initialize screen capture"));
         return;
     }
 
-    m_encoder = new GifEncoder(this);
+    // No parent: the worker thread uses it until finish().
+    m_encoder = new GifEncoder();
     if (!m_encoder->open(m_outputPath, m_outputSize.width(), m_outputSize.height(), loopCount)) {
         QString err = m_encoder->errorString();
         delete m_encoder;
@@ -135,6 +150,7 @@ void ScreenRecorder::start(const QRect &captureRect, int fps, int maxSeconds, in
         emit recordingFailed(err);
         return;
     }
+    m_encodeWorker = new GifEncodeWorker(m_encoder, qMax(8, m_fps * 2));
 
     m_recording = true;
     m_timeline.start(nowMs());
@@ -248,10 +264,13 @@ void ScreenRecorder::cancel()
     cleanupPortalConversion();
     if (m_frameTimer)     { m_frameTimer->stop();     m_frameTimer->deleteLater();     m_frameTimer = nullptr; }
     if (m_countdownTimer) { m_countdownTimer->stop(); m_countdownTimer->deleteLater(); m_countdownTimer = nullptr; }
+    // The worker goes first: it may still be using the encoder.
+    if (m_encodeWorker)   { delete m_encodeWorker;    m_encodeWorker = nullptr; }
     if (m_encoder)        { delete m_encoder;         m_encoder = nullptr; }
     releaseCaptureResources();
     m_hasPendingFrame = false;
     m_pendingFrame = QImage();
+    m_windowsFfmpeg = false;
     if (!m_outputPath.isEmpty() && QFile::exists(m_outputPath)) {
         QFile::remove(m_outputPath);
     }
@@ -324,8 +343,18 @@ void ScreenRecorder::finishRecording()
     QString savedPath = m_outputPath;
     bool ok = false;
     if (m_encoder) {
-        ok = flushPendingFrame(finalFrameDelayCs()) && m_encoder->close();
-        QString err = m_encoder->errorString();
+        ok = flushPendingFrame(finalFrameDelayCs());
+        QString err;
+        if (m_encodeWorker) {
+            // Waits for the frames still queued.
+            ok = m_encodeWorker->finish() && ok;
+            err = m_encodeWorker->error();
+            delete m_encodeWorker;
+            m_encodeWorker = nullptr;
+        }
+        ok = ok && m_encoder->close();
+        if (err.isEmpty())
+            err = m_encoder->errorString();
         delete m_encoder;
         m_encoder = nullptr;
         m_hasPendingFrame = false;
@@ -359,9 +388,18 @@ void ScreenRecorder::handlePortalSegmentEnded(int exitCode, QProcess::ExitStatus
     QProcess *process = m_process;
     if (!process)
         return;
+    if (m_windowsFfmpeg) {
+        readWindowsFfmpegOutput(process);
+        if (!m_ffmpegOutputBuffer.isEmpty()) {
+            handleWindowsFfmpegLine(QString::fromUtf8(m_ffmpegOutputBuffer).trimmed());
+            m_ffmpegOutputBuffer.clear();
+        }
+    }
     m_portalProcessLog += process->readAll();
-    const QString stderrText = launchError.isEmpty()
+    QString stderrText = launchError.isEmpty()
         ? gstFailureReason(QString::fromLocal8Bit(m_portalProcessLog)) : launchError;
+    if (m_windowsFfmpeg && launchError.isEmpty())
+        stderrText = ffmpegFailureReason(m_ffmpegLogTail);
     const qint64 runMs = m_portalSegmentClock.isValid() ? m_portalSegmentClock.elapsed() : -1;
     const bool reachedPlaying = m_portalSegmentPlaying;
     const QString segment = m_portalSegmentPath;
@@ -419,6 +457,8 @@ void ScreenRecorder::handlePortalSegmentEnded(int exitCode, QProcess::ExitStatus
     }
 
     if (m_portalSegments.isEmpty()) {
+        if (firstSegment && !m_stopping && retryWindowsFfmpegWithGdiGrab(stderrText))
+            return;
         m_recording = false;
         m_portalRecording = false;
         m_paused = false;
@@ -543,10 +583,12 @@ void ScreenRecorder::failPortalConversion(const QString &reason)
     if (m_portalSegments.size() == 1) {
         const QString source = m_portalSegments.first();
         const QString target = keptPortalVideoPath(m_outputPath);
-        if (!QFileInfo::exists(target) && QFile::rename(source, target))
+        if (!QFileInfo::exists(target) && QFile::rename(source, target)) {
+            syncRecordingFileHiddenAttribute(target);
             kept << QDir::toNativeSeparators(target);
-        else
+        } else {
             kept << QDir::toNativeSeparators(source);
+        }
     } else {
         // Unjoined parts of a paused recording; the portal video path holds
         // at most a partial join unless it is still the first part.
@@ -555,10 +597,12 @@ void ScreenRecorder::failPortalConversion(const QString &reason)
         int partNumber = 1;
         for (const QString &segment : std::as_const(m_portalSegments)) {
             const QString part = recordingPartPath(m_outputPath, partNumber++);
-            if (!QFileInfo::exists(part) && QFile::rename(segment, part))
+            if (!QFileInfo::exists(part) && QFile::rename(segment, part)) {
+                syncRecordingFileHiddenAttribute(part);
                 kept << QDir::toNativeSeparators(part);
-            else
+            } else {
                 kept << QDir::toNativeSeparators(segment);
+            }
         }
     }
     m_portalSegments.clear();
@@ -608,7 +652,9 @@ void ScreenRecorder::captureFrame()
         // different frame arrives.
     } else {
         if (!flushPendingFrame(m_gifClock.takeDelayCs(frameMs))) {
-            QString err = m_encoder->errorString();
+            QString err = m_encodeWorker ? m_encodeWorker->error() : QString();
+            if (err.isEmpty())
+                err = m_encoder->errorString();
             cancel();
             emit recordingFailed(err);
             return;
@@ -629,7 +675,8 @@ void ScreenRecorder::captureFrame()
 bool ScreenRecorder::flushPendingFrame(int delayCs)
 {
     if (!m_hasPendingFrame || !m_encoder) return true;
-    const bool ok = m_encoder->addFrame(m_pendingFrame, qMax(1, delayCs));
+    const bool ok = m_encodeWorker ? m_encodeWorker->addFrame(m_pendingFrame, qMax(1, delayCs))
+                                   : m_encoder->addFrame(m_pendingFrame, qMax(1, delayCs));
     if (ok) {
         m_hasPendingFrame = false;
         m_pendingFrame = QImage();
@@ -937,6 +984,19 @@ void ScreenRecorder::resumePortalRecording()
         m_portalResumePending = true;
         return;
     }
+    if (m_windowsFfmpeg) {
+        m_portalResuming = true;
+        const QString path = recordingSegmentPath(QFileInfo(m_outputPath).absolutePath(),
+                                                  m_portalSegmentStamp, m_portalSegmentCount);
+        QString error;
+        if (startWindowsFfmpegSegment(path, &error))
+            return;
+        qWarning() << "ScreenRecorder: cannot resume the recording:" << error;
+        m_portalResuming = false;
+        m_stopping = true;
+        finishPortalRecording();
+        return;
+    }
     m_portalResuming = true;
     const int generation = m_portalGeneration;
     const QString path = recordingSegmentPath(QFileInfo(m_outputPath).absolutePath(),
@@ -1231,6 +1291,27 @@ QImage ScreenRecorder::grabScreenRegion(const QRect &rect)
     BOOL ok = BitBlt(m_memDC, 0, 0, sw, sh, m_screenDC, sx, sy, SRCCOPY | CAPTUREBLT);
     if (!ok) return QImage();
 
+    // BitBlt leaves the mouse pointer out; draw it like gdigrab does.
+    CURSORINFO cursor;
+    ZeroMemory(&cursor, sizeof(cursor));
+    cursor.cbSize = sizeof(cursor);
+    if (GetCursorInfo(&cursor) && (cursor.flags & CURSOR_SHOWING) && cursor.hCursor) {
+        int hotspotX = 0;
+        int hotspotY = 0;
+        ICONINFO icon;
+        ZeroMemory(&icon, sizeof(icon));
+        if (GetIconInfo(cursor.hCursor, &icon)) {
+            hotspotX = static_cast<int>(icon.xHotspot);
+            hotspotY = static_cast<int>(icon.yHotspot);
+            if (icon.hbmMask)
+                DeleteObject(icon.hbmMask);
+            if (icon.hbmColor)
+                DeleteObject(icon.hbmColor);
+        }
+        DrawIconEx(m_memDC, cursor.ptScreenPos.x - hotspotX - sx, cursor.ptScreenPos.y - hotspotY - sy,
+                   cursor.hCursor, 0, 0, 0, nullptr, DI_NORMAL);
+    }
+
     QImage img(static_cast<uchar *>(m_bits), sw, sh, sw * 4, QImage::Format_RGB32);
     if (m_outputSize.isValid() && m_outputSize != QSize(sw, sh))
         return img.scaled(m_outputSize, Qt::IgnoreAspectRatio, Qt::FastTransformation);
@@ -1238,6 +1319,189 @@ QImage ScreenRecorder::grabScreenRegion(const QRect &rect)
 #else
     return QImage();
 #endif
+}
+
+RecordingCaptureBackend ScreenRecorder::captureBackend() const
+{
+#ifdef Q_OS_WIN
+    // Without FFmpeg the frames are BitBlt reads like gdigrab's.
+    return m_windowsFfmpeg ? recordingCaptureBackendForPlan(m_windowsPlan)
+                           : RecordingCaptureBackend::WindowsGdiGrab;
+#else
+    return defaultRecordingCaptureBackend();
+#endif
+}
+
+void ScreenRecorder::updateWindowsGifScale()
+{
+    // Recorded at full size; the conversion scales down once with lanczos.
+    const QSize recorded = m_windowsPlan.source == WindowsCaptureSource::DdaGrab
+        ? m_windowsPlan.ddaSize : m_captureRect.size();
+    const QSize gifSize = boundedOutputSize(recorded);
+    m_portalGifScale = gifSize != recorded ? gifSize : QSize();
+}
+
+bool ScreenRecorder::startWindowsFfmpegRecording()
+{
+#ifdef Q_OS_WIN
+    m_windowsFfmpegPath = ffmpegPath();
+    if (m_windowsFfmpegPath.isEmpty())
+        return false;
+    const QDir dir = QFileInfo(m_outputPath).absoluteDir();
+    if (!dir.exists() && !QDir().mkpath(dir.absolutePath()))
+        return false;
+
+    m_windowsPlan = windowsVideoPlanForRecording(m_windowsFfmpegPath, m_captureRect, true);
+    m_windowsStartupRetried = false;
+    updateWindowsGifScale();
+    m_timeline = RecordingTimeline();
+    m_portalSegmentStamp = QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd_hhmmss_zzz"));
+    m_portalVideoPath = dir.filePath(QStringLiteral(".eshot_gif_%1.mp4").arg(m_portalSegmentStamp));
+    QFile::remove(m_portalVideoPath);
+
+    m_recording = true;
+    m_portalRecording = true;
+    m_windowsFfmpeg = true;
+    m_portalStarting = true;
+    m_portalResuming = false;
+    QString error;
+    if (startWindowsFfmpegSegment(m_portalVideoPath, &error))
+        return true;  // recordingStarted() follows with the first progress report
+
+    qWarning() << "ScreenRecorder: cannot start ffmpeg; recording the GIF in-process:" << error;
+    m_recording = false;
+    m_portalRecording = false;
+    m_windowsFfmpeg = false;
+    m_portalStarting = false;
+    m_windowsPlan = WindowsVideoPlan();
+    m_portalVideoPath.clear();
+    m_portalGifScale = QSize();
+    return false;
+#else
+    return false;
+#endif
+}
+
+bool ScreenRecorder::startWindowsFfmpegSegment(const QString &outputPath, QString *error)
+{
+#ifdef Q_OS_WIN
+    WindowsCaptureOptions options;
+    options.captureRect = m_captureRect;
+    options.fps = m_fps;
+    options.plan = m_windowsPlan;
+    options.losslessIntermediate = true;
+
+    QProcess *process = new QProcess(this);
+    process->setProgram(m_windowsFfmpegPath);
+    process->setArguments(windowsFfmpegCaptureArguments(options, outputPath));
+    process->setProcessChannelMode(QProcess::MergedChannels);
+    // Windows refuses to overwrite a hidden file in place.
+    QFile::remove(outputPath);
+    process->start();
+    if (!process->waitForStarted(3000)) {
+        if (error)
+            *error = process->errorString();
+        process->kill();
+        process->deleteLater();
+        QFile::remove(outputPath);
+        return false;
+    }
+    tieRecordingProcessToApplication(process);
+
+    m_process = process;
+    m_portalSegmentPath = outputPath;
+    m_portalProcessLog.clear();
+    m_portalSegmentPlaying = false;
+    m_portalSegmentClock.start();
+    m_ffmpegOutputBuffer.clear();
+    m_ffmpegLogTail.clear();
+    m_framesBeforeSegment = m_frameCount;
+    ++m_portalSegmentCount;
+
+    connect(process, &QProcess::readyReadStandardOutput, this, [this, process]() {
+        readWindowsFfmpegOutput(process);
+    });
+    connect(process, &QProcess::finished, this, &ScreenRecorder::onPortalProcessFinished);
+
+    // An FFmpeg that reports no progress but keeps running is recording.
+    const QPointer<QProcess> guard(process);
+    QTimer::singleShot(8000, this, [this, guard]() {
+        if (guard && guard == m_process && !m_portalSegmentPlaying
+            && guard->state() == QProcess::Running) {
+            qWarning() << "ScreenRecorder: ffmpeg reported no progress yet; assuming capture is running";
+            syncRecordingFileHiddenAttribute(m_portalSegmentPath);
+            onPortalSegmentPlaying();
+        }
+    });
+    return true;
+#else
+    Q_UNUSED(outputPath);
+    Q_UNUSED(error);
+    return false;
+#endif
+}
+
+void ScreenRecorder::readWindowsFfmpegOutput(QProcess *process)
+{
+    if (!process)
+        return;
+    const QByteArray chunk = process->readAll();
+    if (process != m_process)
+        return;
+    m_ffmpegOutputBuffer += chunk;
+    qsizetype newline = -1;
+    while ((newline = m_ffmpegOutputBuffer.indexOf('\n')) >= 0) {
+        const QString line = QString::fromUtf8(m_ffmpegOutputBuffer.left(newline)).trimmed();
+        m_ffmpegOutputBuffer.remove(0, newline + 1);
+        handleWindowsFfmpegLine(line);
+    }
+    if (m_ffmpegOutputBuffer.size() > 64 * 1024)
+        m_ffmpegOutputBuffer.clear();
+}
+
+void ScreenRecorder::handleWindowsFfmpegLine(const QString &line)
+{
+    if (line.isEmpty())
+        return;
+    if (isFfmpegProgressBlockEnd(line)) {
+        if (!m_portalSegmentPlaying) {
+            syncRecordingFileHiddenAttribute(m_portalSegmentPath);
+            onPortalSegmentPlaying();
+        }
+        return;
+    }
+    if (isFfmpegProgressLine(line)) {
+        if (line.startsWith(QStringLiteral("frame="))) {
+            bool ok = false;
+            const int frames = line.mid(6).toInt(&ok);
+            if (ok && frames >= 0) {
+                m_frameCount = m_framesBeforeSegment + frames;
+                emit frameCaptured(m_frameCount);
+            }
+        }
+        return;
+    }
+    m_ffmpegLogTail.append(line);
+    while (m_ffmpegLogTail.size() > 40)
+        m_ffmpegLogTail.removeFirst();
+}
+
+bool ScreenRecorder::retryWindowsFfmpegWithGdiGrab(const QString &reason)
+{
+    if (!m_windowsFfmpeg || m_windowsStartupRetried
+        || m_windowsPlan.source != WindowsCaptureSource::DdaGrab)
+        return false;
+    m_windowsStartupRetried = true;
+    qWarning() << "ScreenRecorder: ddagrab capture failed to start; retrying with gdigrab:" << reason;
+    disableWindowsDdaGrabForSession(m_windowsFfmpegPath);
+    m_windowsPlan = WindowsVideoPlan();
+    updateWindowsGifScale();
+    m_portalStarting = true;
+    QString error;
+    if (startWindowsFfmpegSegment(m_portalVideoPath, &error))
+        return true;
+    qWarning() << "ScreenRecorder: gdigrab capture did not start either:" << error;
+    return false;
 }
 
 QSize ScreenRecorder::boundedOutputSize(const QSize &sourceSize) const
