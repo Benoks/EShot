@@ -240,5 +240,51 @@ QString overlayPanelStyleSheet()
             color: #777777;
             border-color: #404040;
         }
+        QLabel[panelRole="hint"] {
+            color: #9a9a9a;
+            font-size: 10px;
+        }
+        QPushButton[panelSegment] {
+            min-height: 28px;
+            max-height: 28px;
+            background: #303030;
+            border: 1px solid #505050;
+            color: #d6d6d6;
+            font-weight: 600;
+        }
+        QPushButton[panelSegment="first"] {
+            border-top-left-radius: 6px;
+            border-bottom-left-radius: 6px;
+            border-right: none;
+        }
+        QPushButton[panelSegment="last"] {
+            border-top-right-radius: 6px;
+            border-bottom-right-radius: 6px;
+        }
+        QPushButton[panelSegment]:hover {
+            background: #383838;
+        }
+        QPushButton[panelSegment]:checked {
+            background: #0078d4;
+            border-color: #2497eb;
+            color: white;
+        }
+        QPushButton[panelSegment]:focus {
+            border-color: #70bdff;
+        }
+        QPushButton[panelAction="link"] {
+            background: transparent;
+            border: none;
+            color: #4aa8ff;
+            padding: 2px 0;
+            text-align: left;
+        }
+        QPushButton[panelAction="link"]:hover {
+            color: #7cc0ff;
+            text-decoration: underline;
+        }
+        QPushButton[panelAction="link"]:focus {
+            text-decoration: underline;
+        }
     )");
 }

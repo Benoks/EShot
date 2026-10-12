@@ -592,15 +592,29 @@ public slots:
 
     void onSettingsRequested()
     {
+        openSettings(false);
+    }
+
+    void onRecordingSettingsRequested()
+    {
+        openSettings(true);
+    }
+
+    void openSettings(bool recordingTab)
+    {
         // Two dialogs would each save the values they loaded when opened and
         // overwrite each other; bring the open one forward instead.
         if (m_settingsDialog) {
+            if (recordingTab)
+                m_settingsDialog->showRecordingTab();
             m_settingsDialog->raise();
             m_settingsDialog->activateWindow();
             return;
         }
         SettingsDialog dlg;
         m_settingsDialog = &dlg;
+        if (recordingTab)
+            dlg.showRecordingTab();
         if (m_updateManager) {
             dlg.setUpdateInfo(m_updateManager->updateAvailable(),
                               m_updateManager->latestVersion(),
@@ -817,9 +831,9 @@ public slots:
                 this, &EShotApp::onRecordingPausedChanged);
 
         QSettings s("EShot", "EShot");
-        const int fps = s.value("videoRecordingFps", 30).toInt();
-        const int maxSec = s.value("videoRecordingMaxSeconds", 0).toInt();
-        const int crf = s.value("videoRecordingCrf", 24).toInt();
+        const int fps = s.value("videoRecordingFps", DefaultVideoFps).toInt();
+        const int maxSec = s.value("videoRecordingMaxSeconds", DefaultVideoMaxSeconds).toInt();
+        const int crf = s.value("videoRecordingCrf", DefaultVideoCrf).toInt();
         const bool desktopAudio = loadRecordingAudioEnabled(s, RecordingAudioSource::Desktop);
         const int desktopVolume = s.value("videoDesktopAudioVolume", 80).toInt();
         const QString desktopDevice = s.value("videoDesktopAudioDevice",
@@ -880,8 +894,8 @@ public slots:
                 this, &EShotApp::onRecordingPausedChanged);
 
         QSettings s("EShot", "EShot");
-        int fps = s.value("recordingFps", 10).toInt();
-        int maxSec = s.value("recordingMaxSeconds", 30).toInt();
+        int fps = s.value("recordingFps", DefaultGifFps).toInt();
+        int maxSec = s.value("recordingMaxSeconds", DefaultGifMaxSeconds).toInt();
         int loop = s.value("recordingLoop", 0).toInt();
         const int startDelayMs = recordingStartDelayMs(s.value("recordingStartDelaySeconds", 0).toInt());
         auto startGif = [rec = QPointer<ScreenRecorder>(m_screenRecorder), rect, fps, maxSec, loop, displayRect]() {
@@ -914,7 +928,7 @@ public slots:
                 QStringLiteral("%1 × %2")
                     .arg(m_screenRecorder->captureRect().width())
                     .arg(m_screenRecorder->captureRect().height()),
-                QStringLiteral("%1 FPS").arg(settings.value("recordingFps", 10).toInt())
+                QStringLiteral("%1 FPS").arg(settings.value("recordingFps", DefaultGifFps).toInt())
             });
             m_recordingIndicator->setShortcutHints(
                 HotkeyManager::instance().recordingPauseShortcutText(),
@@ -934,6 +948,7 @@ public slots:
         finishRecordingUi();
         const QFileInfo fi(outputPath);
         rememberLastRecording(fi);
+        copyRecordingAfterSaveIfEnabled(fi);
         if (m_trayIcon && m_showNotifications && m_notifyGif) {
             showRecordingSavedNotification(
                 recordingSavedNotificationText(RecordingSavedKind::Gif, fi.absoluteFilePath(),
@@ -980,7 +995,7 @@ public slots:
                 QStringLiteral("%1 × %2")
                     .arg(m_videoRecorder->captureRect().width())
                     .arg(m_videoRecorder->captureRect().height()),
-                QStringLiteral("%1 FPS").arg(settings.value("videoRecordingFps", 30).toInt()),
+                QStringLiteral("%1 FPS").arg(settings.value("videoRecordingFps", DefaultVideoFps).toInt()),
                 audio
             });
             m_recordingIndicator->setShortcutHints(
@@ -1005,6 +1020,7 @@ public slots:
         const QString warningText = warnings.join(QStringLiteral("\n"));
         const QFileInfo fi(outputPath);
         rememberLastRecording(fi);
+        copyRecordingAfterSaveIfEnabled(fi);
         if (m_trayIcon && m_showNotifications && m_notifyVideo) {
             QString message = recordingSavedNotificationText(
                 RecordingSavedKind::Video, fi.absoluteFilePath(), fi.size(), notificationLocale());
@@ -1163,12 +1179,14 @@ private:
         m_recordingTimeLimitSeconds = qMax(0, timeLimitSeconds);
         m_recordingTrayActive = true;
         setTrayIconRecording();
+        activateRecordingHotkeys();
     }
 
     // Removes the controls and restores the tray after stop, failure or cancel.
     void finishRecordingUi()
     {
         m_recordingFinalizing = false;
+        deactivateRecordingHotkeys();
         if (m_recordingIndicator) {
             m_recordingIndicator->stop();
             m_recordingIndicator->deleteLater();
@@ -1194,6 +1212,42 @@ private:
                 keyText(HotkeyManager::instance().recordingStopShortcutText()),
                 keyText(HotkeyManager::instance().recordingPauseShortcutText())),
             7000);
+    }
+
+    void copyRecordingAfterSaveIfEnabled(const QFileInfo &file)
+    {
+        const QSettings settings(QStringLiteral("EShot"), QStringLiteral("EShot"));
+        if (settings.value(QStringLiteral("recordingCopyToClipboard"), false).toBool() && file.exists())
+            copyRecordingFile(file.absoluteFilePath());
+    }
+
+    // Pause/stop/cancel keys exist only while a recording or its countdown
+    // runs; a key that cannot be taken is reported but never stops it.
+    void activateRecordingHotkeys()
+    {
+        if (!m_hotkeysInitialized || HotkeyManager::instance().recordingHotkeysActive())
+            return;
+        if (HotkeyManager::instance().activateRecordingHotkeys())
+            return;
+        QStringList keys;
+        for (const HotkeyBinding &failure : HotkeyManager::instance().failedHotkeys()) {
+            if (failure.id == HotkeyManager::HOTKEY_RECORDING_PAUSE
+                || failure.id == HotkeyManager::HOTKEY_RECORDING_STOP
+                || failure.id == HotkeyManager::HOTKEY_RECORDING_CANCEL) {
+                keys.append(HotkeyManager::shortcutText(failure.modifiers, failure.virtualKey));
+            }
+        }
+        keys.removeDuplicates();
+        qWarning() << "[Recording] recording hotkeys not active:" << keys;
+        showFailureNotification(TranslationManager::tr("recHotkeysNotActive")
+                                    .arg(keys.join(QStringLiteral(", "))),
+                                8000);
+    }
+
+    void deactivateRecordingHotkeys()
+    {
+        if (m_hotkeysInitialized && HotkeyManager::instance().recordingHotkeysActive())
+            HotkeyManager::instance().deactivateRecordingHotkeys();
     }
 
     void rememberLastRecording(const QFileInfo &file)
@@ -1245,6 +1299,8 @@ private:
             dismissRecordingStartCountdown();
             start();
         });
+        // Stop/cancel during the countdown abort the start.
+        activateRecordingHotkeys();
         rebuildTrayMenu();
     }
 
@@ -1266,6 +1322,7 @@ private:
             return false;
         dismissRecordingStartCountdown();
         m_recordingStartPending = false;
+        deactivateRecordingHotkeys();
         if (m_videoRecorder && !m_videoRecorder->isRecording()) {
             m_videoRecorder->deleteLater();
             m_videoRecorder = nullptr;
@@ -1569,6 +1626,8 @@ private:
         connect(m_overlay, &CaptureOverlay::regionSelected, this, &EShotApp::onRegionSelected);
         connect(m_overlay, &CaptureOverlay::gifCaptureRequested, this, &EShotApp::onRecordGifSelected);
         connect(m_overlay, &CaptureOverlay::videoCaptureRequested, this, &EShotApp::onRecordVideoSelected);
+        connect(m_overlay, &CaptureOverlay::recordingSettingsRequested,
+                this, &EShotApp::onRecordingSettingsRequested);
         // Pre-warm: force first paint of overlay + toolbar offscreen at startup
         // to avoid 2-3 s stall on first user capture.
         m_overlay->prewarm();

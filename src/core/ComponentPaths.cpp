@@ -16,6 +16,14 @@ QString defaultSaveDirectory()
     return QDir(picturesPath).filePath(QStringLiteral("EShot"));
 }
 
+QString defaultVideoDirectory()
+{
+    const QString moviesPath = QStandardPaths::writableLocation(QStandardPaths::MoviesLocation);
+    if (moviesPath.trimmed().isEmpty())
+        return QDir(defaultSaveDirectory()).filePath(QStringLiteral("Videos"));
+    return QDir(moviesPath).filePath(QStringLiteral("EShot"));
+}
+
 QString userComponentsDirectory()
 {
     return QDir(QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation))

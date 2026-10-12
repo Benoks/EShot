@@ -56,6 +56,112 @@ private slots:
         QCOMPARE(settings.value(QStringLiteral("videoMicrophoneEnabled")).toBool(), false);
     }
 
+    void gifPresetsMapToSizeAndFps()
+    {
+        QCOMPARE(gifQualityValues(RecordingQualityPreset::Small).maxSide, 720);
+        QCOMPARE(gifQualityValues(RecordingQualityPreset::Small).fps, 10);
+        QCOMPARE(gifQualityValues(RecordingQualityPreset::Balanced).maxSide, 1280);
+        QCOMPARE(gifQualityValues(RecordingQualityPreset::Balanced).fps, 12);
+        QCOMPARE(gifQualityValues(RecordingQualityPreset::High).maxSide, 1920);
+        QCOMPARE(gifQualityValues(RecordingQualityPreset::High).fps, 15);
+        QCOMPARE(gifQualityValues(RecordingQualityPreset::Balanced).fps, DefaultGifFps);
+    }
+
+    void videoPresetsMapToCrfAndFps()
+    {
+        QCOMPARE(videoQualityValues(RecordingQualityPreset::Small).crf, 30);
+        QCOMPARE(videoQualityValues(RecordingQualityPreset::Balanced).crf, 24);
+        QCOMPARE(videoQualityValues(RecordingQualityPreset::High).crf, 20);
+        for (RecordingQualityPreset preset : selectableRecordingQualityPresets()) {
+            QCOMPARE(videoQualityValues(preset).fps, 30);
+            const int crf = videoQualityValues(preset).crf;
+            QVERIFY(crf >= MinVideoCrf && crf <= MaxVideoCrf);
+        }
+        // The old defaults are exactly "Balanced".
+        QCOMPARE(videoQualityPresetFor(DefaultVideoCrf, DefaultVideoFps), RecordingQualityPreset::Balanced);
+    }
+
+    void unmatchedRawValuesAreCustom()
+    {
+        QCOMPARE(gifQualityPresetFor(1280, 12), RecordingQualityPreset::Balanced);
+        QCOMPARE(gifQualityPresetFor(1280, 14), RecordingQualityPreset::Custom);
+        QCOMPARE(gifQualityPresetFor(720, 15), RecordingQualityPreset::Custom);
+        QCOMPARE(videoQualityPresetFor(20, 30), RecordingQualityPreset::High);
+        QCOMPARE(videoQualityPresetFor(20, 60), RecordingQualityPreset::Custom);
+        QCOMPARE(videoQualityPresetFor(26, 30), RecordingQualityPreset::Custom);
+    }
+
+    void presetKeysRoundTrip()
+    {
+        for (RecordingQualityPreset preset : selectableRecordingQualityPresets())
+            QCOMPARE(recordingQualityPresetFromKey(recordingQualityPresetKey(preset)), preset);
+        QCOMPARE(recordingQualityPresetKey(RecordingQualityPreset::Custom), QStringLiteral("custom"));
+        QCOMPARE(recordingQualityPresetFromKey(QStringLiteral(" High ")), RecordingQualityPreset::High);
+        QCOMPARE(recordingQualityPresetFromKey(QStringLiteral("bogus")), RecordingQualityPreset::Custom);
+    }
+
+    void applyingAPresetWritesTheRawKeysTheRecordersRead()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        QSettings settings(directory.filePath(QStringLiteral("settings.ini")), QSettings::IniFormat);
+
+        applyGifQualityPreset(settings, RecordingQualityPreset::High);
+        QCOMPARE(settings.value("recordingMaxSide").toInt(), 1920);
+        QCOMPARE(settings.value("recordingFps").toInt(), 15);
+        QCOMPARE(settings.value("gifQualityPreset").toString(), QStringLiteral("high"));
+        QCOMPARE(loadGifQualityPreset(settings), RecordingQualityPreset::High);
+
+        applyVideoQualityPreset(settings, RecordingQualityPreset::Small);
+        QCOMPARE(settings.value("videoRecordingCrf").toInt(), 30);
+        QCOMPARE(settings.value("videoRecordingFps").toInt(), 30);
+        QCOMPARE(settings.value("videoQualityPreset").toString(), QStringLiteral("small"));
+        QCOMPARE(loadVideoQualityPreset(settings), RecordingQualityPreset::Small);
+
+        // Raw values stay authoritative: editing one makes it Custom.
+        settings.setValue("videoRecordingFps", 60);
+        QCOMPARE(loadVideoQualityPreset(settings), RecordingQualityPreset::Custom);
+        applyVideoQualityPreset(settings, RecordingQualityPreset::Custom);
+        QCOMPARE(settings.value("videoRecordingFps").toInt(), 60);
+    }
+
+    void freshInstallsStartBalanced()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        QSettings settings(directory.filePath(QStringLiteral("settings.ini")), QSettings::IniFormat);
+        QCOMPARE(loadGifQualityPreset(settings), RecordingQualityPreset::Balanced);
+        QCOMPARE(loadVideoQualityPreset(settings), RecordingQualityPreset::Balanced);
+    }
+
+    void untouchedLegacyGifDefaultsMoveToBalancedOnce()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        QSettings settings(directory.filePath(QStringLiteral("settings.ini")), QSettings::IniFormat);
+        settings.setValue("recordingFps", LegacyDefaultGifFps);
+        settings.setValue("recordingMaxSide", 1280);
+        QCOMPARE(loadGifQualityPreset(settings), RecordingQualityPreset::Balanced);
+        QCOMPARE(settings.value("recordingFps").toInt(), 12);
+
+        // Once a preset was stored, 10 fps at 1280 px is a deliberate choice.
+        settings.setValue("recordingFps", LegacyDefaultGifFps);
+        QCOMPARE(loadGifQualityPreset(settings), RecordingQualityPreset::Custom);
+        QCOMPARE(settings.value("recordingFps").toInt(), LegacyDefaultGifFps);
+    }
+
+    void customLegacyGifValuesAreKept()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        QSettings settings(directory.filePath(QStringLiteral("settings.ini")), QSettings::IniFormat);
+        settings.setValue("recordingFps", 20);
+        settings.setValue("recordingMaxSide", 1920);
+        QCOMPARE(loadGifQualityPreset(settings), RecordingQualityPreset::Custom);
+        QCOMPARE(settings.value("recordingFps").toInt(), 20);
+        QVERIFY(!settings.contains("gifQualityPreset"));
+    }
+
     void discoversDevicesOnlyForAnUnresolvedEnabledMicrophone()
     {
         QVERIFY(shouldDiscoverAudioDevices(true, QStringLiteral("default")));

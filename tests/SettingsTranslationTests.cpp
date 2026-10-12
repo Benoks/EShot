@@ -13,6 +13,7 @@ private slots:
     void linuxRemovalTextExistsInEveryLanguage();
     void formerlyBilingualTextExistsInEveryLanguage();
     void recordingUxTextExistsInEveryLanguage();
+    void recordingSettingsTextExistsInEveryLanguage();
 };
 
 void SettingsTranslationTests::issue15SettingsTextExistsInEveryLanguage()
@@ -339,6 +340,38 @@ void SettingsTranslationTests::formerlyBilingualTextExistsInEveryLanguage()
         }
     }
     TranslationManager::setLanguage(TranslationManager::English, false);
+}
+
+void SettingsTranslationTests::recordingSettingsTextExistsInEveryLanguage()
+{
+    const QStringList keys = {
+        QStringLiteral("recSegmentVideo"), QStringLiteral("recQualityLabel"),
+        QStringLiteral("recQualitySmall"), QStringLiteral("recQualityBalanced"),
+        QStringLiteral("recQualityHigh"), QStringLiteral("recQualityCustom"),
+        QStringLiteral("recCustomValue"), QStringLiteral("recDurationLabel"),
+        QStringLiteral("recSeconds"), QStringLiteral("recMinutes"),
+        QStringLiteral("recAdvancedSettings"), QStringLiteral("recDrawerHotkeys"),
+        QStringLiteral("tipRecQualityPreset"), QStringLiteral("recHotkeysNotActive"),
+        QStringLiteral("recCopyToClipboard"), QStringLiteral("tipRecCopyToClipboard"),
+        QStringLiteral("recHardwareEncoding"), QStringLiteral("tipRecHardwareEncoding"),
+        QStringLiteral("recAdvancedOptions"), QStringLiteral("recMaxSideLabel"),
+        QStringLiteral("recQualityPresetLabel"),
+    };
+    for (int language = 0; language < TranslationManager::LangCount; ++language) {
+        TranslationManager::setLanguage(static_cast<TranslationManager::Language>(language), false);
+        for (const QString &key : keys) {
+            const QString translated = TranslationManager::tr(key.toUtf8().constData());
+            QVERIFY2(translated != key,
+                     qPrintable(QStringLiteral("Missing translation for %1 in language %2")
+                                    .arg(key).arg(language)));
+        }
+        // Placeholders survive translation.
+        QVERIFY(TranslationManager::tr("recCustomValue").contains(QStringLiteral("%1")));
+        QVERIFY(TranslationManager::tr("recDrawerHotkeys").contains(QStringLiteral("%2")));
+        QVERIFY(TranslationManager::tr("recHotkeysNotActive").contains(QStringLiteral("%1")));
+    }
+    TranslationManager::setLanguage(TranslationManager::Turkish, false);
+    QVERIFY(TranslationManager::tr("recQualityHigh").contains(QStringLiteral("Yüksek")));
 }
 
 QTEST_APPLESS_MAIN(SettingsTranslationTests)

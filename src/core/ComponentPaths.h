@@ -9,6 +9,9 @@ namespace ComponentPaths {
 // Default root for screenshots, GIFs and videos (~/Pictures/EShot).
 QString defaultSaveDirectory();
 
+// Default folder for videos when none is configured (~/Videos/EShot).
+QString defaultVideoDirectory();
+
 // Per-user folder for optional components (FFmpeg, Tesseract) downloaded when
 // the install folder is not writable, e.g. an all-users install in Program Files.
 QString userComponentsDirectory();

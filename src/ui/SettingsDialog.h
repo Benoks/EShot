@@ -32,6 +32,7 @@ public:
 
     void setUpdateInfo(bool available, const QString &version, bool busy, const QString &status);
     bool remembersWindowSize() const { return m_rememberSettingsWindowSizeEnabled; }
+    void showRecordingTab();
 
 signals:
     void updateRequested();
@@ -71,6 +72,7 @@ private:
     QWidget* createPackagesTab();
 
     QString resolvePatternPreview(const QString &pattern) const;
+    void syncRecordingQualityPresets();
     void updatePrintScreenConflictUi();
     bool updateHotkeyConflictUi();
     void refreshPackageStatus();
@@ -89,6 +91,8 @@ private:
     static bool isAutoStartEnabled();
 
     QSettings *m_settings = nullptr;
+    QTabWidget *m_tabs = nullptr;
+    QWidget *m_recordingTab = nullptr;
 
     // General
     QLineEdit *m_savePathEdit = nullptr;
@@ -188,6 +192,12 @@ private:
     QPushButton *m_linuxPrintScreenBindingButton = nullptr;
 
     // Recording
+    QCheckBox *m_recordingOpenFolderCheck = nullptr;
+    QCheckBox *m_recordingCopyToClipboardCheck = nullptr;
+    QComboBox *m_gifQualityPresetCombo = nullptr;
+    QComboBox *m_videoQualityPresetCombo = nullptr;
+    QCheckBox *m_videoHardwareEncodingCheck = nullptr;
+    QComboBox *m_videoDesktopAudioDeviceCombo = nullptr;
     QSpinBox *m_recordingFpsSpin = nullptr;
     QSpinBox *m_recordingMaxSecSpin = nullptr;
     QComboBox *m_recordingLoopCombo = nullptr;

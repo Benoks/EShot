@@ -3,6 +3,7 @@
 #include "LinuxGnomeShortcutInstaller.h"
 #include "LinuxPortalGlobalShortcuts.h"
 #include "LinuxKGlobalAccelShortcuts.h"
+#include "ui/SettingsHotkeyPolicy.h"
 #include <QApplication>
 #include <QCoreApplication>
 #include <QDir>
@@ -243,18 +244,20 @@ HotkeyManager::HotkeyManager(QObject *parent) : QObject(parent)
         recordFailure(HOTKEY_CAPTURE, modifiers, vkey);
     }
 
-    m_recordingPauseModifiers = static_cast<UINT>(s.value("recordingPauseHotkeyModifiers", MOD_CONTROL | MOD_ALT).toUInt());
-    m_recordingPauseVirtualKey = static_cast<UINT>(s.value("recordingPauseHotkeyVKey", 'P').toUInt());
-    m_recordingStopModifiers = static_cast<UINT>(s.value("recordingStopHotkeyModifiers", MOD_CONTROL | MOD_ALT).toUInt());
-    m_recordingStopVirtualKey = static_cast<UINT>(s.value("recordingStopHotkeyVKey", 'S').toUInt());
-    m_recordingCancelModifiers = static_cast<UINT>(s.value("recordingCancelHotkeyModifiers", MOD_CONTROL | MOD_ALT).toUInt());
-    m_recordingCancelVirtualKey = static_cast<UINT>(s.value("recordingCancelHotkeyVKey", 'X').toUInt());
-    if (!registerHotkey(HOTKEY_RECORDING_PAUSE, m_recordingPauseModifiers, m_recordingPauseVirtualKey))
-        recordFailure(HOTKEY_RECORDING_PAUSE, m_recordingPauseModifiers, m_recordingPauseVirtualKey);
-    if (!registerHotkey(HOTKEY_RECORDING_STOP, m_recordingStopModifiers, m_recordingStopVirtualKey))
-        recordFailure(HOTKEY_RECORDING_STOP, m_recordingStopModifiers, m_recordingStopVirtualKey);
-    if (!registerHotkey(HOTKEY_RECORDING_CANCEL, m_recordingCancelModifiers, m_recordingCancelVirtualKey))
-        recordFailure(HOTKEY_RECORDING_CANCEL, m_recordingCancelModifiers, m_recordingCancelVirtualKey);
+    auto storedRecordingHotkey = [&s](RecordingHotkeyAction action, UINT &modifiers, UINT &virtualKey) {
+        const SettingsHotkeyDefinition fallback = platformDefaultRecordingHotkey(action);
+        modifiers = static_cast<UINT>(s.value(recordingHotkeyModifiersKey(action), fallback.modifiers).toUInt());
+        virtualKey = static_cast<UINT>(s.value(recordingHotkeyVirtualKeyKey(action), fallback.virtualKey).toUInt());
+    };
+    storedRecordingHotkey(RecordingHotkeyAction::Pause, m_recordingPauseModifiers, m_recordingPauseVirtualKey);
+    storedRecordingHotkey(RecordingHotkeyAction::Stop, m_recordingStopModifiers, m_recordingStopVirtualKey);
+    storedRecordingHotkey(RecordingHotkeyAction::Cancel, m_recordingCancelModifiers, m_recordingCancelVirtualKey);
+    if (!recordingHotkeysOnDemand()) {
+        for (const HotkeyBinding &binding : recordingHotkeyBindings()) {
+            if (!registerHotkey(binding.id, binding.modifiers, binding.virtualKey))
+                recordFailure(binding.id, binding.modifiers, binding.virtualKey);
+        }
+    }
 
     m_instantCaptureModifiers = static_cast<UINT>(s.value("instantCaptureHotkeyModifiers", 0).toUInt());
     m_instantCaptureVirtualKey = static_cast<UINT>(s.value("instantCaptureHotkeyVKey", 0).toUInt());
@@ -275,6 +278,57 @@ HotkeyManager::HotkeyManager(QObject *parent) : QObject(parent)
     if (!registerHotkey(HOTKEY_WINDOW_CAPTURE, m_windowCaptureModifiers, m_windowCaptureVirtualKey)) {
         qWarning() << "[HotkeyManager] Window capture hotkey could not be registered";
         recordFailure(HOTKEY_WINDOW_CAPTURE, m_windowCaptureModifiers, m_windowCaptureVirtualKey);
+    }
+}
+
+QList<HotkeyBinding> HotkeyManager::recordingHotkeyBindings() const
+{
+    return {{HOTKEY_RECORDING_PAUSE, m_recordingPauseModifiers, m_recordingPauseVirtualKey},
+            {HOTKEY_RECORDING_STOP, m_recordingStopModifiers, m_recordingStopVirtualKey},
+            {HOTKEY_RECORDING_CANCEL, m_recordingCancelModifiers, m_recordingCancelVirtualKey}};
+}
+
+bool HotkeyManager::recordingHotkeysOnDemand() const
+{
+#if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
+    return recordingHotkeysRegisteredOnDemand(m_usePortalShortcuts);
+#else
+    return recordingHotkeysRegisteredOnDemand(false);
+#endif
+}
+
+bool HotkeyManager::activateRecordingHotkeys()
+{
+    m_recordingHotkeysActive = true;
+    bool ok = true;
+    for (const HotkeyBinding &binding : recordingHotkeyBindings()) {
+        if (binding.virtualKey == 0)
+            continue;
+        if (!m_registeredHotkeyDefs.contains(binding.id)
+            && !registerHotkey(binding.id, binding.modifiers, binding.virtualKey)) {
+            recordFailure(binding.id, binding.modifiers, binding.virtualKey);
+        }
+        if (m_failedHotkeys.contains(binding.id))
+            ok = false;
+    }
+    return ok;
+}
+
+void HotkeyManager::deactivateRecordingHotkeys()
+{
+    m_recordingHotkeysActive = false;
+    releaseIdleRecordingHotkeys();
+}
+
+void HotkeyManager::releaseIdleRecordingHotkeys()
+{
+    if (m_recordingHotkeysActive || !recordingHotkeysOnDemand())
+        return;
+    for (const HotkeyBinding &binding : recordingHotkeyBindings()) {
+        if (m_registeredHotkeyDefs.contains(binding.id))
+            unregisterHotkey(binding.id);
+        // Not wanted while idle, so not "failed" either.
+        m_failedHotkeys.remove(binding.id);
     }
 }
 
@@ -688,6 +742,9 @@ bool HotkeyManager::reRegisterRecordingHotkeys(UINT pauseModifiers, UINT pauseVi
                         {HOTKEY_RECORDING_STOP, oldStopModifiers, oldStopVirtualKey},
                         {HOTKEY_RECORDING_CANCEL, oldCancelModifiers, oldCancelVirtualKey}});
     }
+    // While no recording runs the registration above only checked that the
+    // keys are free; release them again.
+    releaseIdleRecordingHotkeys();
     return ok;
 }
 

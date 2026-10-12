@@ -73,6 +73,9 @@ signals:
     void regionSelected(QRect captureRect, QRect displayRect);
     void gifCaptureRequested(QRect captureRect, QRect displayRect);
     void videoCaptureRequested(QRect captureRect, QRect displayRect);
+    // "Advanced settings…" in the recording drawer; the receiver opens the
+    // Settings dialog on its recording tab before returning.
+    void recordingSettingsRequested();
 
 protected:
     void paintEvent(QPaintEvent *event) override;
@@ -229,34 +232,20 @@ private:
     QSpinBox *m_quickCounterStartSpin = nullptr;
     QSlider *m_quickCounterSizeSlider = nullptr;
     QLabel *m_quickCounterSizeValueLabel = nullptr;
-    QSpinBox *m_quickGifFpsSpin = nullptr;
-    QSpinBox *m_quickGifSecondsSpin = nullptr;
-    QComboBox *m_quickGifLoopCombo = nullptr;
-    QSpinBox *m_quickVideoFpsSpin = nullptr;
-    QSpinBox *m_quickVideoSecondsSpin = nullptr;
-    QSpinBox *m_quickVideoCrfSpin = nullptr;
-    QCheckBox *m_quickDesktopAudioCheck = nullptr;
-    QSlider *m_quickDesktopVolumeSlider = nullptr;
-    QLabel *m_quickDesktopVolumeLabel = nullptr;
-    QComboBox *m_quickDesktopAudioDeviceCombo = nullptr;
-    QCheckBox *m_quickMicrophoneCheck = nullptr;
-    QSlider *m_quickMicrophoneVolumeSlider = nullptr;
-    QLabel *m_quickMicrophoneVolumeLabel = nullptr;
-    QComboBox *m_quickMicrophoneDeviceCombo = nullptr;
     QCheckBox *m_quickAutoLockSelectionCheck = nullptr;
+    // The one place for recording options before a recording starts; the
+    // rest lives on the Settings dialog's recording tab.
     QWidget *m_recordingDrawer = nullptr;
-    QWidget *m_recordingGifOptions = nullptr;
+    QPushButton *m_recordingGifModeButton = nullptr;
+    QPushButton *m_recordingVideoModeButton = nullptr;
+    QComboBox *m_recordingQualityCombo = nullptr;
+    QComboBox *m_recordingDurationCombo = nullptr;
+    QComboBox *m_recordingStartDelayCombo = nullptr;
     QWidget *m_recordingVideoOptions = nullptr;
-    QLabel *m_recordingDrawerTitle = nullptr;
-    QSpinBox *m_recordingGifFpsSpin = nullptr;
-    QSpinBox *m_recordingGifSecondsSpin = nullptr;
-    QComboBox *m_recordingGifLoopCombo = nullptr;
-    QSpinBox *m_recordingVideoFpsSpin = nullptr;
-    QSpinBox *m_recordingVideoSecondsSpin = nullptr;
-    QSpinBox *m_recordingVideoCrfSpin = nullptr;
     QCheckBox *m_recordingDesktopAudioCheck = nullptr;
     QCheckBox *m_recordingMicrophoneCheck = nullptr;
     QComboBox *m_recordingMicrophoneDeviceCombo = nullptr;
+    QLabel *m_recordingHotkeyHint = nullptr;
     QPushButton *m_recordingStartButton = nullptr;
     QPushButton *m_recordingCancelButton = nullptr;
     RecordingDrawerMode m_recordingDrawerMode = RecordingDrawerMode::None;
@@ -267,6 +256,10 @@ private:
     bool isToolSettingsUiAt(const QPoint &pos) const;
     void setupRecordingDrawer();
     void showRecordingDrawer(RecordingDrawerMode mode);
+    void setRecordingDrawerMode(RecordingDrawerMode mode);
+    void loadRecordingDrawerValues();
+    void placeRecordingDrawer();
+    void openRecordingSettings();
     void hideRecordingDrawer(bool restoreToolbar = true);
     void startRecordingFromDrawer();
     void ensureAudioDevicesLoaded();
@@ -330,7 +323,6 @@ private:
     bool m_showHighlighterStraightHint = false;
     DebouncedSettingsWriter *m_settingsWriter = nullptr;
     bool m_audioDevicesLoaded = false;
-    QStringList m_cachedDesktopAudioDevices;
     QList<QPair<QString, QString>> m_cachedMicrophoneAudioDevices;
 
     // New: Eyedropper mode

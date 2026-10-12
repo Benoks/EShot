@@ -57,6 +57,7 @@
 #include <QSlider>
 #include <QComboBox>
 #include <QCheckBox>
+#include <QButtonGroup>
 #include <QSignalBlocker>
 #include <QPropertyAnimation>
 #include <QVariantAnimation>
@@ -95,6 +96,47 @@ void addOverlayPanelSection(QVBoxLayout *layout, QWidget *parent,
     auto *label = new QLabel(title, parent);
     label->setProperty("panelRole", QStringLiteral("section"));
     layout->addWidget(label);
+}
+
+QString recordingSecondsText(int seconds)
+{
+    if (seconds >= 60 && seconds % 60 == 0)
+        return TranslationManager::tr("recMinutes").arg(seconds / 60);
+    return TranslationManager::tr("recSeconds").arg(seconds);
+}
+
+// Form labels from Settings ("Start delay:") without their colon.
+QString withoutTrailingColon(QString label)
+{
+    label = label.trimmed();
+    while (label.endsWith(QLatin1Char(':')) || label.endsWith(QChar(0xFF1A)))
+        label.chop(1);
+    return label.trimmed();
+}
+
+QString recordingQualityPresetText(RecordingQualityPreset preset)
+{
+    switch (preset) {
+    case RecordingQualityPreset::Small:
+        return TranslationManager::tr("recQualitySmall");
+    case RecordingQualityPreset::Balanced:
+        return TranslationManager::tr("recQualityBalanced");
+    case RecordingQualityPreset::High:
+        return TranslationManager::tr("recQualityHigh");
+    case RecordingQualityPreset::Custom:
+        break;
+    }
+    return TranslationManager::tr("recQualityCustom");
+}
+
+QString recordingQualityPresetDetails(RecordingQualityPreset preset, bool gif)
+{
+    if (gif) {
+        const GifQualityValues values = gifQualityValues(preset);
+        return QStringLiteral("%1 px · %2 FPS").arg(values.maxSide).arg(values.fps);
+    }
+    const VideoQualityValues values = videoQualityValues(preset);
+    return QStringLiteral("CRF %1 · %2 FPS").arg(values.crf).arg(values.fps);
 }
 
 QLineEdit *overlaySpinBoxEditor(QObject *object)
@@ -357,12 +399,6 @@ private:
     }
 };
 
-#ifndef Q_OS_WIN
-QStringList desktopAudioDevices()
-{
-    return {QStringLiteral("@DEFAULT_SINK@.monitor")};
-}
-#endif
 
 }
 
@@ -878,191 +914,6 @@ void CaptureOverlay::setupToolSettingsDrawer()
     m_quickCounterOptions->hide();
 
     addOverlayPanelSection(drawerLayout, m_toolSettingsDrawer,
-                           TranslationManager::quickGifRecording());
-
-    auto *fpsRow = new QHBoxLayout();
-    fpsRow->addWidget(new QLabel(TranslationManager::gifFpsLabel().remove(QChar(':')), m_toolSettingsDrawer));
-    m_quickGifFpsSpin = new QSpinBox(m_toolSettingsDrawer);
-    m_quickGifFpsSpin->setRange(1, gifRecordingFpsLimit());
-    configureOverlaySpinBox(m_quickGifFpsSpin);
-    m_quickGifFpsSpin->setFixedWidth(96);
-    fpsRow->addWidget(m_quickGifFpsSpin);
-    drawerLayout->addLayout(fpsRow);
-
-    auto *timeRow = new QHBoxLayout();
-    timeRow->addWidget(new QLabel(TranslationManager::quickMaxSeconds(), m_toolSettingsDrawer));
-    m_quickGifSecondsSpin = new QSpinBox(m_toolSettingsDrawer);
-    m_quickGifSecondsSpin->setRange(0, 600);
-    m_quickGifSecondsSpin->setSpecialValueText(TranslationManager::recordingUnlimited());
-    configureOverlaySpinBox(m_quickGifSecondsSpin);
-    m_quickGifSecondsSpin->setFixedWidth(96);
-    timeRow->addWidget(m_quickGifSecondsSpin);
-    drawerLayout->addLayout(timeRow);
-
-    auto *loopRow = new QHBoxLayout();
-    loopRow->addWidget(new QLabel(TranslationManager::recordingLoop().remove(QChar(':')), m_toolSettingsDrawer));
-    m_quickGifLoopCombo = new QComboBox(m_toolSettingsDrawer);
-    m_quickGifLoopCombo->addItem(TranslationManager::recordingLoopInfinite(), 0);
-    m_quickGifLoopCombo->addItem(QStringLiteral("1"), 1);
-    m_quickGifLoopCombo->addItem(QStringLiteral("2"), 2);
-    m_quickGifLoopCombo->addItem(QStringLiteral("3"), 3);
-    m_quickGifLoopCombo->addItem(QStringLiteral("5"), 5);
-    m_quickGifLoopCombo->addItem(QStringLiteral("10"), 10);
-    m_quickGifLoopCombo->setFixedWidth(96);
-    loopRow->addWidget(m_quickGifLoopCombo);
-    drawerLayout->addLayout(loopRow);
-
-    addOverlayPanelSection(drawerLayout, m_toolSettingsDrawer,
-                           TranslationManager::videoRecordingTitle());
-
-    auto *videoFpsRow = new QHBoxLayout();
-    videoFpsRow->addWidget(new QLabel(TranslationManager::videoFpsLabel().remove(QChar(':')), m_toolSettingsDrawer));
-    m_quickVideoFpsSpin = new QSpinBox(m_toolSettingsDrawer);
-    m_quickVideoFpsSpin->setRange(1, videoRecordingFpsLimit());
-    configureOverlaySpinBox(m_quickVideoFpsSpin);
-    m_quickVideoFpsSpin->setFixedWidth(96);
-    videoFpsRow->addWidget(m_quickVideoFpsSpin);
-    drawerLayout->addLayout(videoFpsRow);
-
-    auto *videoTimeRow = new QHBoxLayout();
-    videoTimeRow->addWidget(new QLabel(TranslationManager::quickMaxSeconds(), m_toolSettingsDrawer));
-    m_quickVideoSecondsSpin = new QSpinBox(m_toolSettingsDrawer);
-    m_quickVideoSecondsSpin->setRange(0, 3600);
-    m_quickVideoSecondsSpin->setSpecialValueText(TranslationManager::recordingUnlimited());
-    configureOverlaySpinBox(m_quickVideoSecondsSpin);
-    m_quickVideoSecondsSpin->setFixedWidth(96);
-    videoTimeRow->addWidget(m_quickVideoSecondsSpin);
-    drawerLayout->addLayout(videoTimeRow);
-
-    auto *videoCrfRow = new QHBoxLayout();
-    videoCrfRow->addWidget(new QLabel(TranslationManager::videoQualityCrf(), m_toolSettingsDrawer));
-    m_quickVideoCrfSpin = new QSpinBox(m_toolSettingsDrawer);
-    m_quickVideoCrfSpin->setRange(18, 32);
-    m_quickVideoCrfSpin->setValue(24);
-    m_quickVideoCrfSpin->setToolTip(TranslationManager::videoCrfHint());
-    configureOverlaySpinBox(m_quickVideoCrfSpin);
-    m_quickVideoCrfSpin->setFixedWidth(96);
-    videoCrfRow->addWidget(m_quickVideoCrfSpin);
-    drawerLayout->addLayout(videoCrfRow);
-
-    addOverlayPanelSection(drawerLayout, m_toolSettingsDrawer,
-                           TranslationManager::audioMode());
-
-    auto addAudioVolumeRow = [&](QCheckBox *&check, QSlider *&slider, QLabel *&valueLabel,
-                                 const QString &label, const char *enabledKey, const char *volumeKey) {
-        check = new QCheckBox(label, m_toolSettingsDrawer);
-        check->setChecked(false);
-        drawerLayout->addWidget(check);
-
-        auto *valueRow = new QHBoxLayout();
-        valueRow->setContentsMargins(0, 0, 0, 0);
-        valueRow->setSpacing(7);
-        slider = new QSlider(Qt::Horizontal, m_toolSettingsDrawer);
-        slider->setRange(0, 100);
-        slider->setValue(80);
-        valueLabel = new QLabel(QStringLiteral("80"), m_toolSettingsDrawer);
-        valueLabel->setProperty("panelRole", QStringLiteral("value"));
-        valueLabel->setFixedWidth(34);
-        valueRow->addWidget(slider, 1);
-        valueRow->addWidget(valueLabel);
-        drawerLayout->addLayout(valueRow);
-
-        auto updateEnabled = [slider, valueLabel](bool enabled) {
-            slider->setEnabled(enabled);
-            valueLabel->setEnabled(enabled);
-        };
-        updateEnabled(check->isChecked());
-
-        connect(check, &QCheckBox::toggled, this, [enabledKey, updateEnabled](bool enabled) {
-            QSettings s("EShot", "EShot");
-            s.setValue(QString::fromLatin1(enabledKey), enabled);
-            updateEnabled(enabled);
-        });
-        connect(slider, &QSlider::valueChanged, this, [this, valueLabel, volumeKey](int value) {
-            valueLabel->setText(QString::number(value));
-            if (m_settingsWriter)
-                m_settingsWriter->schedule(QString::fromLatin1(volumeKey), value);
-        });
-    };
-
-    addAudioVolumeRow(m_quickDesktopAudioCheck, m_quickDesktopVolumeSlider, m_quickDesktopVolumeLabel,
-                      TranslationManager::audioDesktop(), "videoDesktopAudioEnabled", "videoDesktopAudioVolume");
-    addAudioVolumeRow(m_quickMicrophoneCheck, m_quickMicrophoneVolumeSlider, m_quickMicrophoneVolumeLabel,
-                      TranslationManager::audioMicrophone(), "videoMicrophoneEnabled", "videoMicrophoneVolume");
-
-    const QStringList audioDevices;
-    const QList<QPair<QString, QString>> activeInputDevices;
-    auto *desktopDeviceRow = new QHBoxLayout();
-    auto *desktopDeviceLabel = new QLabel(TranslationManager::audioSource(), m_toolSettingsDrawer);
-    desktopDeviceRow->addWidget(desktopDeviceLabel);
-    m_quickDesktopAudioDeviceCombo = new QComboBox(m_toolSettingsDrawer);
-    bool hasDesktopCandidate = true;
-    m_quickDesktopAudioDeviceCombo->addItem(TranslationManager::audioSystemLoopback(), defaultDesktopAudioDevice());
-#ifdef Q_OS_WIN
-    for (const QString &device : audioDevices) {
-        const QString lower = device.toLower();
-        const bool looksLikeDesktop = lower.contains(QStringLiteral("virtual-audio-capturer")) ||
-            lower.contains(QStringLiteral("stereo mix")) ||
-            lower.contains(QStringLiteral("what u hear")) ||
-            lower.contains(QStringLiteral("loopback")) ||
-            lower.contains(QStringLiteral("wave out"));
-        if (!looksLikeDesktop)
-            continue;
-        hasDesktopCandidate = true;
-        m_quickDesktopAudioDeviceCombo->addItem(device, device);
-    }
-#else
-    Q_UNUSED(hasDesktopCandidate);
-#endif
-    desktopDeviceRow->addWidget(m_quickDesktopAudioDeviceCombo);
-    drawerLayout->addLayout(desktopDeviceRow);
-    if (m_quickDesktopAudioCheck)
-        m_quickDesktopAudioCheck->setEnabled(true);
-    const bool desktopAudioEnabled = hasDesktopCandidate && m_quickDesktopAudioCheck
-        && m_quickDesktopAudioCheck->isChecked();
-    desktopDeviceLabel->setEnabled(desktopAudioEnabled);
-    m_quickDesktopAudioDeviceCombo->setEnabled(desktopAudioEnabled);
-    connect(m_quickDesktopAudioCheck, &QCheckBox::toggled,
-            this, [this, hasDesktopCandidate, desktopDeviceLabel](bool enabled) {
-                desktopDeviceLabel->setEnabled(hasDesktopCandidate && enabled);
-                if (m_quickDesktopAudioDeviceCombo)
-                    m_quickDesktopAudioDeviceCombo->setEnabled(hasDesktopCandidate && enabled);
-            });
-
-    auto *micDeviceRow = new QHBoxLayout();
-    auto *microphoneDeviceLabel = new QLabel(TranslationManager::audioMicrophoneDevice(), m_toolSettingsDrawer);
-    micDeviceRow->addWidget(microphoneDeviceLabel);
-    m_quickMicrophoneDeviceCombo = new QComboBox(m_toolSettingsDrawer);
-    if (activeInputDevices.isEmpty() && audioDevices.isEmpty()) {
-        m_quickMicrophoneDeviceCombo->addItem(TranslationManager::tr("defaultAudioDevice"), QStringLiteral("default"));
-    } else {
-        m_quickMicrophoneDeviceCombo->addItem(TranslationManager::tr("defaultAudioDevice"), activeInputDevices.isEmpty() ? QStringLiteral("default") : activeInputDevices.first().second);
-    }
-    for (const auto &device : activeInputDevices) {
-        if (m_quickMicrophoneDeviceCombo->findData(device.second) >= 0)
-            continue;
-        m_quickMicrophoneDeviceCombo->addItem(device.first, device.second);
-    }
-#ifdef Q_OS_WIN
-    for (const QString &device : audioDevices) {
-        if (m_quickMicrophoneDeviceCombo->findData(device) >= 0)
-            continue;
-        m_quickMicrophoneDeviceCombo->addItem(device, device);
-    }
-#endif
-    micDeviceRow->addWidget(m_quickMicrophoneDeviceCombo);
-    drawerLayout->addLayout(micDeviceRow);
-    const bool microphoneEnabled = m_quickMicrophoneCheck && m_quickMicrophoneCheck->isChecked();
-    microphoneDeviceLabel->setEnabled(microphoneEnabled);
-    m_quickMicrophoneDeviceCombo->setEnabled(microphoneEnabled);
-    connect(m_quickMicrophoneCheck, &QCheckBox::toggled,
-            this, [this, microphoneDeviceLabel](bool enabled) {
-                microphoneDeviceLabel->setEnabled(enabled);
-                if (m_quickMicrophoneDeviceCombo)
-                    m_quickMicrophoneDeviceCombo->setEnabled(enabled);
-            });
-
-    addOverlayPanelSection(drawerLayout, m_toolSettingsDrawer,
                            TranslationManager::tr("sheetSectionSelection"));
     m_quickAutoLockSelectionCheck = new QCheckBox(TranslationManager::tr("autoLockSelection"),
                                                   m_toolSettingsDrawer);
@@ -1101,39 +952,6 @@ void CaptureOverlay::setupToolSettingsDrawer()
         if (m_settingsWriter)
             m_settingsWriter->schedule(QStringLiteral("blurIntensity"), value);
     });
-    connect(m_quickGifFpsSpin, qOverload<int>(&QSpinBox::valueChanged), this, [](int value) {
-        QSettings s("EShot", "EShot");
-        s.setValue("recordingFps", value);
-    });
-    connect(m_quickGifSecondsSpin, qOverload<int>(&QSpinBox::valueChanged), this, [](int value) {
-        QSettings s("EShot", "EShot");
-        s.setValue("recordingMaxSeconds", value);
-    });
-    connect(m_quickGifLoopCombo, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int) {
-        QSettings s("EShot", "EShot");
-        s.setValue("recordingLoop", m_quickGifLoopCombo->currentData().toInt());
-    });
-    connect(m_quickVideoFpsSpin, qOverload<int>(&QSpinBox::valueChanged), this, [](int value) {
-        QSettings s("EShot", "EShot");
-        s.setValue("videoRecordingFps", value);
-    });
-    connect(m_quickVideoSecondsSpin, qOverload<int>(&QSpinBox::valueChanged), this, [](int value) {
-        QSettings s("EShot", "EShot");
-        s.setValue("videoRecordingMaxSeconds", value);
-    });
-    connect(m_quickVideoCrfSpin, qOverload<int>(&QSpinBox::valueChanged), this, [](int value) {
-        QSettings s("EShot", "EShot");
-        s.setValue("videoRecordingCrf", value);
-    });
-    connect(m_quickMicrophoneDeviceCombo, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int) {
-        QSettings s("EShot", "EShot");
-        s.setValue("videoMicrophoneDevice", m_quickMicrophoneDeviceCombo->currentData().toString());
-    });
-    connect(m_quickDesktopAudioDeviceCombo, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int) {
-        QSettings s("EShot", "EShot");
-        s.setValue("videoDesktopAudioDevice", m_quickDesktopAudioDeviceCombo->currentData().toString());
-    });
-
     m_toolSettingsDrawer->hide();
 
     const int drawerAnimationDurationMs = overlayPanelMetrics().drawerAnimationDurationMs;
@@ -1158,7 +976,7 @@ void CaptureOverlay::setupRecordingDrawer()
 {
     m_recordingDrawer = new QWidget(this);
     m_recordingDrawer->setObjectName(QStringLiteral("recordingDrawer"));
-    m_recordingDrawer->setFixedWidth(264);
+    m_recordingDrawer->setFixedWidth(320);
     m_recordingDrawer->setStyleSheet(overlayPanelStyleSheet());
 
     const OverlayPanelMetrics panelMetrics = overlayPanelMetrics();
@@ -1166,93 +984,156 @@ void CaptureOverlay::setupRecordingDrawer()
     layout->setContentsMargins(panelMetrics.contentMargin, panelMetrics.contentMargin,
                                panelMetrics.contentMargin, panelMetrics.contentMargin);
     layout->setSpacing(panelMetrics.rowSpacing);
-    m_recordingDrawerTitle = new QLabel(m_recordingDrawer);
-    m_recordingDrawerTitle->setObjectName(QStringLiteral("recordingDrawerTitle"));
-    m_recordingDrawerTitle->setProperty("panelRole", QStringLiteral("title"));
-    layout->addWidget(m_recordingDrawerTitle);
+    auto *title = new QLabel(TranslationManager::tabRecording(), m_recordingDrawer);
+    title->setObjectName(QStringLiteral("recordingDrawerTitle"));
+    title->setProperty("panelRole", QStringLiteral("title"));
+    layout->addWidget(title);
 
-    m_recordingGifOptions = new QWidget(m_recordingDrawer);
-    auto *gifForm = new QFormLayout(m_recordingGifOptions);
-    gifForm->setContentsMargins(0, 0, 0, 0);
-    gifForm->setHorizontalSpacing(10);
-    gifForm->setVerticalSpacing(panelMetrics.rowSpacing);
-    gifForm->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
-    m_recordingGifFpsSpin = new QSpinBox(m_recordingGifOptions);
-    m_recordingGifFpsSpin->setRange(1, gifRecordingFpsLimit());
-    configureOverlaySpinBox(m_recordingGifFpsSpin);
-    m_recordingGifSecondsSpin = new QSpinBox(m_recordingGifOptions);
-    m_recordingGifSecondsSpin->setRange(0, 600);
-    m_recordingGifSecondsSpin->setSpecialValueText(TranslationManager::recordingUnlimited());
-    configureOverlaySpinBox(m_recordingGifSecondsSpin);
-    m_recordingGifLoopCombo = new QComboBox(m_recordingGifOptions);
-    m_recordingGifLoopCombo->addItem(TranslationManager::recordingLoopInfinite(), 0);
-    for (int loops : {1, 2, 3, 5, 10})
-        m_recordingGifLoopCombo->addItem(QString::number(loops), loops);
-    gifForm->addRow(TranslationManager::gifFpsLabel().remove(QChar(':')), m_recordingGifFpsSpin);
-    gifForm->addRow(TranslationManager::quickMaxSeconds(), m_recordingGifSecondsSpin);
-    gifForm->addRow(TranslationManager::recordingLoop().remove(QChar(':')), m_recordingGifLoopCombo);
-    layout->addWidget(m_recordingGifOptions);
+    // GIF ⇄ Video segmented switch.
+    auto *modeRow = new QHBoxLayout();
+    modeRow->setContentsMargins(0, 0, 0, 0);
+    modeRow->setSpacing(0);
+    auto makeSegment = [this](const QString &text, const QString &position) {
+        auto *button = new QPushButton(text, m_recordingDrawer);
+        button->setCheckable(true);
+        button->setAutoDefault(false);
+        button->setCursor(Qt::PointingHandCursor);
+        button->setProperty("panelSegment", position);
+        return button;
+    };
+    m_recordingGifModeButton = makeSegment(QStringLiteral("GIF"), QStringLiteral("first"));
+    m_recordingVideoModeButton = makeSegment(TranslationManager::tr("recSegmentVideo"),
+                                             QStringLiteral("last"));
+    m_recordingGifModeButton->setObjectName(QStringLiteral("recordingGifModeButton"));
+    m_recordingVideoModeButton->setObjectName(QStringLiteral("recordingVideoModeButton"));
+    auto *modeGroup = new QButtonGroup(m_recordingDrawer);
+    modeGroup->setExclusive(true);
+    modeGroup->addButton(m_recordingGifModeButton);
+    modeGroup->addButton(m_recordingVideoModeButton);
+    modeRow->addWidget(m_recordingGifModeButton, 1);
+    modeRow->addWidget(m_recordingVideoModeButton, 1);
+    layout->addLayout(modeRow);
 
-    m_recordingVideoOptions = new QWidget(m_recordingDrawer);
-    auto *videoForm = new QFormLayout(m_recordingVideoOptions);
-    videoForm->setContentsMargins(0, 0, 0, 0);
-    videoForm->setHorizontalSpacing(10);
-    videoForm->setVerticalSpacing(panelMetrics.rowSpacing);
-    videoForm->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
-    m_recordingVideoFpsSpin = new QSpinBox(m_recordingVideoOptions);
-    m_recordingVideoFpsSpin->setRange(1, videoRecordingFpsLimit());
-    configureOverlaySpinBox(m_recordingVideoFpsSpin);
-    m_recordingVideoSecondsSpin = new QSpinBox(m_recordingVideoOptions);
-    m_recordingVideoSecondsSpin->setRange(0, 3600);
-    m_recordingVideoSecondsSpin->setSpecialValueText(TranslationManager::recordingUnlimited());
-    configureOverlaySpinBox(m_recordingVideoSecondsSpin);
-    m_recordingVideoCrfSpin = new QSpinBox(m_recordingVideoOptions);
-    m_recordingVideoCrfSpin->setRange(18, 32);
-    configureOverlaySpinBox(m_recordingVideoCrfSpin);
-    m_recordingVideoCrfSpin->setToolTip(TranslationManager::videoCrfHint());
-    m_recordingDesktopAudioCheck = new QCheckBox(TranslationManager::audioDesktop(), m_recordingVideoOptions);
-    m_recordingMicrophoneCheck = new QCheckBox(TranslationManager::audioMicrophone(), m_recordingVideoOptions);
-    m_recordingMicrophoneDeviceCombo = new QComboBox(m_recordingVideoOptions);
-    const QList<QPair<QString, QString>> inputDevices;
-    m_recordingMicrophoneDeviceCombo->addItem(
-        TranslationManager::tr("defaultAudioDevice"),
-        inputDevices.isEmpty() ? QStringLiteral("default") : inputDevices.first().second);
-    for (const auto &device : inputDevices) {
-        if (m_recordingMicrophoneDeviceCombo->findData(device.second) < 0)
-            m_recordingMicrophoneDeviceCombo->addItem(device.first, device.second);
+    auto *form = new QFormLayout();
+    form->setContentsMargins(0, 2, 0, 0);
+    form->setHorizontalSpacing(10);
+    form->setVerticalSpacing(panelMetrics.rowSpacing);
+    form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+    form->setLabelAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    // Long labels (e.g. Russian) move above their field instead of
+    // squeezing the choices.
+    form->setRowWrapPolicy(QFormLayout::WrapLongRows);
+    m_recordingQualityCombo = new QComboBox(m_recordingDrawer);
+    m_recordingQualityCombo->setObjectName(QStringLiteral("recordingQualityCombo"));
+    m_recordingDurationCombo = new QComboBox(m_recordingDrawer);
+    m_recordingDurationCombo->setObjectName(QStringLiteral("recordingDurationCombo"));
+    m_recordingStartDelayCombo = new QComboBox(m_recordingDrawer);
+    m_recordingStartDelayCombo->setObjectName(QStringLiteral("recordingStartDelayCombo"));
+    m_recordingStartDelayCombo->setToolTip(TranslationManager::tr("tipRecordingStartDelay"));
+    for (QComboBox *combo : {m_recordingQualityCombo, m_recordingDurationCombo, m_recordingStartDelayCombo})
+        combo->setMinimumWidth(170);
+    for (int seconds : recordingStartDelayChoices()) {
+        m_recordingStartDelayCombo->addItem(seconds == 0 ? TranslationManager::noDelay()
+                                                         : recordingSecondsText(seconds),
+                                            seconds);
     }
-    videoForm->addRow(TranslationManager::videoFpsLabel().remove(QChar(':')), m_recordingVideoFpsSpin);
-    videoForm->addRow(TranslationManager::quickMaxSeconds(), m_recordingVideoSecondsSpin);
-    videoForm->addRow(TranslationManager::videoQualityCrf(), m_recordingVideoCrfSpin);
-    auto *audioSeparator = new QFrame(m_recordingVideoOptions);
-    audioSeparator->setFrameShape(QFrame::HLine);
-    audioSeparator->setProperty("panelRole", QStringLiteral("separator"));
-    videoForm->addRow(audioSeparator);
-    auto *audioSection = new QLabel(TranslationManager::audioMode(), m_recordingVideoOptions);
-    audioSection->setProperty("panelRole", QStringLiteral("section"));
-    videoForm->addRow(audioSection);
-    videoForm->addRow(m_recordingDesktopAudioCheck);
-    videoForm->addRow(m_recordingMicrophoneCheck);
-    videoForm->addRow(TranslationManager::audioMicrophoneDevice(), m_recordingMicrophoneDeviceCombo);
+    form->addRow(TranslationManager::tr("recQualityLabel"), m_recordingQualityCombo);
+    form->addRow(TranslationManager::tr("recDurationLabel"), m_recordingDurationCombo);
+    form->addRow(withoutTrailingColon(TranslationManager::tr("recordingStartDelayLabel")),
+                 m_recordingStartDelayCombo);
+    layout->addLayout(form);
+
+    // Video only: audio sources. Volumes and the system audio device are on
+    // the Settings recording tab.
+    m_recordingVideoOptions = new QWidget(m_recordingDrawer);
+    auto *videoLayout = new QVBoxLayout(m_recordingVideoOptions);
+    videoLayout->setContentsMargins(0, 0, 0, 0);
+    videoLayout->setSpacing(panelMetrics.rowSpacing);
+    addOverlayPanelSection(videoLayout, m_recordingVideoOptions, TranslationManager::audioMode());
+    m_recordingDesktopAudioCheck = new QCheckBox(TranslationManager::audioSystemLoopback(),
+                                                 m_recordingVideoOptions);
+    m_recordingDesktopAudioCheck->setToolTip(TranslationManager::tr("tipVideoDesktopAudio"));
+    m_recordingMicrophoneCheck = new QCheckBox(TranslationManager::audioMicrophone(),
+                                               m_recordingVideoOptions);
+    m_recordingMicrophoneCheck->setToolTip(TranslationManager::tr("tipVideoMicrophone"));
+    m_recordingMicrophoneDeviceCombo = new QComboBox(m_recordingVideoOptions);
+    m_recordingMicrophoneDeviceCombo->setObjectName(QStringLiteral("recordingMicrophoneDeviceCombo"));
+    m_recordingMicrophoneDeviceCombo->setToolTip(TranslationManager::tr("tipVideoMicrophoneDevice"));
+    m_recordingMicrophoneDeviceCombo->addItem(TranslationManager::tr("defaultAudioDevice"),
+                                              QStringLiteral("default"));
+    videoLayout->addWidget(m_recordingDesktopAudioCheck);
+    videoLayout->addWidget(m_recordingMicrophoneCheck);
+    auto *deviceRow = new QHBoxLayout();
+    deviceRow->setContentsMargins(21, 0, 0, 0);
+    deviceRow->addWidget(m_recordingMicrophoneDeviceCombo, 1);
+    videoLayout->addLayout(deviceRow);
     layout->addWidget(m_recordingVideoOptions);
 
-    m_recordingStartButton = new QPushButton(m_recordingDrawer);
+    auto *advancedButton = new QPushButton(TranslationManager::tr("recAdvancedSettings"), m_recordingDrawer);
+    advancedButton->setObjectName(QStringLiteral("recordingAdvancedSettingsButton"));
+    advancedButton->setProperty("panelAction", QStringLiteral("link"));
+    advancedButton->setAutoDefault(false);
+    advancedButton->setCursor(Qt::PointingHandCursor);
+    auto *advancedRow = new QHBoxLayout();
+    advancedRow->setContentsMargins(0, 0, 0, 0);
+    advancedRow->addWidget(advancedButton);
+    advancedRow->addStretch(1);
+    layout->addLayout(advancedRow);
+
+    m_recordingHotkeyHint = new QLabel(m_recordingDrawer);
+    m_recordingHotkeyHint->setObjectName(QStringLiteral("recordingHotkeyHint"));
+    m_recordingHotkeyHint->setProperty("panelRole", QStringLiteral("hint"));
+    m_recordingHotkeyHint->setWordWrap(true);
+    layout->addWidget(m_recordingHotkeyHint);
+
+    m_recordingStartButton = new QPushButton(TranslationManager::recordingStart(), m_recordingDrawer);
     m_recordingStartButton->setObjectName(QStringLiteral("recordingStartButton"));
     m_recordingStartButton->setProperty("panelAction", QStringLiteral("primary"));
+    m_recordingStartButton->setToolTip(QStringLiteral("%1 (Enter)").arg(TranslationManager::recordingStart()));
+    // Enter on a focused button clicks that button (outside a dialog Qt
+    // leaves autoDefault off); elsewhere in the drawer Enter starts.
+    m_recordingStartButton->setAutoDefault(true);
+    m_recordingStartButton->setDefault(true);
     m_recordingCancelButton = new QPushButton(TranslationManager::recordingCancel(), m_recordingDrawer);
     m_recordingCancelButton->setObjectName(QStringLiteral("recordingCancelButton"));
     m_recordingCancelButton->setProperty("panelAction", QStringLiteral("secondary"));
+    m_recordingCancelButton->setAutoDefault(true);
     layout->addWidget(m_recordingStartButton);
     layout->addWidget(m_recordingCancelButton);
 
-    auto persist = [](const char *key, int value) { QSettings("EShot", "EShot").setValue(key, value); };
-    connect(m_recordingGifFpsSpin, qOverload<int>(&QSpinBox::valueChanged), this, [persist](int value) { persist("recordingFps", value); });
-    connect(m_recordingGifSecondsSpin, qOverload<int>(&QSpinBox::valueChanged), this, [persist](int value) { persist("recordingMaxSeconds", value); });
-    connect(m_recordingGifLoopCombo, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int) { QSettings("EShot", "EShot").setValue("recordingLoop", m_recordingGifLoopCombo->currentData()); });
-    connect(m_recordingVideoFpsSpin, qOverload<int>(&QSpinBox::valueChanged), this, [persist](int value) { persist("videoRecordingFps", value); });
-    connect(m_recordingVideoSecondsSpin, qOverload<int>(&QSpinBox::valueChanged), this, [persist](int value) { persist("videoRecordingMaxSeconds", value); });
-    connect(m_recordingVideoCrfSpin, qOverload<int>(&QSpinBox::valueChanged), this, [persist](int value) { persist("videoRecordingCrf", value); });
-    connect(m_recordingDesktopAudioCheck, &QCheckBox::toggled, this, [](bool enabled) { QSettings("EShot", "EShot").setValue("videoDesktopAudioEnabled", enabled); });
+    connect(m_recordingGifModeButton, &QPushButton::clicked, this, [this]() {
+        setRecordingDrawerMode(RecordingDrawerMode::Gif);
+    });
+    connect(m_recordingVideoModeButton, &QPushButton::clicked, this, [this]() {
+        setRecordingDrawerMode(RecordingDrawerMode::Video);
+    });
+    connect(m_recordingQualityCombo, qOverload<int>(&QComboBox::activated), this, [this](int index) {
+        const auto preset = static_cast<RecordingQualityPreset>(
+            m_recordingQualityCombo->itemData(index).toInt());
+        if (preset == RecordingQualityPreset::Custom)
+            return;
+        QSettings settings("EShot", "EShot");
+        if (m_recordingDrawerMode == RecordingDrawerMode::Gif)
+            applyGifQualityPreset(settings, preset);
+        else
+            applyVideoQualityPreset(settings, preset);
+        // A preset replaces the custom values; drop the "Custom" entry
+        // (after the combo has finished emitting).
+        QTimer::singleShot(0, this, [this]() { loadRecordingDrawerValues(); });
+    });
+    connect(m_recordingDurationCombo, qOverload<int>(&QComboBox::activated), this, [this](int index) {
+        QSettings("EShot", "EShot").setValue(
+            m_recordingDrawerMode == RecordingDrawerMode::Gif
+                ? QStringLiteral("recordingMaxSeconds") : QStringLiteral("videoRecordingMaxSeconds"),
+            m_recordingDurationCombo->itemData(index).toInt());
+    });
+    connect(m_recordingStartDelayCombo, qOverload<int>(&QComboBox::activated), this, [this](int index) {
+        QSettings("EShot", "EShot").setValue(QStringLiteral("recordingStartDelaySeconds"),
+                                             m_recordingStartDelayCombo->itemData(index).toInt());
+    });
+    connect(m_recordingDesktopAudioCheck, &QCheckBox::toggled, this, [](bool enabled) {
+        QSettings("EShot", "EShot").setValue("videoDesktopAudioEnabled", enabled);
+    });
     connect(m_recordingMicrophoneCheck, &QCheckBox::toggled, this, [this](bool enabled) {
         QSettings("EShot", "EShot").setValue("videoMicrophoneEnabled", enabled);
         if (m_recordingMicrophoneDeviceCombo)
@@ -1262,6 +1143,7 @@ void CaptureOverlay::setupRecordingDrawer()
         QSettings("EShot", "EShot").setValue(
             "videoMicrophoneDevice", m_recordingMicrophoneDeviceCombo->currentData().toString());
     });
+    connect(advancedButton, &QPushButton::clicked, this, &CaptureOverlay::openRecordingSettings);
     connect(m_recordingStartButton, &QPushButton::clicked, this, &CaptureOverlay::startRecordingFromDrawer);
     connect(m_recordingCancelButton, &QPushButton::clicked, this, [this] { hideRecordingDrawer(); });
     m_recordingDrawer->hide();
@@ -1269,43 +1151,8 @@ void CaptureOverlay::setupRecordingDrawer()
 
 void CaptureOverlay::showRecordingDrawer(RecordingDrawerMode mode)
 {
-    if (!m_recordingDrawer || !m_selectionComplete)
+    if (!m_recordingDrawer || !m_selectionComplete || mode == RecordingDrawerMode::None)
         return;
-
-    ensureAudioDevicesLoaded();
-    m_recordingDrawerMode = mode;
-    const QStringList fields = recordingDrawerFields(mode);
-    m_recordingGifOptions->setVisible(fields.contains(QStringLiteral("gifFps")));
-    m_recordingVideoOptions->setVisible(fields.contains(QStringLiteral("videoFps")));
-    const bool isGif = mode == RecordingDrawerMode::Gif;
-    m_recordingDrawerTitle->setText(isGif ? TranslationManager::quickGifRecording() : TranslationManager::videoRecordingTitle());
-    m_recordingStartButton->setText(TranslationManager::recordingStart());
-
-    QSettings settings("EShot", "EShot");
-    {
-        QSignalBlocker gifFpsBlocker(m_recordingGifFpsSpin);
-        QSignalBlocker gifTimeBlocker(m_recordingGifSecondsSpin);
-        QSignalBlocker gifLoopBlocker(m_recordingGifLoopCombo);
-        QSignalBlocker videoFpsBlocker(m_recordingVideoFpsSpin);
-        QSignalBlocker videoTimeBlocker(m_recordingVideoSecondsSpin);
-        QSignalBlocker videoCrfBlocker(m_recordingVideoCrfSpin);
-        QSignalBlocker desktopAudioBlocker(m_recordingDesktopAudioCheck);
-        QSignalBlocker microphoneBlocker(m_recordingMicrophoneCheck);
-        QSignalBlocker microphoneDeviceBlocker(m_recordingMicrophoneDeviceCombo);
-        m_recordingGifFpsSpin->setValue(settings.value("recordingFps", 10).toInt());
-        m_recordingGifSecondsSpin->setValue(settings.value("recordingMaxSeconds", 30).toInt());
-        int loopIndex = m_recordingGifLoopCombo->findData(settings.value("recordingLoop", 0).toInt());
-        m_recordingGifLoopCombo->setCurrentIndex(loopIndex < 0 ? 0 : loopIndex);
-        m_recordingVideoFpsSpin->setValue(settings.value("videoRecordingFps", 30).toInt());
-        m_recordingVideoSecondsSpin->setValue(settings.value("videoRecordingMaxSeconds", 0).toInt());
-        m_recordingVideoCrfSpin->setValue(settings.value("videoRecordingCrf", 24).toInt());
-        m_recordingDesktopAudioCheck->setChecked(loadRecordingAudioEnabled(settings, RecordingAudioSource::Desktop));
-        m_recordingMicrophoneCheck->setChecked(loadRecordingAudioEnabled(settings, RecordingAudioSource::Microphone));
-        const int microphoneDeviceIndex = m_recordingMicrophoneDeviceCombo->findData(
-            settings.value("videoMicrophoneDevice", "default").toString());
-        m_recordingMicrophoneDeviceCombo->setCurrentIndex(microphoneDeviceIndex < 0 ? 0 : microphoneDeviceIndex);
-        m_recordingMicrophoneDeviceCombo->setEnabled(m_recordingMicrophoneCheck->isChecked());
-    }
 
     setToolSettingsDrawerVisible(false);
     if (m_toolbar)
@@ -1316,14 +1163,140 @@ void CaptureOverlay::showRecordingDrawer(RecordingDrawerMode mode)
         m_toolSettingsButton->hide();
     if (m_toolSettingsDrawer)
         m_toolSettingsDrawer->hide();
+    setRecordingDrawerMode(mode);
+    m_recordingDrawer->show();
+    m_recordingDrawer->raise();
+    if (m_recordingStartButton)
+        m_recordingStartButton->setFocus(Qt::OtherFocusReason);
+}
+
+void CaptureOverlay::setRecordingDrawerMode(RecordingDrawerMode mode)
+{
+    if (!m_recordingDrawer || mode == RecordingDrawerMode::None)
+        return;
+    m_recordingDrawerMode = mode;
+    const QStringList fields = recordingDrawerFields(mode);
+    if (mode == RecordingDrawerMode::Video)
+        ensureAudioDevicesLoaded();
+    m_recordingVideoOptions->setVisible(fields.contains(QStringLiteral("systemAudio")));
+    {
+        QSignalBlocker gifBlocker(m_recordingGifModeButton);
+        QSignalBlocker videoBlocker(m_recordingVideoModeButton);
+        m_recordingGifModeButton->setChecked(mode == RecordingDrawerMode::Gif);
+        m_recordingVideoModeButton->setChecked(mode == RecordingDrawerMode::Video);
+    }
+    loadRecordingDrawerValues();
+    placeRecordingDrawer();
+}
+
+void CaptureOverlay::loadRecordingDrawerValues()
+{
+    if (!m_recordingDrawer)
+        return;
+    const bool gif = m_recordingDrawerMode == RecordingDrawerMode::Gif;
+    QSettings settings("EShot", "EShot");
+
+    QSignalBlocker qualityBlocker(m_recordingQualityCombo);
+    QSignalBlocker durationBlocker(m_recordingDurationCombo);
+    QSignalBlocker delayBlocker(m_recordingStartDelayCombo);
+    QSignalBlocker desktopAudioBlocker(m_recordingDesktopAudioCheck);
+    QSignalBlocker microphoneBlocker(m_recordingMicrophoneCheck);
+    QSignalBlocker microphoneDeviceBlocker(m_recordingMicrophoneDeviceCombo);
+
+    m_recordingQualityCombo->clear();
+    for (RecordingQualityPreset preset : selectableRecordingQualityPresets()) {
+        m_recordingQualityCombo->addItem(recordingQualityPresetText(preset), static_cast<int>(preset));
+        m_recordingQualityCombo->setItemData(m_recordingQualityCombo->count() - 1,
+                                             recordingQualityPresetDetails(preset, gif),
+                                             Qt::ToolTipRole);
+    }
+    const RecordingQualityPreset current = gif ? loadGifQualityPreset(settings)
+                                               : loadVideoQualityPreset(settings);
+    if (current == RecordingQualityPreset::Custom) {
+        const QString details = gif
+            ? QStringLiteral("%1 px · %2 FPS")
+                  .arg(settings.value("recordingMaxSide", DefaultGifMaxSide).toInt())
+                  .arg(settings.value("recordingFps", DefaultGifFps).toInt())
+            : QStringLiteral("CRF %1 · %2 FPS")
+                  .arg(settings.value("videoRecordingCrf", DefaultVideoCrf).toInt())
+                  .arg(settings.value("videoRecordingFps", DefaultVideoFps).toInt());
+        m_recordingQualityCombo->addItem(TranslationManager::tr("recCustomValue").arg(details),
+                                         static_cast<int>(RecordingQualityPreset::Custom));
+    }
+    m_recordingQualityCombo->setCurrentIndex(
+        qMax(0, m_recordingQualityCombo->findData(static_cast<int>(current))));
+    m_recordingQualityCombo->setToolTip(TranslationManager::tr("tipRecQualityPreset"));
+
+    const int maxSeconds = gif
+        ? settings.value("recordingMaxSeconds", DefaultGifMaxSeconds).toInt()
+        : settings.value("videoRecordingMaxSeconds", DefaultVideoMaxSeconds).toInt();
+    m_recordingDurationCombo->clear();
+    for (int seconds : recordingDurationChoices()) {
+        m_recordingDurationCombo->addItem(seconds == 0 ? TranslationManager::recordingUnlimited()
+                                                       : recordingSecondsText(seconds),
+                                          seconds);
+    }
+    if (recordingChoiceIndex(recordingDurationChoices(), maxSeconds) < 0) {
+        m_recordingDurationCombo->addItem(
+            TranslationManager::tr("recCustomValue").arg(recordingSecondsText(maxSeconds)), maxSeconds);
+    }
+    m_recordingDurationCombo->setCurrentIndex(qMax(0, m_recordingDurationCombo->findData(maxSeconds)));
+    m_recordingDurationCombo->setToolTip(TranslationManager::tr(gif ? "tipGifMaxSeconds"
+                                                                    : "tipVideoMaxSeconds"));
+
+    const int delay = settings.value("recordingStartDelaySeconds", 0).toInt();
+    const int customDelay = m_recordingStartDelayCombo->findData(QStringLiteral("custom"), Qt::UserRole + 1);
+    if (customDelay >= 0)
+        m_recordingStartDelayCombo->removeItem(customDelay);
+    if (recordingChoiceIndex(recordingStartDelayChoices(), delay) < 0) {
+        m_recordingStartDelayCombo->addItem(
+            TranslationManager::tr("recCustomValue").arg(recordingSecondsText(delay)), delay);
+        m_recordingStartDelayCombo->setItemData(m_recordingStartDelayCombo->count() - 1,
+                                                QStringLiteral("custom"), Qt::UserRole + 1);
+    }
+    m_recordingStartDelayCombo->setCurrentIndex(qMax(0, m_recordingStartDelayCombo->findData(delay)));
+
+    if (!gif) {
+        m_recordingDesktopAudioCheck->setChecked(loadRecordingAudioEnabled(settings, RecordingAudioSource::Desktop));
+        m_recordingMicrophoneCheck->setChecked(loadRecordingAudioEnabled(settings, RecordingAudioSource::Microphone));
+        const int microphoneDeviceIndex = m_recordingMicrophoneDeviceCombo->findData(
+            settings.value("videoMicrophoneDevice", "default").toString());
+        m_recordingMicrophoneDeviceCombo->setCurrentIndex(microphoneDeviceIndex < 0 ? 0 : microphoneDeviceIndex);
+        m_recordingMicrophoneDeviceCombo->setEnabled(m_recordingMicrophoneCheck->isChecked());
+    }
+
+    const HotkeyManager &hotkeys = HotkeyManager::instance();
+    auto keyText = [](const QString &shortcut) {
+        return shortcut.trimmed().isEmpty() ? TranslationManager::hotkeyNoneActive() : shortcut;
+    };
+    m_recordingHotkeyHint->setText(TranslationManager::tr("recDrawerHotkeys").arg(
+        keyText(hotkeys.recordingStopShortcutText()),
+        keyText(hotkeys.recordingPauseShortcutText())));
+}
+
+void CaptureOverlay::placeRecordingDrawer()
+{
+    if (!m_recordingDrawer)
+        return;
     m_recordingDrawer->adjustSize();
     QRect bounds = m_selectionAnchorScreenRect.intersected(rect());
     if (bounds.isEmpty())
         bounds = rect();
     bounds.adjust(12, 12, -12, -12);
     m_recordingDrawer->move(recordingDrawerPosition(bounds, m_recordingDrawer->size()));
-    m_recordingDrawer->show();
-    m_recordingDrawer->raise();
+}
+
+void CaptureOverlay::openRecordingSettings()
+{
+    const RecordingDrawerMode mode = m_recordingDrawerMode;
+    hideRecordingDrawer(false);
+    hideForModalDialog();
+    // The receiver shows the Settings dialog modally and returns once it
+    // closes; then the drawer comes back with the saved values.
+    emit recordingSettingsRequested();
+    restoreAfterModalDialog();
+    if (m_selectionComplete && mode != RecordingDrawerMode::None)
+        showRecordingDrawer(mode);
 }
 
 void CaptureOverlay::hideRecordingDrawer(bool restoreToolbar)
@@ -1371,12 +1344,10 @@ void CaptureOverlay::ensureAudioDevicesLoaded()
         // again once the refreshed list arrives.
         requestDshowAudioDevices(ComponentPaths::ffmpegPath(), this,
                                  [this](const QList<DshowAudioDevice> &devices) {
-            m_cachedDesktopAudioDevices = dshowDesktopAudioDevices(devices);
             m_cachedMicrophoneAudioDevices = dshowMicrophoneDevices(devices);
             populateAudioDeviceCombos();
         });
 #else
-        m_cachedDesktopAudioDevices = desktopAudioDevices();
         m_cachedMicrophoneAudioDevices = microphoneAudioDevices();
 #endif
     }
@@ -1385,50 +1356,28 @@ void CaptureOverlay::ensureAudioDevicesLoaded()
 
 void CaptureOverlay::populateAudioDeviceCombos()
 {
+    QComboBox *combo = m_recordingMicrophoneDeviceCombo;
+    if (!combo)
+        return;
     QSettings settings("EShot", "EShot");
     const QString savedMicrophone = settings.value("videoMicrophoneDevice", "default").toString();
-    const QList<QComboBox *> microphoneCombos = {
-        m_quickMicrophoneDeviceCombo, m_recordingMicrophoneDeviceCombo
-    };
-    for (QComboBox *combo : microphoneCombos) {
-        if (!combo)
-            continue;
-        QSignalBlocker blocker(combo);
-        // "default" follows the system default microphone; the recorder
-        // resolves it when recording starts.
-        if (combo->count() == 0)
-            combo->addItem(TranslationManager::tr("defaultAudioDevice"), QStringLiteral("default"));
-        else
-            combo->setItemData(0, QStringLiteral("default"));
-        for (const auto &device : m_cachedMicrophoneAudioDevices) {
-            if (combo->findData(device.second) < 0)
-                combo->addItem(device.first, device.second);
-        }
-        // The saved device may only have arrived with this list.
-        if (combo->currentIndex() <= 0) {
-            const int saved = combo->findData(savedMicrophone);
-            if (saved > 0)
-                combo->setCurrentIndex(saved);
-        }
+    QSignalBlocker blocker(combo);
+    // "default" follows the system default microphone; the recorder
+    // resolves it when recording starts.
+    if (combo->count() == 0)
+        combo->addItem(TranslationManager::tr("defaultAudioDevice"), QStringLiteral("default"));
+    else
+        combo->setItemData(0, QStringLiteral("default"));
+    for (const auto &device : m_cachedMicrophoneAudioDevices) {
+        if (combo->findData(device.second) < 0)
+            combo->addItem(device.first, device.second);
     }
-
-#ifdef Q_OS_WIN
-    // Only loopback sources (system loopback, Stereo Mix, ...); microphones
-    // belong in the microphone list.
-    if (m_quickDesktopAudioDeviceCombo) {
-        QSignalBlocker blocker(m_quickDesktopAudioDeviceCombo);
-        for (const QString &device : std::as_const(m_cachedDesktopAudioDevices)) {
-            if (m_quickDesktopAudioDeviceCombo->findData(device) < 0)
-                m_quickDesktopAudioDeviceCombo->addItem(device, device);
-        }
-        if (m_quickDesktopAudioDeviceCombo->currentIndex() <= 0) {
-            const int saved = m_quickDesktopAudioDeviceCombo->findData(
-                settings.value("videoDesktopAudioDevice", defaultDesktopAudioDevice()).toString());
-            if (saved > 0)
-                m_quickDesktopAudioDeviceCombo->setCurrentIndex(saved);
-        }
+    // The saved device may only have arrived with this list.
+    if (combo->currentIndex() <= 0) {
+        const int saved = combo->findData(savedMicrophone);
+        if (saved > 0)
+            combo->setCurrentIndex(saved);
     }
-#endif
 }
 
 void CaptureOverlay::updateToolSettingsDrawerPosition()
@@ -1545,8 +1494,6 @@ void CaptureOverlay::setToolSettingsDrawerVisible(bool visible)
         m_toolSettingsButtonAnimation->stop();
 
     if (visible) {
-        ensureAudioDevicesLoaded();
-        QSettings s("EShot", "EShot");
         if (m_quickPenWidthSlider && m_annotationEngine) {
             QSignalBlocker blocker(m_quickPenWidthSlider);
             const int value = m_annotationEngine->penWidth();
@@ -1560,71 +1507,6 @@ void CaptureOverlay::setToolSettingsDrawerVisible(bool visible)
             m_quickBlurSlider->setValue(value);
             if (m_quickBlurValueLabel)
                 m_quickBlurValueLabel->setText(QString::number(value));
-        }
-        if (m_quickGifFpsSpin) {
-            QSignalBlocker blocker(m_quickGifFpsSpin);
-            m_quickGifFpsSpin->setValue(s.value("recordingFps", 10).toInt());
-        }
-        if (m_quickGifSecondsSpin) {
-            QSignalBlocker blocker(m_quickGifSecondsSpin);
-            m_quickGifSecondsSpin->setValue(s.value("recordingMaxSeconds", 30).toInt());
-        }
-        if (m_quickGifLoopCombo) {
-            QSignalBlocker blocker(m_quickGifLoopCombo);
-            int idx = m_quickGifLoopCombo->findData(s.value("recordingLoop", 0).toInt());
-            if (idx < 0) idx = 0;
-            m_quickGifLoopCombo->setCurrentIndex(idx);
-        }
-        if (m_quickVideoFpsSpin) {
-            QSignalBlocker blocker(m_quickVideoFpsSpin);
-            m_quickVideoFpsSpin->setValue(s.value("videoRecordingFps", 30).toInt());
-        }
-        if (m_quickVideoSecondsSpin) {
-            QSignalBlocker blocker(m_quickVideoSecondsSpin);
-            m_quickVideoSecondsSpin->setValue(s.value("videoRecordingMaxSeconds", 0).toInt());
-        }
-        if (m_quickVideoCrfSpin) {
-            QSignalBlocker blocker(m_quickVideoCrfSpin);
-            m_quickVideoCrfSpin->setValue(s.value("videoRecordingCrf", 24).toInt());
-        }
-        if (m_quickDesktopAudioCheck)
-            m_quickDesktopAudioCheck->setChecked(loadRecordingAudioEnabled(
-                s, RecordingAudioSource::Desktop));
-        if (m_quickDesktopVolumeSlider) {
-            QSignalBlocker blocker(m_quickDesktopVolumeSlider);
-            const int value = s.value("videoDesktopAudioVolume", 80).toInt();
-            m_quickDesktopVolumeSlider->setValue(value);
-            if (m_quickDesktopVolumeLabel)
-                m_quickDesktopVolumeLabel->setText(QString::number(value));
-        }
-        if (m_quickDesktopAudioDeviceCombo) {
-            QSignalBlocker blocker(m_quickDesktopAudioDeviceCombo);
-            int idx = m_quickDesktopAudioDeviceCombo->findData(s.value("videoDesktopAudioDevice", defaultDesktopAudioDevice()).toString());
-            if (idx < 0) idx = 0;
-            m_quickDesktopAudioDeviceCombo->setCurrentIndex(idx);
-            const bool hasDevice = !m_quickDesktopAudioDeviceCombo->currentData().toString().isEmpty();
-            if (!hasDevice && m_quickDesktopAudioCheck) {
-                QSignalBlocker checkBlocker(m_quickDesktopAudioCheck);
-                m_quickDesktopAudioCheck->setChecked(false);
-                s.setValue("videoDesktopAudioEnabled", false);
-            }
-            m_quickDesktopAudioDeviceCombo->setEnabled(hasDevice && m_quickDesktopAudioCheck && m_quickDesktopAudioCheck->isChecked());
-        }
-        if (m_quickMicrophoneCheck)
-            m_quickMicrophoneCheck->setChecked(loadRecordingAudioEnabled(
-                s, RecordingAudioSource::Microphone));
-        if (m_quickMicrophoneVolumeSlider) {
-            QSignalBlocker blocker(m_quickMicrophoneVolumeSlider);
-            const int value = s.value("videoMicrophoneVolume", 80).toInt();
-            m_quickMicrophoneVolumeSlider->setValue(value);
-            if (m_quickMicrophoneVolumeLabel)
-                m_quickMicrophoneVolumeLabel->setText(QString::number(value));
-        }
-        if (m_quickMicrophoneDeviceCombo) {
-            QSignalBlocker blocker(m_quickMicrophoneDeviceCombo);
-            int idx = m_quickMicrophoneDeviceCombo->findData(s.value("videoMicrophoneDevice", "default").toString());
-            if (idx < 0) idx = 0;
-            m_quickMicrophoneDeviceCombo->setCurrentIndex(idx);
         }
         const QRect startRect = m_toolSettingsDrawer->isVisible()
             ? m_toolSettingsDrawer->geometry()
@@ -1725,6 +1607,14 @@ void CaptureOverlay::refreshUI()
     updateToolSettingsDrawerPosition();
     if (drawerWasVisible)
         setToolSettingsDrawerVisible(true);
+
+    // Rebuilt hidden; the Settings link reopens it with the new texts.
+    if (m_recordingDrawer && !m_recordingDrawer->isVisible()) {
+        m_recordingDrawer->deleteLater();
+        m_recordingDrawer = nullptr;
+        setupRecordingDrawer();
+        populateAudioDeviceCombos();
+    }
 
     // Refresh action panel button tooltips
     if (m_actionPanel) {
@@ -3371,6 +3261,10 @@ void CaptureOverlay::keyPressEvent(QKeyEvent *event)
         m_annotationEngine->setShiftHeld(true);
     }
 
+    if (recordingDrawerStartsOnKey(event->key(), m_recordingDrawer && m_recordingDrawer->isVisible())) {
+        startRecordingFromDrawer();
+        return;
+    }
     if (event->key() == Qt::Key_Escape) {
         const bool recordingOpen = m_recordingDrawer && m_recordingDrawer->isVisible();
         const bool quickSettingsOpen = m_toolSettingsDrawer

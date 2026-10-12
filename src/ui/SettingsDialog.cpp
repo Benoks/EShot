@@ -59,6 +59,7 @@
 #include <QUrl>
 #include <QTabBar>
 #include <QStyle>
+#include <QToolButton>
 #include <algorithm>
 
 #ifdef Q_OS_WIN
@@ -82,6 +83,28 @@ constexpr UINT defaultWindowCaptureVirtualKey()
 #else
     return 0;
 #endif
+}
+
+QString recordingQualityPresetName(RecordingQualityPreset preset)
+{
+    switch (preset) {
+    case RecordingQualityPreset::Small:
+        return TranslationManager::tr("recQualitySmall");
+    case RecordingQualityPreset::Balanced:
+        return TranslationManager::tr("recQualityBalanced");
+    case RecordingQualityPreset::High:
+        return TranslationManager::tr("recQualityHigh");
+    case RecordingQualityPreset::Custom:
+        break;
+    }
+    return TranslationManager::tr("recQualityCustom");
+}
+
+SettingsHotkeyDefinition storedRecordingHotkey(const QSettings &settings, RecordingHotkeyAction action)
+{
+    const SettingsHotkeyDefinition fallback = platformDefaultRecordingHotkey(action);
+    return {static_cast<quint32>(settings.value(recordingHotkeyModifiersKey(action), fallback.modifiers).toUInt()),
+            static_cast<quint32>(settings.value(recordingHotkeyVirtualKeyKey(action), fallback.virtualKey).toUInt())};
 }
 
 // A form label such as "Video:" without its trailing colon, for messages.
@@ -423,10 +446,12 @@ void SettingsDialog::setupUI()
     mainLayout->addWidget(titleLabel);
 
     QTabWidget *tabs = new QTabWidget(this);
+    m_tabs = tabs;
     tabs->addTab(createGeneralTab(),     TranslationManager::tabGeneral());
     tabs->addTab(createPackagesTab(),    TranslationManager::tr("tabPackages"));
     tabs->addTab(createCaptureTab(),     TranslationManager::tabCapture());
-    tabs->addTab(createRecordingTab(),   TranslationManager::tabRecording());
+    m_recordingTab = createRecordingTab();
+    tabs->addTab(m_recordingTab,         TranslationManager::tabRecording());
     tabs->addTab(createAppearanceTab(),  TranslationManager::tabAppearance());
     tabs->addTab(createInterfaceTab(),   TranslationManager::tabInterface());
     tabs->addTab(createHotkeyTab(),      TranslationManager::tabHotkey());
@@ -899,25 +924,65 @@ QWidget* SettingsDialog::createAppearanceTab()
 QWidget* SettingsDialog::createRecordingTab()
 {
     QWidget *tab = new QWidget();
-    QVBoxLayout *layout = new QVBoxLayout(tab);
+    QVBoxLayout *outerLayout = new QVBoxLayout(tab);
+    outerLayout->setContentsMargins(0, 0, 0, 0);
+    QScrollArea *scroll = new QScrollArea(tab);
+    scroll->setWidgetResizable(true);
+    scroll->setFrameShape(QFrame::NoFrame);
+    QWidget *content = new QWidget(scroll);
+    QVBoxLayout *layout = new QVBoxLayout(content);
 
+    // ── General: applies to GIF and video ──
+    QGroupBox *generalGroup = new QGroupBox(TranslationManager::tabGeneral());
+    QFormLayout *generalForm = new QFormLayout(generalGroup);
+    m_recordingStartDelaySpin = new QSpinBox();
+    m_recordingStartDelaySpin->setRange(0, 10);
+    m_recordingStartDelaySpin->setSuffix(QStringLiteral(" s"));
+    m_recordingStartDelaySpin->setSpecialValueText(TranslationManager::noDelay());
+    m_recordingStartDelaySpin->setToolTip(TranslationManager::tr("tipRecordingStartDelay"));
+    generalForm->addRow(TranslationManager::tr("recordingStartDelayLabel"), m_recordingStartDelaySpin);
+    // Same setting as in the General tab's notification options.
+    m_recordingOpenFolderCheck = new QCheckBox(TranslationManager::notificationOpenFolder());
+    m_recordingOpenFolderCheck->setToolTip(TranslationManager::tr("tipNotificationOpenFolder"));
+    generalForm->addRow(QString(), m_recordingOpenFolderCheck);
+    if (m_notificationOpenFolderCheck) {
+        connect(m_recordingOpenFolderCheck, &QCheckBox::toggled,
+                m_notificationOpenFolderCheck, &QCheckBox::setChecked);
+        connect(m_notificationOpenFolderCheck, &QCheckBox::toggled,
+                m_recordingOpenFolderCheck, &QCheckBox::setChecked);
+    }
+    m_recordingCopyToClipboardCheck = new QCheckBox(TranslationManager::tr("recCopyToClipboard"));
+    m_recordingCopyToClipboardCheck->setToolTip(TranslationManager::tr("tipRecCopyToClipboard"));
+    generalForm->addRow(QString(), m_recordingCopyToClipboardCheck);
+    layout->addWidget(generalGroup);
+
+    auto fillPresetCombo = [](QComboBox *combo) {
+        for (RecordingQualityPreset preset : selectableRecordingQualityPresets())
+            combo->addItem(recordingQualityPresetName(preset), static_cast<int>(preset));
+        combo->setToolTip(TranslationManager::tr("tipRecQualityPreset"));
+    };
+
+    // ── GIF ──
     QGroupBox *recGroup = new QGroupBox(TranslationManager::gifSettings());
     QFormLayout *recForm = new QFormLayout(recGroup);
+    m_gifQualityPresetCombo = new QComboBox();
+    fillPresetCombo(m_gifQualityPresetCombo);
+    recForm->addRow(TranslationManager::tr("recQualityPresetLabel"), m_gifQualityPresetCombo);
 
     m_recordingFpsSpin = new QSpinBox();
     m_recordingFpsSpin->setRange(1, gifRecordingFpsLimit());
     m_recordingFpsSpin->setSuffix(QStringLiteral(" fps"));
-    m_recordingFpsSpin->setValue(10);
+    m_recordingFpsSpin->setValue(DefaultGifFps);
     m_recordingFpsSpin->setToolTip(TranslationManager::tr("tipGifFps"));
     recForm->addRow(TranslationManager::gifFpsLabel(), m_recordingFpsSpin);
 
-    m_recordingMaxSecSpin = new QSpinBox();
-    m_recordingMaxSecSpin->setRange(0, 600);
-    m_recordingMaxSecSpin->setSuffix(QStringLiteral(" s"));
-    m_recordingMaxSecSpin->setSpecialValueText(TranslationManager::recordingUnlimited());
-    m_recordingMaxSecSpin->setValue(30);
-    m_recordingMaxSecSpin->setToolTip(TranslationManager::tr("tipGifMaxSeconds"));
-    recForm->addRow(TranslationManager::recordingMaxTime(), m_recordingMaxSecSpin);
+    m_gifSizePresetCombo = new QComboBox();
+    for (RecordingQualityPreset preset : selectableRecordingQualityPresets()) {
+        const int side = gifQualityValues(preset).maxSide;
+        m_gifSizePresetCombo->addItem(QStringLiteral("%1 px").arg(side), side);
+    }
+    m_gifSizePresetCombo->setToolTip(TranslationManager::tr("tipGifSizePreset"));
+    recForm->addRow(TranslationManager::tr("recMaxSideLabel"), m_gifSizePresetCombo);
 
     m_recordingLoopCombo = new QComboBox();
     m_recordingLoopCombo->addItem(TranslationManager::recordingLoopInfinite(), 0);
@@ -929,51 +994,90 @@ QWidget* SettingsDialog::createRecordingTab()
     m_recordingLoopCombo->setToolTip(TranslationManager::tr("tipGifLoop"));
     recForm->addRow(TranslationManager::recordingLoop(), m_recordingLoopCombo);
 
-    m_gifSizePresetCombo = new QComboBox();
-    m_gifSizePresetCombo->addItem(TranslationManager::tr("gifSizeSmallest"), 720);
-    m_gifSizePresetCombo->addItem(TranslationManager::tr("gifSizeBalanced"), 1280);
-    m_gifSizePresetCombo->addItem(TranslationManager::tr("gifSizeBest"), 1920);
-    m_gifSizePresetCombo->setToolTip(TranslationManager::tr("tipGifSizePreset"));
-    recForm->addRow(TranslationManager::tr("gifSizePresetLabel"), m_gifSizePresetCombo);
-
-    m_recordingStartDelaySpin = new QSpinBox();
-    m_recordingStartDelaySpin->setRange(0, 10);
-    m_recordingStartDelaySpin->setSuffix(QStringLiteral(" s"));
-    m_recordingStartDelaySpin->setSpecialValueText(TranslationManager::noDelay());
-    m_recordingStartDelaySpin->setToolTip(TranslationManager::tr("tipRecordingStartDelay"));
-    recForm->addRow(TranslationManager::tr("recordingStartDelayLabel"), m_recordingStartDelaySpin);
-
+    m_recordingMaxSecSpin = new QSpinBox();
+    m_recordingMaxSecSpin->setRange(0, 600);
+    m_recordingMaxSecSpin->setSuffix(QStringLiteral(" s"));
+    m_recordingMaxSecSpin->setSpecialValueText(TranslationManager::recordingUnlimited());
+    m_recordingMaxSecSpin->setValue(DefaultGifMaxSeconds);
+    m_recordingMaxSecSpin->setToolTip(TranslationManager::tr("tipGifMaxSeconds"));
+    recForm->addRow(TranslationManager::recordingMaxTime(), m_recordingMaxSecSpin);
     layout->addWidget(recGroup);
 
+    // ── Video ──
     QGroupBox *videoGroup = new QGroupBox(TranslationManager::videoRecordingTitle());
     QFormLayout *videoForm = new QFormLayout(videoGroup);
-
-    m_videoFpsSpin = new QSpinBox();
-    m_videoFpsSpin->setRange(1, videoRecordingFpsLimit());
-    m_videoFpsSpin->setSuffix(QStringLiteral(" fps"));
-    m_videoFpsSpin->setValue(30);
-    m_videoFpsSpin->setToolTip(TranslationManager::tr("tipVideoFps"));
-    videoForm->addRow(TranslationManager::videoFpsLabel(), m_videoFpsSpin);
+    m_videoQualityPresetCombo = new QComboBox();
+    fillPresetCombo(m_videoQualityPresetCombo);
+    videoForm->addRow(TranslationManager::tr("recQualityPresetLabel"), m_videoQualityPresetCombo);
 
     m_videoMaxSecSpin = new QSpinBox();
     m_videoMaxSecSpin->setRange(0, 3600);
     m_videoMaxSecSpin->setSuffix(QStringLiteral(" s"));
     m_videoMaxSecSpin->setSpecialValueText(TranslationManager::recordingUnlimited());
-    m_videoMaxSecSpin->setValue(0);
+    m_videoMaxSecSpin->setValue(DefaultVideoMaxSeconds);
     m_videoMaxSecSpin->setToolTip(TranslationManager::tr("tipVideoMaxSeconds"));
     videoForm->addRow(TranslationManager::recordingMaxTime(), m_videoMaxSecSpin);
 
+    m_videoHardwareEncodingCheck = new QCheckBox(TranslationManager::tr("recHardwareEncoding"));
+    m_videoHardwareEncodingCheck->setToolTip(TranslationManager::tr("tipRecHardwareEncoding"));
+    videoForm->addRow(QString(), m_videoHardwareEncodingCheck);
+
+    QToolButton *advancedToggle = new QToolButton(videoGroup);
+    advancedToggle->setText(TranslationManager::tr("recAdvancedOptions"));
+    advancedToggle->setCheckable(true);
+    advancedToggle->setChecked(false);
+    advancedToggle->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+    advancedToggle->setArrowType(Qt::RightArrow);
+    advancedToggle->setAutoRaise(true);
+    videoForm->addRow(advancedToggle);
+
+    QWidget *advanced = new QWidget(videoGroup);
+    QFormLayout *advancedForm = new QFormLayout(advanced);
+    advancedForm->setContentsMargins(16, 0, 0, 0);
+
     m_videoCrfSpin = new QSpinBox();
-    m_videoCrfSpin->setRange(18, 32);
-    m_videoCrfSpin->setValue(24);
+    m_videoCrfSpin->setRange(MinVideoCrf, MaxVideoCrf);
+    m_videoCrfSpin->setValue(DefaultVideoCrf);
     m_videoCrfSpin->setToolTip(TranslationManager::videoCrfHint());
-    videoForm->addRow(TranslationManager::videoQualityCrf(), m_videoCrfSpin);
+    advancedForm->addRow(TranslationManager::videoQualityCrf(), m_videoCrfSpin);
 
-    m_videoDesktopAudioCheck = new QCheckBox(TranslationManager::audioDesktop());
+    m_videoFpsSpin = new QSpinBox();
+    m_videoFpsSpin->setRange(1, videoRecordingFpsLimit());
+    m_videoFpsSpin->setSuffix(QStringLiteral(" fps"));
+    m_videoFpsSpin->setValue(DefaultVideoFps);
+    m_videoFpsSpin->setToolTip(TranslationManager::tr("tipVideoFps"));
+    advancedForm->addRow(TranslationManager::videoFpsLabel(), m_videoFpsSpin);
+
+    m_videoDesktopAudioCheck = new QCheckBox(TranslationManager::audioSystemLoopback());
     m_videoDesktopAudioCheck->setToolTip(TranslationManager::tr("tipVideoDesktopAudio"));
-    videoForm->addRow(TranslationManager::audioMode(), m_videoDesktopAudioCheck);
+    advancedForm->addRow(TranslationManager::audioMode(), m_videoDesktopAudioCheck);
 
-    QWidget *desktopVolumeRow = new QWidget(videoGroup);
+    m_videoDesktopAudioDeviceCombo = new QComboBox(advanced);
+    m_videoDesktopAudioDeviceCombo->addItem(TranslationManager::audioSystemLoopback(),
+                                            defaultDesktopAudioDevice());
+#ifdef Q_OS_WIN
+    // Loopback sources (Stereo Mix, ...) by DirectShow name, enumerated off
+    // the GUI thread; the list fills in from the cache and after a refresh.
+    requestDshowAudioDevices(ComponentPaths::ffmpegPath(), m_videoDesktopAudioDeviceCombo,
+                             [combo = m_videoDesktopAudioDeviceCombo](const QList<DshowAudioDevice> &devices) {
+        QSignalBlocker blocker(combo);
+        for (const QString &device : dshowDesktopAudioDevices(devices)) {
+            if (combo->findData(device) < 0)
+                combo->addItem(device, device);
+        }
+        if (combo->currentIndex() <= 0) {
+            const QSettings settings("EShot", "EShot");
+            const int saved = combo->findData(
+                settings.value("videoDesktopAudioDevice", defaultDesktopAudioDevice()).toString());
+            if (saved > 0)
+                combo->setCurrentIndex(saved);
+        }
+    });
+#endif
+    auto *desktopDeviceLabel = new QLabel(TranslationManager::audioSource(), advanced);
+    advancedForm->addRow(desktopDeviceLabel, m_videoDesktopAudioDeviceCombo);
+
+    QWidget *desktopVolumeRow = new QWidget(advanced);
     QHBoxLayout *desktopVolumeLayout = new QHBoxLayout(desktopVolumeRow);
     desktopVolumeLayout->setContentsMargins(0, 0, 0, 0);
     desktopVolumeLayout->setSpacing(8);
@@ -990,14 +1094,14 @@ QWidget* SettingsDialog::createRecordingTab()
     connect(m_videoDesktopVolumeSpin, qOverload<int>(&QSpinBox::valueChanged), m_videoDesktopVolumeSlider, &QSlider::setValue);
     desktopVolumeLayout->addWidget(m_videoDesktopVolumeSlider);
     desktopVolumeLayout->addWidget(m_videoDesktopVolumeSpin);
-    auto *desktopVolumeLabel = new QLabel(TranslationManager::tr("desktopVolumeLabel"), videoGroup);
-    videoForm->addRow(desktopVolumeLabel, desktopVolumeRow);
+    auto *desktopVolumeLabel = new QLabel(TranslationManager::tr("desktopVolumeLabel"), advanced);
+    advancedForm->addRow(desktopVolumeLabel, desktopVolumeRow);
 
     m_videoMicrophoneCheck = new QCheckBox(TranslationManager::audioMicrophone());
     m_videoMicrophoneCheck->setToolTip(TranslationManager::tr("tipVideoMicrophone"));
-    videoForm->addRow(QString(), m_videoMicrophoneCheck);
+    advancedForm->addRow(QString(), m_videoMicrophoneCheck);
 
-    m_videoMicrophoneDeviceCombo = new QComboBox(videoGroup);
+    m_videoMicrophoneDeviceCombo = new QComboBox(advanced);
     m_videoMicrophoneDeviceCombo->addItem(TranslationManager::tr("defaultAudioDevice"), QStringLiteral("default"));
 #ifdef Q_OS_WIN
     // DirectShow names (what FFmpeg accepts), enumerated off the GUI thread;
@@ -1022,10 +1126,10 @@ QWidget* SettingsDialog::createRecordingTab()
     }
 #endif
     m_videoMicrophoneDeviceCombo->setToolTip(TranslationManager::tr("tipVideoMicrophoneDevice"));
-    auto *microphoneDeviceLabel = new QLabel(TranslationManager::audioMicrophoneDevice(), videoGroup);
-    videoForm->addRow(microphoneDeviceLabel, m_videoMicrophoneDeviceCombo);
+    auto *microphoneDeviceLabel = new QLabel(TranslationManager::audioSource(), advanced);
+    advancedForm->addRow(microphoneDeviceLabel, m_videoMicrophoneDeviceCombo);
 
-    QWidget *micVolumeRow = new QWidget(videoGroup);
+    QWidget *micVolumeRow = new QWidget(advanced);
     QHBoxLayout *micVolumeLayout = new QHBoxLayout(micVolumeRow);
     micVolumeLayout->setContentsMargins(0, 0, 0, 0);
     micVolumeLayout->setSpacing(8);
@@ -1042,12 +1146,22 @@ QWidget* SettingsDialog::createRecordingTab()
     connect(m_videoMicrophoneVolumeSpin, qOverload<int>(&QSpinBox::valueChanged), m_videoMicrophoneVolumeSlider, &QSlider::setValue);
     micVolumeLayout->addWidget(m_videoMicrophoneVolumeSlider);
     micVolumeLayout->addWidget(m_videoMicrophoneVolumeSpin);
-    auto *microphoneVolumeLabel = new QLabel(TranslationManager::tr("microphoneVolumeLabel"), videoGroup);
-    videoForm->addRow(microphoneVolumeLabel, micVolumeRow);
+    auto *microphoneVolumeLabel = new QLabel(TranslationManager::tr("microphoneVolumeLabel"), advanced);
+    advancedForm->addRow(microphoneVolumeLabel, micVolumeRow);
 
-    auto updateDesktopAudioState = [desktopVolumeLabel, desktopVolumeRow](bool enabled) {
+    videoForm->addRow(advanced);
+    advanced->setVisible(false);
+    connect(advancedToggle, &QToolButton::toggled, this, [advanced, advancedToggle](bool open) {
+        advanced->setVisible(open);
+        advancedToggle->setArrowType(open ? Qt::DownArrow : Qt::RightArrow);
+    });
+
+    auto updateDesktopAudioState = [desktopVolumeLabel, desktopVolumeRow, desktopDeviceLabel, this](bool enabled) {
         desktopVolumeLabel->setEnabled(enabled);
         desktopVolumeRow->setEnabled(enabled);
+        desktopDeviceLabel->setEnabled(enabled);
+        if (m_videoDesktopAudioDeviceCombo)
+            m_videoDesktopAudioDeviceCombo->setEnabled(enabled);
     };
     auto updateMicrophoneState = [microphoneDeviceLabel, microphoneVolumeLabel,
                                   micVolumeRow, this](bool enabled) {
@@ -1061,11 +1175,69 @@ QWidget* SettingsDialog::createRecordingTab()
     connect(m_videoMicrophoneCheck, &QCheckBox::toggled, this, updateMicrophoneState);
     updateDesktopAudioState(m_videoDesktopAudioCheck->isChecked());
     updateMicrophoneState(m_videoMicrophoneCheck->isChecked());
-
     layout->addWidget(videoGroup);
 
+    // Presets write the override fields; edited overrides show "Custom".
+    connect(m_gifQualityPresetCombo, qOverload<int>(&QComboBox::activated), this, [this](int index) {
+        const auto preset = static_cast<RecordingQualityPreset>(m_gifQualityPresetCombo->itemData(index).toInt());
+        if (preset == RecordingQualityPreset::Custom)
+            return;
+        const GifQualityValues values = gifQualityValues(preset);
+        m_recordingFpsSpin->setValue(values.fps);
+        const int sideIndex = m_gifSizePresetCombo->findData(values.maxSide);
+        if (sideIndex >= 0)
+            m_gifSizePresetCombo->setCurrentIndex(sideIndex);
+        syncRecordingQualityPresets();
+    });
+    connect(m_videoQualityPresetCombo, qOverload<int>(&QComboBox::activated), this, [this](int index) {
+        const auto preset = static_cast<RecordingQualityPreset>(m_videoQualityPresetCombo->itemData(index).toInt());
+        if (preset == RecordingQualityPreset::Custom)
+            return;
+        const VideoQualityValues values = videoQualityValues(preset);
+        m_videoCrfSpin->setValue(values.crf);
+        m_videoFpsSpin->setValue(values.fps);
+        syncRecordingQualityPresets();
+    });
+    auto sync = [this]() { syncRecordingQualityPresets(); };
+    connect(m_recordingFpsSpin, qOverload<int>(&QSpinBox::valueChanged), this, sync);
+    connect(m_gifSizePresetCombo, qOverload<int>(&QComboBox::currentIndexChanged), this, sync);
+    connect(m_videoCrfSpin, qOverload<int>(&QSpinBox::valueChanged), this, sync);
+    connect(m_videoFpsSpin, qOverload<int>(&QSpinBox::valueChanged), this, sync);
+
     layout->addStretch();
+    scroll->setWidget(content);
+    outerLayout->addWidget(scroll);
     return tab;
+}
+
+// Shows the preset matching the override fields, adding "Custom" only while
+// they match none.
+void SettingsDialog::syncRecordingQualityPresets()
+{
+    auto show = [](QComboBox *combo, RecordingQualityPreset preset) {
+        if (!combo)
+            return;
+        QSignalBlocker blocker(combo);
+        const int customIndex = combo->findData(static_cast<int>(RecordingQualityPreset::Custom));
+        if (preset == RecordingQualityPreset::Custom && customIndex < 0)
+            combo->addItem(recordingQualityPresetName(RecordingQualityPreset::Custom),
+                           static_cast<int>(RecordingQualityPreset::Custom));
+        else if (preset != RecordingQualityPreset::Custom && customIndex >= 0)
+            combo->removeItem(customIndex);
+        combo->setCurrentIndex(qMax(0, combo->findData(static_cast<int>(preset))));
+    };
+    if (m_recordingFpsSpin && m_gifSizePresetCombo)
+        show(m_gifQualityPresetCombo, gifQualityPresetFor(m_gifSizePresetCombo->currentData().toInt(),
+                                                          m_recordingFpsSpin->value()));
+    if (m_videoCrfSpin && m_videoFpsSpin)
+        show(m_videoQualityPresetCombo, videoQualityPresetFor(m_videoCrfSpin->value(),
+                                                              m_videoFpsSpin->value()));
+}
+
+void SettingsDialog::showRecordingTab()
+{
+    if (m_tabs && m_recordingTab)
+        m_tabs->setCurrentWidget(m_recordingTab);
 }
 
 QWidget* SettingsDialog::createInterfaceTab()
@@ -1958,7 +2130,7 @@ void SettingsDialog::loadSettings()
     if (m_videoPathEdit)
         m_videoPathEdit->setText(m_settings->contains("videoSavePath")
             ? m_settings->value("videoSavePath").toString()
-            : QDir(defPath).filePath(QStringLiteral("Videos")));
+            : ComponentPaths::defaultVideoDirectory());
     m_filenamePatternEdit->setText(m_settings->value("filenamePattern", "Screenshot_%Y-%M-%D_%h-%m-%s").toString());
     onFilenamePatternChanged(m_filenamePatternEdit->text());
 
@@ -2012,10 +2184,12 @@ void SettingsDialog::loadSettings()
     if (m_autoLockSelectionCheck)
         m_autoLockSelectionCheck->setChecked(m_settings->value("autoLockSelection", false).toBool());
 
+    // Moves untouched pre-preset GIF defaults to Balanced (see the policy).
+    loadGifQualityPreset(*m_settings);
     if (m_recordingFpsSpin)
-        m_recordingFpsSpin->setValue(m_settings->value("recordingFps", 10).toInt());
+        m_recordingFpsSpin->setValue(m_settings->value("recordingFps", DefaultGifFps).toInt());
     if (m_recordingMaxSecSpin)
-        m_recordingMaxSecSpin->setValue(m_settings->value("recordingMaxSeconds", 30).toInt());
+        m_recordingMaxSecSpin->setValue(m_settings->value("recordingMaxSeconds", DefaultGifMaxSeconds).toInt());
     if (m_recordingLoopCombo) {
         const int loop = m_settings->value("recordingLoop", 0).toInt();
         int idx = m_recordingLoopCombo->findData(loop);
@@ -2023,25 +2197,44 @@ void SettingsDialog::loadSettings()
         m_recordingLoopCombo->setCurrentIndex(idx);
     }
     if (m_gifSizePresetCombo) {
-        int idx = m_gifSizePresetCombo->findData(m_settings->value("recordingMaxSide", 1280).toInt());
-        if (idx < 0) idx = m_gifSizePresetCombo->findData(1280);
+        const int maxSide = m_settings->value("recordingMaxSide", DefaultGifMaxSide).toInt();
+        int idx = m_gifSizePresetCombo->findData(maxSide);
+        if (idx < 0 && maxSide > 0) {
+            // A value set outside the dialog stays selectable as is.
+            m_gifSizePresetCombo->addItem(QStringLiteral("%1 px").arg(maxSide), maxSide);
+            idx = m_gifSizePresetCombo->count() - 1;
+        }
+        if (idx < 0) idx = m_gifSizePresetCombo->findData(DefaultGifMaxSide);
         if (idx < 0) idx = 0;
         m_gifSizePresetCombo->setCurrentIndex(idx);
     }
     if (m_recordingStartDelaySpin)
         m_recordingStartDelaySpin->setValue(m_settings->value("recordingStartDelaySeconds", 0).toInt());
+    if (m_recordingCopyToClipboardCheck)
+        m_recordingCopyToClipboardCheck->setChecked(m_settings->value("recordingCopyToClipboard", false).toBool());
+    if (m_recordingOpenFolderCheck)
+        m_recordingOpenFolderCheck->setChecked(m_settings->value("notificationOpenFolder", true).toBool());
     if (m_videoFpsSpin)
-        m_videoFpsSpin->setValue(m_settings->value("videoRecordingFps", 30).toInt());
+        m_videoFpsSpin->setValue(m_settings->value("videoRecordingFps", DefaultVideoFps).toInt());
     if (m_videoMaxSecSpin)
-        m_videoMaxSecSpin->setValue(m_settings->value("videoRecordingMaxSeconds", 0).toInt());
+        m_videoMaxSecSpin->setValue(m_settings->value("videoRecordingMaxSeconds", DefaultVideoMaxSeconds).toInt());
     if (m_videoCrfSpin)
-        m_videoCrfSpin->setValue(m_settings->value("videoRecordingCrf", 24).toInt());
+        m_videoCrfSpin->setValue(m_settings->value("videoRecordingCrf", DefaultVideoCrf).toInt());
+    if (m_videoHardwareEncodingCheck)
+        m_videoHardwareEncodingCheck->setChecked(m_settings->value("videoHardwareEncoding", true).toBool());
+    syncRecordingQualityPresets();
     const bool videoDesktopAudio = loadRecordingAudioEnabled(
         *m_settings, RecordingAudioSource::Desktop);
     const bool videoMicrophoneAudio = loadRecordingAudioEnabled(
         *m_settings, RecordingAudioSource::Microphone);
     if (m_videoDesktopAudioCheck)
         m_videoDesktopAudioCheck->setChecked(videoDesktopAudio);
+    if (m_videoDesktopAudioDeviceCombo) {
+        int idx = m_videoDesktopAudioDeviceCombo->findData(
+            m_settings->value("videoDesktopAudioDevice", defaultDesktopAudioDevice()).toString());
+        if (idx < 0) idx = 0;
+        m_videoDesktopAudioDeviceCombo->setCurrentIndex(idx);
+    }
     if (m_videoDesktopVolumeSlider)
         m_videoDesktopVolumeSlider->setValue(m_settings->value("videoDesktopAudioVolume", 80).toInt());
     if (m_videoDesktopVolumeSpin)
@@ -2111,18 +2304,18 @@ void SettingsDialog::loadSettings()
     UINT savedMod  = static_cast<UINT>(m_settings->value("hotkeyModifiers", 0).toUInt());
     UINT savedVKey = static_cast<UINT>(m_settings->value("hotkeyVKey", VK_SNAPSHOT).toUInt());
     m_hotkeyEdit->setKeySequence(win32ToKeySequence(savedMod, savedVKey));
-    if (m_recordingPauseHotkeyEdit)
-        m_recordingPauseHotkeyEdit->setKeySequence(win32ToKeySequence(
-            static_cast<UINT>(m_settings->value("recordingPauseHotkeyModifiers", MOD_CONTROL | MOD_ALT).toUInt()),
-            static_cast<UINT>(m_settings->value("recordingPauseHotkeyVKey", 'P').toUInt())));
-    if (m_recordingStopHotkeyEdit)
-        m_recordingStopHotkeyEdit->setKeySequence(win32ToKeySequence(
-            static_cast<UINT>(m_settings->value("recordingStopHotkeyModifiers", MOD_CONTROL | MOD_ALT).toUInt()),
-            static_cast<UINT>(m_settings->value("recordingStopHotkeyVKey", 'S').toUInt())));
-    if (m_recordingCancelHotkeyEdit)
-        m_recordingCancelHotkeyEdit->setKeySequence(win32ToKeySequence(
-            static_cast<UINT>(m_settings->value("recordingCancelHotkeyModifiers", MOD_CONTROL | MOD_ALT).toUInt()),
-            static_cast<UINT>(m_settings->value("recordingCancelHotkeyVKey", 'X').toUInt())));
+    if (m_recordingPauseHotkeyEdit) {
+        const SettingsHotkeyDefinition hotkey = storedRecordingHotkey(*m_settings, RecordingHotkeyAction::Pause);
+        m_recordingPauseHotkeyEdit->setKeySequence(win32ToKeySequence(hotkey.modifiers, hotkey.virtualKey));
+    }
+    if (m_recordingStopHotkeyEdit) {
+        const SettingsHotkeyDefinition hotkey = storedRecordingHotkey(*m_settings, RecordingHotkeyAction::Stop);
+        m_recordingStopHotkeyEdit->setKeySequence(win32ToKeySequence(hotkey.modifiers, hotkey.virtualKey));
+    }
+    if (m_recordingCancelHotkeyEdit) {
+        const SettingsHotkeyDefinition hotkey = storedRecordingHotkey(*m_settings, RecordingHotkeyAction::Cancel);
+        m_recordingCancelHotkeyEdit->setKeySequence(win32ToKeySequence(hotkey.modifiers, hotkey.virtualKey));
+    }
     if (m_instantCaptureHotkeyEdit)
         m_instantCaptureHotkeyEdit->setKeySequence(win32ToKeySequence(
             static_cast<UINT>(m_settings->value("instantCaptureHotkeyModifiers", 0).toUInt()),
@@ -2391,15 +2584,9 @@ void SettingsDialog::onSave()
         return;
     }
     const bool recordingHotkeysChanged =
-        settingsHotkeyChanged({pauseMod, pauseVKey},
-                              {static_cast<quint32>(m_settings->value("recordingPauseHotkeyModifiers", MOD_CONTROL | MOD_ALT).toUInt()),
-                               static_cast<quint32>(m_settings->value("recordingPauseHotkeyVKey", 'P').toUInt())}) ||
-        settingsHotkeyChanged({stopMod, stopVKey},
-                              {static_cast<quint32>(m_settings->value("recordingStopHotkeyModifiers", MOD_CONTROL | MOD_ALT).toUInt()),
-                               static_cast<quint32>(m_settings->value("recordingStopHotkeyVKey", 'S').toUInt())}) ||
-        settingsHotkeyChanged({cancelMod, cancelVKey},
-                              {static_cast<quint32>(m_settings->value("recordingCancelHotkeyModifiers", MOD_CONTROL | MOD_ALT).toUInt()),
-                               static_cast<quint32>(m_settings->value("recordingCancelHotkeyVKey", 'X').toUInt())});
+        settingsHotkeyChanged({pauseMod, pauseVKey}, storedRecordingHotkey(*m_settings, RecordingHotkeyAction::Pause)) ||
+        settingsHotkeyChanged({stopMod, stopVKey}, storedRecordingHotkey(*m_settings, RecordingHotkeyAction::Stop)) ||
+        settingsHotkeyChanged({cancelMod, cancelVKey}, storedRecordingHotkey(*m_settings, RecordingHotkeyAction::Cancel));
     auto optionalHotkey = [](QKeySequenceEdit *edit, UINT &mod, UINT &vkey) {
         mod = 0;
         vkey = 0;
@@ -2533,14 +2720,14 @@ void SettingsDialog::onSave()
             TranslationManager::errInvalidHotkeyTitle(),
             TranslationManager::errInvalidHotkey() + QStringLiteral("\n\n") + TranslationManager::directCaptureHotkeyMayBeInUse());
         rollBackCapture();
-        if (recordingHotkeysChanged)
+        if (recordingHotkeysChanged) {
+            const SettingsHotkeyDefinition pause = storedRecordingHotkey(*m_settings, RecordingHotkeyAction::Pause);
+            const SettingsHotkeyDefinition stop = storedRecordingHotkey(*m_settings, RecordingHotkeyAction::Stop);
+            const SettingsHotkeyDefinition cancel = storedRecordingHotkey(*m_settings, RecordingHotkeyAction::Cancel);
             HotkeyManager::instance().reRegisterRecordingHotkeys(
-                m_settings->value("recordingPauseHotkeyModifiers", MOD_CONTROL | MOD_ALT).toUInt(),
-                m_settings->value("recordingPauseHotkeyVKey", 'P').toUInt(),
-                m_settings->value("recordingStopHotkeyModifiers", MOD_CONTROL | MOD_ALT).toUInt(),
-                m_settings->value("recordingStopHotkeyVKey", 'S').toUInt(),
-                m_settings->value("recordingCancelHotkeyModifiers", MOD_CONTROL | MOD_ALT).toUInt(),
-                m_settings->value("recordingCancelHotkeyVKey", 'X').toUInt());
+                pause.modifiers, pause.virtualKey, stop.modifiers, stop.virtualKey,
+                cancel.modifiers, cancel.virtualKey);
+        }
         return;
     }
 
@@ -2664,13 +2851,24 @@ void SettingsDialog::onSave()
         m_settings->setValue("videoRecordingMaxSeconds", m_videoMaxSecSpin->value());
     if (m_videoCrfSpin)
         m_settings->setValue("videoRecordingCrf", m_videoCrfSpin->value());
+    if (m_recordingFpsSpin && m_gifSizePresetCombo)
+        m_settings->setValue("gifQualityPreset", recordingQualityPresetKey(gifQualityPresetFor(
+            m_gifSizePresetCombo->currentData().toInt(), m_recordingFpsSpin->value())));
+    if (m_videoCrfSpin && m_videoFpsSpin)
+        m_settings->setValue("videoQualityPreset", recordingQualityPresetKey(videoQualityPresetFor(
+            m_videoCrfSpin->value(), m_videoFpsSpin->value())));
+    if (m_recordingCopyToClipboardCheck)
+        m_settings->setValue("recordingCopyToClipboard", m_recordingCopyToClipboardCheck->isChecked());
+    if (m_videoHardwareEncodingCheck)
+        m_settings->setValue("videoHardwareEncoding", m_videoHardwareEncodingCheck->isChecked());
     const bool desktopAudio = m_videoDesktopAudioCheck && m_videoDesktopAudioCheck->isChecked();
     const bool microphoneAudio = m_videoMicrophoneCheck && m_videoMicrophoneCheck->isChecked();
     m_settings->setValue("videoDesktopAudioEnabled", desktopAudio);
     m_settings->setValue("videoMicrophoneEnabled", microphoneAudio);
     m_settings->setValue("videoDesktopAudioVolume", m_videoDesktopVolumeSpin ? m_videoDesktopVolumeSpin->value() : 80);
     m_settings->setValue("videoMicrophoneVolume", m_videoMicrophoneVolumeSpin ? m_videoMicrophoneVolumeSpin->value() : 80);
-    m_settings->setValue("videoDesktopAudioDevice", defaultDesktopAudioDevice());
+    m_settings->setValue("videoDesktopAudioDevice", m_videoDesktopAudioDeviceCombo
+        ? m_videoDesktopAudioDeviceCombo->currentData().toString() : defaultDesktopAudioDevice());
     m_settings->setValue("videoMicrophoneDevice",
                          m_videoMicrophoneDeviceCombo ? m_videoMicrophoneDeviceCombo->currentData().toString() : QStringLiteral("default"));
     m_settings->setValue("videoAudioMode", desktopAudio && microphoneAudio ? QStringLiteral("both")
@@ -2714,9 +2912,12 @@ void SettingsDialog::onReset()
         // clear() wiped the hotkey config; re-register every group with its
         // defaults so the live keys match what the dialog now shows.
         HotkeyManager::instance().reRegisterCaptureHotkey(0, VK_SNAPSHOT);
+        const SettingsHotkeyDefinition pause = platformDefaultRecordingHotkey(RecordingHotkeyAction::Pause);
+        const SettingsHotkeyDefinition stop = platformDefaultRecordingHotkey(RecordingHotkeyAction::Stop);
+        const SettingsHotkeyDefinition cancel = platformDefaultRecordingHotkey(RecordingHotkeyAction::Cancel);
         HotkeyManager::instance().reRegisterRecordingHotkeys(
-            MOD_CONTROL | MOD_ALT, 'P', MOD_CONTROL | MOD_ALT, 'S',
-            MOD_CONTROL | MOD_ALT, 'X');
+            pause.modifiers, pause.virtualKey, stop.modifiers, stop.virtualKey,
+            cancel.modifiers, cancel.virtualKey);
         HotkeyManager::instance().reRegisterActionHotkeys(
             0, 0, 0, 0, 0, 0,
             defaultWindowCaptureModifiers(), defaultWindowCaptureVirtualKey());
@@ -2832,6 +3033,18 @@ void SettingsDialog::onExportSettings()
         obj["videoRecordingMaxSeconds"] = m_videoMaxSecSpin->value();
     if (m_videoCrfSpin)
         obj["videoRecordingCrf"] = m_videoCrfSpin->value();
+    if (m_recordingFpsSpin && m_gifSizePresetCombo)
+        obj["gifQualityPreset"] = recordingQualityPresetKey(gifQualityPresetFor(
+            m_gifSizePresetCombo->currentData().toInt(), m_recordingFpsSpin->value()));
+    if (m_videoCrfSpin && m_videoFpsSpin)
+        obj["videoQualityPreset"] = recordingQualityPresetKey(videoQualityPresetFor(
+            m_videoCrfSpin->value(), m_videoFpsSpin->value()));
+    if (m_recordingCopyToClipboardCheck)
+        obj["recordingCopyToClipboard"] = m_recordingCopyToClipboardCheck->isChecked();
+    if (m_videoHardwareEncodingCheck)
+        obj["videoHardwareEncoding"] = m_videoHardwareEncodingCheck->isChecked();
+    if (m_videoDesktopAudioDeviceCombo)
+        obj["videoDesktopAudioDevice"] = m_videoDesktopAudioDeviceCombo->currentData().toString();
     const bool desktopAudio = m_videoDesktopAudioCheck && m_videoDesktopAudioCheck->isChecked();
     const bool microphoneAudio = m_videoMicrophoneCheck && m_videoMicrophoneCheck->isChecked();
     obj["videoDesktopAudioEnabled"] = desktopAudio;
@@ -3005,6 +3218,33 @@ void SettingsDialog::onImportSettings()
         m_videoMaxSecSpin->setValue(obj["videoRecordingMaxSeconds"].toInt());
     if (m_videoCrfSpin && obj.contains("videoRecordingCrf"))
         m_videoCrfSpin->setValue(obj["videoRecordingCrf"].toInt());
+    // A preset without its raw values (hand-written file) still applies.
+    if (obj.contains("gifQualityPreset") && !obj.contains("recordingFps") && !obj.contains("recordingMaxSide")) {
+        const RecordingQualityPreset preset = recordingQualityPresetFromKey(obj["gifQualityPreset"].toString());
+        if (preset != RecordingQualityPreset::Custom && m_recordingFpsSpin && m_gifSizePresetCombo) {
+            const GifQualityValues values = gifQualityValues(preset);
+            m_recordingFpsSpin->setValue(values.fps);
+            m_gifSizePresetCombo->setCurrentIndex(qMax(0, m_gifSizePresetCombo->findData(values.maxSide)));
+        }
+    }
+    if (obj.contains("videoQualityPreset") && !obj.contains("videoRecordingCrf") && !obj.contains("videoRecordingFps")) {
+        const RecordingQualityPreset preset = recordingQualityPresetFromKey(obj["videoQualityPreset"].toString());
+        if (preset != RecordingQualityPreset::Custom && m_videoCrfSpin && m_videoFpsSpin) {
+            const VideoQualityValues values = videoQualityValues(preset);
+            m_videoCrfSpin->setValue(values.crf);
+            m_videoFpsSpin->setValue(values.fps);
+        }
+    }
+    syncRecordingQualityPresets();
+    if (m_recordingCopyToClipboardCheck && obj.contains("recordingCopyToClipboard"))
+        m_recordingCopyToClipboardCheck->setChecked(obj["recordingCopyToClipboard"].toBool());
+    if (m_videoHardwareEncodingCheck && obj.contains("videoHardwareEncoding"))
+        m_videoHardwareEncodingCheck->setChecked(obj["videoHardwareEncoding"].toBool());
+    if (m_videoDesktopAudioDeviceCombo && obj.contains("videoDesktopAudioDevice")) {
+        const int idx = m_videoDesktopAudioDeviceCombo->findData(obj["videoDesktopAudioDevice"].toString());
+        if (idx >= 0)
+            m_videoDesktopAudioDeviceCombo->setCurrentIndex(idx);
+    }
     if (m_videoDesktopAudioCheck && obj.contains("videoDesktopAudioEnabled"))
         m_videoDesktopAudioCheck->setChecked(obj["videoDesktopAudioEnabled"].toBool());
     if (m_videoMicrophoneCheck && obj.contains("videoMicrophoneEnabled"))

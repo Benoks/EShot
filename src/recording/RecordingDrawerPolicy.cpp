@@ -1,12 +1,15 @@
 #include "RecordingDrawerPolicy.h"
 
+#include <Qt>
+
 QStringList recordingDrawerFields(RecordingDrawerMode mode)
 {
     switch (mode) {
     case RecordingDrawerMode::Gif:
-        return {"gifFps", "gifDuration", "gifLoop", "startGif"};
+        return {"mode", "quality", "duration", "startDelay", "advancedSettings", "hotkeys", "start"};
     case RecordingDrawerMode::Video:
-        return {"videoFps", "videoQuality", "videoDuration", "desktopAudio", "microphone", "microphoneDevice", "startVideo"};
+        return {"mode", "quality", "duration", "startDelay", "systemAudio", "microphone",
+                "microphoneDevice", "advancedSettings", "hotkeys", "start"};
     case RecordingDrawerMode::None:
         return {};
     }
@@ -36,4 +39,24 @@ OverlayMenuPressAction overlayMenuPressAction(bool recordingOpen,
 bool escapeClosesOverlayMenu(bool recordingOpen, bool quickSettingsOpen)
 {
     return recordingOpen || quickSettingsOpen;
+}
+
+QList<int> recordingDurationChoices()
+{
+    return {0, 15, 30, 60, 300};
+}
+
+QList<int> recordingStartDelayChoices()
+{
+    return {0, 3, 5, 10};
+}
+
+int recordingChoiceIndex(const QList<int> &choices, int value)
+{
+    return choices.indexOf(value);
+}
+
+bool recordingDrawerStartsOnKey(int key, bool drawerOpen)
+{
+    return drawerOpen && (key == Qt::Key_Return || key == Qt::Key_Enter);
 }

@@ -15,19 +15,28 @@ private slots:
     void insidePressDoesNotCloseAnOverlayMenu();
     void pressWithoutMenuKeepsNormalCaptureBehavior();
     void escapeClosesAnOpenOverlayMenuFirst();
+    void durationChoicesCoverCommonLimits();
+    void startDelayChoicesMatchTheDrawer();
+    void customValuesAreNotAChoice();
+    void enterStartsOnlyWhileTheDrawerIsOpen();
 };
 
 void RecordingDrawerPolicyTests::gifShowsOnlyGifEssentials()
 {
-    QCOMPARE(recordingDrawerFields(RecordingDrawerMode::Gif),
-             QStringList({"gifFps", "gifDuration", "gifLoop", "startGif"}));
+    const QStringList fields = recordingDrawerFields(RecordingDrawerMode::Gif);
+    QCOMPARE(fields, QStringList({"mode", "quality", "duration", "startDelay",
+                                  "advancedSettings", "hotkeys", "start"}));
+    // Raw knobs and audio stay out of the drawer.
+    QVERIFY(!fields.contains("systemAudio"));
+    QVERIFY(!fields.contains("fps"));
 }
 
 void RecordingDrawerPolicyTests::videoShowsOnlyVideoEssentials()
 {
     QCOMPARE(recordingDrawerFields(RecordingDrawerMode::Video),
-             QStringList({"videoFps", "videoQuality", "videoDuration",
-                          "desktopAudio", "microphone", "microphoneDevice", "startVideo"}));
+             QStringList({"mode", "quality", "duration", "startDelay",
+                          "systemAudio", "microphone", "microphoneDevice",
+                          "advancedSettings", "hotkeys", "start"}));
 }
 
 void RecordingDrawerPolicyTests::noneShowsNoFields()
@@ -72,6 +81,32 @@ void RecordingDrawerPolicyTests::escapeClosesAnOpenOverlayMenuFirst()
     QVERIFY(escapeClosesOverlayMenu(true, false));
     QVERIFY(escapeClosesOverlayMenu(false, true));
     QVERIFY(!escapeClosesOverlayMenu(false, false));
+}
+
+void RecordingDrawerPolicyTests::durationChoicesCoverCommonLimits()
+{
+    QCOMPARE(recordingDurationChoices(), QList<int>({0, 15, 30, 60, 300}));
+}
+
+void RecordingDrawerPolicyTests::startDelayChoicesMatchTheDrawer()
+{
+    QCOMPARE(recordingStartDelayChoices(), QList<int>({0, 3, 5, 10}));
+}
+
+void RecordingDrawerPolicyTests::customValuesAreNotAChoice()
+{
+    QCOMPARE(recordingChoiceIndex(recordingDurationChoices(), 0), 0);
+    QCOMPARE(recordingChoiceIndex(recordingDurationChoices(), 60), 3);
+    QCOMPARE(recordingChoiceIndex(recordingDurationChoices(), 45), -1);
+    QCOMPARE(recordingChoiceIndex(recordingStartDelayChoices(), 7), -1);
+}
+
+void RecordingDrawerPolicyTests::enterStartsOnlyWhileTheDrawerIsOpen()
+{
+    QVERIFY(recordingDrawerStartsOnKey(Qt::Key_Return, true));
+    QVERIFY(recordingDrawerStartsOnKey(Qt::Key_Enter, true));
+    QVERIFY(!recordingDrawerStartsOnKey(Qt::Key_Return, false));
+    QVERIFY(!recordingDrawerStartsOnKey(Qt::Key_Space, true));
 }
 
 QTEST_MAIN(RecordingDrawerPolicyTests)

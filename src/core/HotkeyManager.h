@@ -40,6 +40,13 @@ public:
     QString recordingPauseShortcutText() const;
     QString recordingStopShortcutText() const;
     QString recordingCancelShortcutText() const;
+    // Pause/stop/cancel recording keys are registered only while a recording
+    // or its start countdown runs (see recordingHotkeysRegisteredOnDemand).
+    // Returns false when a configured key could not be registered; the keys
+    // are then listed by failedHotkeys() until deactivateRecordingHotkeys().
+    bool activateRecordingHotkeys();
+    void deactivateRecordingHotkeys();
+    bool recordingHotkeysActive() const { return m_recordingHotkeysActive; }
     // Configured hotkeys that are not active, e.g. because another app owns
     // the key. Keys rejected by reRegister*() are reported by its return value.
     QList<HotkeyBinding> failedHotkeys() const;
@@ -76,12 +83,13 @@ private:
     QHash<int, QPair<UINT, UINT>> m_failedHotkeys;
     UINT m_captureModifiers = 0;
     UINT m_captureVirtualKey = VK_SNAPSHOT;
-    UINT m_recordingPauseModifiers = MOD_CONTROL | MOD_ALT;
-    UINT m_recordingPauseVirtualKey = 'P';
-    UINT m_recordingStopModifiers = MOD_CONTROL | MOD_ALT;
-    UINT m_recordingStopVirtualKey = 'S';
-    UINT m_recordingCancelModifiers = MOD_CONTROL | MOD_ALT;
-    UINT m_recordingCancelVirtualKey = 'X';
+    UINT m_recordingPauseModifiers = 0;
+    UINT m_recordingPauseVirtualKey = 0;
+    UINT m_recordingStopModifiers = 0;
+    UINT m_recordingStopVirtualKey = 0;
+    UINT m_recordingCancelModifiers = 0;
+    UINT m_recordingCancelVirtualKey = 0;
+    bool m_recordingHotkeysActive = false;
     UINT m_instantCaptureModifiers = 0;
     UINT m_instantCaptureVirtualKey = 0;
     UINT m_gifCaptureModifiers = 0;
@@ -100,6 +108,9 @@ private:
     bool registerPlatformHotkey(int id, UINT modifiers, UINT virtualKey);
     void recordFailure(int id, UINT modifiers, UINT virtualKey);
     void restoreHotkeys(const QList<HotkeyBinding> &previous);
+    QList<HotkeyBinding> recordingHotkeyBindings() const;
+    bool recordingHotkeysOnDemand() const;
+    void releaseIdleRecordingHotkeys();
     void onPortalShortcutsFailed();
     void emitHotkey(int id);
     void refreshPortalShortcuts();

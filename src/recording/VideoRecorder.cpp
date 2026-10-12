@@ -1891,7 +1891,7 @@ QString VideoRecorder::makeDefaultOutputPath() const
     QStringList candidates;
     QString configuredDir = s.contains("videoSavePath")
         ? s.value("videoSavePath").toString().trimmed()
-        : QDir(ComponentPaths::defaultSaveDirectory()).filePath(QStringLiteral("Videos"));
+        : ComponentPaths::defaultVideoDirectory();
     if (configuredDir.isEmpty())
         configuredDir = s.value("savePath").toString().trimmed();
     candidates << (configuredDir.isEmpty() ? ComponentPaths::defaultSaveDirectory() : configuredDir)
