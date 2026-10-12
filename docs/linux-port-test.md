@@ -91,6 +91,7 @@ To create the user-facing AppImage:
 - Wayland: global shortcuts use the xdg-desktop-portal GlobalShortcuts interface when the desktop supports it.
 - OCR: uses system `tesseract` or an app-local `tesseract` folder.
 - Video: uses system `ffmpeg` on Windows/X11; Wayland recording uses xdg-desktop-portal ScreenCast plus GStreamer/PipeWire.
+- Wayland video encoding: a working hardware H.264 encoder is used when one is found (VA-API `vah264enc`/`vah264lpenc`, then NVIDIA `nvh264enc`), otherwise `x264enc`, then `openh264enc`. EShot verifies each hardware encoder once with a short test encode in the background and caches the result until GStreamer or the GPU drivers change. The `videoHardwareEncoding` setting (default `true`) set to `false` always uses the software encoder. GIF recordings always use the software encoder.
 - GIF: uses the built-in frame encoder on Windows/X11; Wayland GIF recording uses xdg-desktop-portal ScreenCast plus GStreamer/PipeWire.
 - Autostart: writes an XDG autostart desktop file under `~/.config/autostart`.
 - Updates: Linux selects the matching AppImage release asset, verifies its GitHub SHA-256 digest, replaces the current AppImage after exit, and restarts EShot.
@@ -103,7 +104,7 @@ To create the user-facing AppImage:
 - `desktop-file-validate` and `appstreamcli validate --no-net` pass for the Linux packaging metadata.
 - `DESTDIR="$(pwd)/linux-root" cmake --install build-linux --prefix /usr` followed by `appstreamcli validate-tree --no-net ./linux-root` passes after install.
 - Runtime dependency check succeeds with `./scripts/linux/check-linux-runtime.sh`.
-- The runtime check reports the ScreenCast portal plus `pipewiresrc`, `pulsesrc`, `x264enc`, `h264parse`, `mp4mux`, `voaacenc`, and `gifenc` as available.
+- The runtime check reports the ScreenCast portal plus the GStreamer recording elements (`pipewiresrc`, `videorate`, `videocrop`, `videoconvert`, `h264parse`, `mp4mux`, `splitmuxsrc`, `pulsesrc`, `audioconvert`, `audioresample`, `volume`, `audiomixer`), `x264enc` or `openh264enc`, and an AAC encoder as available; the optional hardware encoder elements are listed as extras.
 - App starts from `./dist-linux/bin/EShot`.
 - Tray icon appears.
 - Capture opens from tray action.

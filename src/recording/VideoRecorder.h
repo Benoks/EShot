@@ -84,6 +84,7 @@ private:
     void onGstSegmentPlaying();
     void handleGstSegmentEnded(int exitCode, QProcess::ExitStatus status, const QString &launchError);
     void resumePortalRecording();
+    void restartPortalWithSoftwareEncoder();
     QString portalPreflightError(bool includeAudio);
     bool startNextSegment(QString *error);
     void requestEncoderStop();
@@ -170,7 +171,11 @@ private:
     QString m_portalSourcePath;
     PortalCropGeometry m_portalCrop;
     QString m_gstAacEncoder;
+    // Encoder of this recording (kept for every pause/resume segment so the
+    // segments join) and the software fallback found by the preflight.
     QString m_gstH264Encoder = QStringLiteral("x264enc");
+    QString m_gstSoftwareH264Encoder = QStringLiteral("x264enc");
+    bool m_gstEncoderRetried = false;
     bool m_gstHasAudio = false;
     // Portal segment state: launch-to-exit clock, the output read so far
     // and whether gst-launch reported PLAYING.

@@ -306,6 +306,35 @@ QStringList gstH264EncoderArguments(const QString &encoder, int fps, int crf,
     const qint64 pixels = static_cast<qint64>(qMax(1, outputSize.width()))
         * qMax(1, outputSize.height());
     const QString keyframeInterval = QString::number(2 * safeFps);
+    const bool heavy = pixels >= 3840LL * 2160 || safeFps >= 60;
+    if (encoder == QStringLiteral("vah264enc") || encoder == QStringLiteral("vah264lpenc")) {
+        const int qp = hardwareH264QpForCrf(crf);
+        return {
+            encoder,
+            QStringLiteral("rate-control=cqp"),
+            QStringLiteral("qpi=%1").arg(qBound(1, qp - 2, 51)),
+            QStringLiteral("qpp=%1").arg(qp),
+            QStringLiteral("qpb=%1").arg(qBound(1, qp + 2, 51)),
+            QStringLiteral("key-int-max=%1").arg(qMin(2 * safeFps, 1024))
+        };
+    }
+    if (encoder == QStringLiteral("nvh264enc")) {
+        // Constant-quality VBR (no bitrate cap); High profile so every
+        // segment of a paused recording uses the same stream parameters.
+        return {
+            encoder,
+            heavy ? QStringLiteral("preset=p2") : QStringLiteral("preset=p4"),
+            QStringLiteral("tune=high-quality"),
+            QStringLiteral("rc-mode=vbr"),
+            QStringLiteral("const-quality=%1").arg(hardwareH264QpForCrf(crf)),
+            QStringLiteral("bitrate=0"),
+            QStringLiteral("max-bitrate=0"),
+            QStringLiteral("bframes=0"),
+            QStringLiteral("gop-size=%1").arg(keyframeInterval),
+            QStringLiteral("!"),
+            QStringLiteral("video/x-h264,profile=high")
+        };
+    }
     if (encoder == QStringLiteral("openh264enc")) {
         const qint64 bitsPerSecond = lossless
             ? qBound(qint64(4000000), pixels * safeFps, qint64(200000000))
@@ -329,7 +358,6 @@ QStringList gstH264EncoderArguments(const QString &encoder, int fps, int crf,
             QStringLiteral("key-int-max=%1").arg(keyframeInterval)
         };
     }
-    const bool heavy = pixels >= 3840LL * 2160 || safeFps >= 60;
     return {
         encoder,
         heavy ? QStringLiteral("speed-preset=superfast") : QStringLiteral("speed-preset=veryfast"),
@@ -339,6 +367,184 @@ QStringList gstH264EncoderArguments(const QString &encoder, int fps, int crf,
         QStringLiteral("bframes=2"),
         QStringLiteral("key-int-max=%1").arg(keyframeInterval)
     };
+}
+
+QStringList hardwareGstH264Encoders()
+{
+    return {QStringLiteral("vah264enc"), QStringLiteral("vah264lpenc"), QStringLiteral("nvh264enc")};
+}
+
+bool isHardwareGstH264Encoder(const QString &encoder)
+{
+    return hardwareGstH264Encoders().contains(encoder);
+}
+
+QStringList gstH264EncoderHelperElements(const QString &encoder)
+{
+    if (encoder == QStringLiteral("vah264enc") || encoder == QStringLiteral("vah264lpenc"))
+        return {QStringLiteral("vapostproc")};
+    if (encoder == QStringLiteral("nvh264enc"))
+        return {QStringLiteral("cudaupload"), QStringLiteral("cudaconvertscale")};
+    return {};
+}
+
+QStringList installedHardwareGstH264Encoders(const QStringList &availableElements)
+{
+    QStringList installed;
+    for (const QString &encoder : hardwareGstH264Encoders()) {
+        bool complete = catalogHasElement(availableElements, encoder);
+        for (const QString &helper : gstH264EncoderHelperElements(encoder))
+            complete = complete && catalogHasElement(availableElements, helper);
+        if (complete)
+            installed << encoder;
+    }
+    return installed;
+}
+
+QStringList optionalPortalRecordingElements()
+{
+    QStringList elements;
+    for (const QString &encoder : hardwareGstH264Encoders()) {
+        elements << encoder;
+        for (const QString &helper : gstH264EncoderHelperElements(encoder)) {
+            if (!elements.contains(helper))
+                elements << helper;
+        }
+    }
+    return elements;
+}
+
+bool gstH264EncoderSupportsSize(const QString &encoder, const QSize &size)
+{
+    if (!size.isValid())
+        return false;
+    if (encoder == QStringLiteral("vah264enc") || encoder == QStringLiteral("vah264lpenc"))
+        return size.width() >= 128 && size.height() >= 128
+            && size.width() <= 4096 && size.height() <= 4096;
+    if (encoder == QStringLiteral("nvh264enc"))
+        return size.width() >= 160 && size.height() >= 64
+            && size.width() <= 4096 && size.height() <= 4096;
+    return true;
+}
+
+int hardwareH264QpForCrf(int crf)
+{
+    return qBound(18, crf, 32) + 2;
+}
+
+QStringList gstH264EncoderInputArguments(const QString &encoder, int fps, const QSize &outputSize,
+                                         bool needsScale, bool lossless)
+{
+    const int safeFps = qMax(1, fps);
+    const QString geometry = QStringLiteral("width=%1,height=%2,framerate=%3/1")
+        .arg(outputSize.width()).arg(outputSize.height()).arg(safeFps);
+    if (!lossless && (encoder == QStringLiteral("vah264enc") || encoder == QStringLiteral("vah264lpenc"))) {
+        // The GPU converts (and scales) into its own NV12 surfaces.
+        return {QStringLiteral("vapostproc"), QStringLiteral("!"),
+                QStringLiteral("video/x-raw(memory:VAMemory),format=NV12,%1").arg(geometry)};
+    }
+    if (!lossless && encoder == QStringLiteral("nvh264enc")) {
+        return {QStringLiteral("cudaupload"), QStringLiteral("!"),
+                QStringLiteral("cudaconvertscale"), QStringLiteral("!"),
+                QStringLiteral("video/x-raw(memory:CUDAMemory),format=NV12,%1").arg(geometry)};
+    }
+    QStringList args = {QStringLiteral("videoconvert"), QStringLiteral("!")};
+    if (needsScale)
+        args << QStringLiteral("videoscale") << QStringLiteral("!");
+    args << QStringLiteral("video/x-raw,format=%1,%2")
+                .arg(portalEncoderInputFormat(encoder, lossless, outputSize), geometry);
+    return args;
+}
+
+QString selectPortalH264Encoder(const QStringList &workingHardwareEncoders,
+                                const QString &softwareEncoder, bool hardwareEnabled,
+                                bool lossless, const QSize &outputSize)
+{
+    const QString software = softwareEncoder.isEmpty() ? QStringLiteral("x264enc") : softwareEncoder;
+    if (!hardwareEnabled || lossless)
+        return software;
+    for (const QString &encoder : hardwareGstH264Encoders()) {
+        if (workingHardwareEncoders.contains(encoder)
+            && gstH264EncoderSupportsSize(encoder, outputSize))
+            return encoder;
+    }
+    return software;
+}
+
+QStringList gstH264EncoderProbeArguments(const QString &encoder)
+{
+    const QSize size(320, 240);
+    const int fps = 30;
+    // Same input chain and properties as a recording, so an unsupported
+    // property or caps fails here instead of in the user's recording.
+    return QStringList{
+        QStringLiteral("-q"),
+        QStringLiteral("videotestsrc"), QStringLiteral("num-buffers=5"), QStringLiteral("!"),
+        QStringLiteral("video/x-raw,format=BGRx,width=%1,height=%2,framerate=%3/1")
+            .arg(size.width()).arg(size.height()).arg(fps),
+        QStringLiteral("!")}
+        + gstH264EncoderInputArguments(encoder, fps, size, false, false)
+        + QStringList{QStringLiteral("!")}
+        + gstH264EncoderArguments(encoder, fps, 24, size, false)
+        + QStringList{QStringLiteral("!"), QStringLiteral("h264parse"), QStringLiteral("!"),
+                      QStringLiteral("fakesink")};
+}
+
+int gstH264EncoderProbeTimeoutMs()
+{
+    // CUDA and VA initialisation alone take a few seconds on a cold GPU.
+    return 15000;
+}
+
+GstH264ProbeState gstH264ProbeStateForSignature(const GstH264ProbeState &stored,
+                                                const QString &currentSignature)
+{
+    if (stored.signature != currentSignature || currentSignature.isEmpty())
+        return GstH264ProbeState{currentSignature, {}, {}};
+    return stored;
+}
+
+QString nextGstH264EncoderToProbe(const GstH264ProbeState &state)
+{
+    for (const QString &encoder : hardwareGstH264Encoders()) {
+        if (state.working.contains(encoder))
+            return {};
+        if (state.failed.contains(encoder))
+            continue;
+        if (encoder == QStringLiteral("vah264lpenc")
+            && !state.failed.contains(QStringLiteral("vah264enc")))
+            continue;
+        return encoder;
+    }
+    return {};
+}
+
+QString gstH264ProbeSignature(const QString &gstLaunchPath, qint64 gstLaunchMtime,
+                              const QList<qint64> &registryMtimes,
+                              const QString &driverVersions)
+{
+    QStringList parts = {QStringLiteral("v1"), gstLaunchPath, QString::number(gstLaunchMtime)};
+    for (qint64 mtime : registryMtimes)
+        parts << QString::number(mtime);
+    parts << driverVersions.simplified();
+    return parts.join(QLatin1Char('|'));
+}
+
+bool joinPortalSegmentsWithFfmpeg(bool ffmpegAvailable)
+{
+    return ffmpegAvailable;
+}
+
+bool shouldRetryPortalStartWithSoftwareEncoder(const QString &encoder, bool firstPipeline,
+                                               bool keptAnySegment, bool expectedStop,
+                                               bool reachedPlaying, qint64 runMs,
+                                               bool alreadyRetried)
+{
+    // Device or caps errors show up while the pipeline starts or right
+    // after the first frames reach the encoder.
+    const bool earlyFailure = !reachedPlaying || (runMs >= 0 && runMs < 5000);
+    return isHardwareGstH264Encoder(encoder) && firstPipeline && !keptAnySegment
+        && !expectedStop && earlyFailure && !alreadyRetried;
 }
 
 QStringList portalVideoBranchArguments(const PortalVideoPipelineOptions &options)
@@ -370,6 +576,10 @@ QStringList portalVideoBranchArguments(const PortalVideoPipelineOptions &options
          << QStringLiteral("videorate")
          << QStringLiteral("drop-only=true")
          << QStringLiteral("max-rate=%1").arg(fps)
+         // Start the frame grid at the first frame: a late first frame (slow
+         // portal or GPU encoder start) otherwise lets a burst of frames
+         // through at the source rate.
+         << QStringLiteral("skip-to-first=true")
          << QStringLiteral("!")
          << QStringLiteral("videocrop")
          << QStringLiteral("left=%1").arg(crop.left)
@@ -377,15 +587,8 @@ QStringList portalVideoBranchArguments(const PortalVideoPipelineOptions &options
          << QStringLiteral("top=%1").arg(crop.top)
          << QStringLiteral("bottom=%1").arg(crop.bottom)
          << QStringLiteral("!")
-         << QStringLiteral("videoconvert")
-         << QStringLiteral("!");
-    if (crop.needsScale)
-        args << QStringLiteral("videoscale") << QStringLiteral("!");
-    args << QStringLiteral("video/x-raw,format=%1,width=%2,height=%3,framerate=%4/1")
-                .arg(portalEncoderInputFormat(encoder, options.losslessIntermediate, crop.outputSize))
-                .arg(crop.outputSize.width())
-                .arg(crop.outputSize.height())
-                .arg(fps)
+         << gstH264EncoderInputArguments(encoder, fps, crop.outputSize, crop.needsScale,
+                                         options.losslessIntermediate)
          << QStringLiteral("!")
          << gstH264EncoderArguments(encoder, fps, options.crf, crop.outputSize,
                                     options.losslessIntermediate)

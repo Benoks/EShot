@@ -4,6 +4,7 @@
 #include "core/ComponentPaths.h"
 #include "core/LinuxPortalScreenCast.h"
 #include "PortalRecordingSource.h"
+#include "GstH264EncoderProbe.h"
 #include "LinuxRecordingSupport.h"
 #include "RecordingSegments.h"
 #include "RecordingSettingsPolicy.h"
@@ -349,6 +350,12 @@ VideoRecorder::VideoRecorder(QObject *parent)
     const QString ffmpeg = ffmpegPath();
     refreshDshowAudioDevices(ffmpeg, true);
     requestWindowsCaptureProbe(ffmpeg);
+#endif
+#if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
+    // Find working hardware encoders while the user picks the source; the
+    // first recording falls back to software if this is not done in time.
+    if (LinuxPortalScreenCast::isWaylandSession() && GstH264EncoderProbe::hardwareEncodingEnabled())
+        GstH264EncoderProbe::instance()->ensureStarted(gstLaunchPath());
 #endif
 }
 
@@ -1165,8 +1172,10 @@ bool VideoRecorder::startSegmentConcat()
 
     QString program;
     QStringList args;
-    if (m_usesGStreamer) {
-        // Wayland recordings only require GStreamer; FFmpeg may be missing.
+    // Wayland recordings only require GStreamer; FFmpeg may be missing. When
+    // it is installed it joins the parts (see joinPortalSegmentsWithFfmpeg()).
+    const QString concatFfmpeg = m_usesGStreamer ? ffmpegPath() : m_ffmpegPath;
+    if (m_usesGStreamer && !joinPortalSegmentsWithFfmpeg(!concatFfmpeg.isEmpty())) {
         program = m_gstPath;
         args = gstConcatArguments(recordingSegmentPattern(m_segmentDirectory, m_segmentStamp),
                                   target, m_gstHasAudio);
@@ -1179,7 +1188,7 @@ bool VideoRecorder::startSegmentConcat()
         list.write(ffmpegConcatList(m_segmentPaths));
         list.close();
         syncHiddenAttribute(m_concatListPath);
-        program = m_ffmpegPath;
+        program = concatFfmpeg;
         args = ffmpegConcatArguments(m_concatListPath, target);
     }
 
@@ -1508,6 +1517,7 @@ QString VideoRecorder::portalPreflightError(bool includeAudio)
         // gst-inspect-1.0 could not run: keep the previous behaviour and let
         // gst-launch report problems, but an AAC encoder cannot be guessed.
         m_gstH264Encoder = QStringLiteral("x264enc");
+        m_gstSoftwareH264Encoder = m_gstH264Encoder;
         m_gstAacEncoder.clear();
         return withAudio ? QStringLiteral("No GStreamer AAC encoder is installed") : QString();
     }
@@ -1518,7 +1528,10 @@ QString VideoRecorder::portalPreflightError(bool includeAudio)
         invalidateGstElementCache();
         return gstMissingElementsReason(missing);
     }
-    m_gstH264Encoder = preferredGstH264Encoder(elements);
+    // Hardware encoders are optional; the software encoder is the fallback
+    // and the final choice is made in startWaylandPortalRecording().
+    m_gstSoftwareH264Encoder = preferredGstH264Encoder(elements);
+    m_gstH264Encoder = m_gstSoftwareH264Encoder;
     m_gstAacEncoder = withAudio ? preferredGstAacEncoder(elements) : QString();
     return {};
 #else
@@ -1571,6 +1584,20 @@ bool VideoRecorder::startWaylandPortalRecording(const QRect &captureRect)
     m_portalSessionHandle = stream.sessionHandle;
     m_portalSourcePath = pipeWireSourcePath(stream.nodeId, stream.pipewireSerial);
     m_portalCrop = crop;
+    {
+        // Probe results known so far; a probe still running means software.
+        const bool hardwareEnabled = GstH264EncoderProbe::hardwareEncodingEnabled();
+        QStringList workingHardware;
+        if (hardwareEnabled) {
+            GstH264EncoderProbe *probe = GstH264EncoderProbe::instance();
+            probe->ensureStarted(m_gstPath);
+            workingHardware = probe->workingHardwareEncoders();
+        }
+        m_gstH264Encoder = selectPortalH264Encoder(workingHardware, m_gstSoftwareH264Encoder,
+                                                   hardwareEnabled, false, crop.outputSize);
+        m_gstEncoderRetried = false;
+        qInfo() << "VideoRecorder: H.264 encoder" << m_gstH264Encoder << "for" << crop.outputSize;
+    }
     m_usesGStreamer = true;
     m_recording = true;
     m_gstStarting = true;
@@ -1775,6 +1802,18 @@ void VideoRecorder::handleGstSegmentEnded(int exitCode, QProcess::ExitStatus sta
         break;
     }
 
+    if (shouldRetryPortalStartWithSoftwareEncoder(m_gstH264Encoder, m_segmentCount == 1,
+                                                  !m_segmentPaths.isEmpty(), expectedStop,
+                                                  reachedPlaying, runMs, m_gstEncoderRetried)) {
+        qWarning() << "VideoRecorder: hardware encoder" << m_gstH264Encoder
+                   << "failed to start, retrying with" << m_gstSoftwareH264Encoder << failureText;
+        GstH264EncoderProbe::instance()->markFailed(m_gstH264Encoder);
+        m_gstH264Encoder = m_gstSoftwareH264Encoder;
+        m_gstEncoderRetried = true;
+        restartPortalWithSoftwareEncoder();
+        return;
+    }
+
     if (firstSegment && m_segmentPaths.isEmpty()) {
         stopSystemAudioCapture();
         removeRecordingFiles();
@@ -1844,6 +1883,33 @@ void VideoRecorder::resumePortalRecording()
                           .arg(error.isEmpty() ? QStringLiteral("encoder did not start") : error);
         m_stopping = true;
         finishRecording();
+    });
+}
+
+void VideoRecorder::restartPortalWithSoftwareEncoder()
+{
+    // The first pipeline consumed its PipeWire remote; open a new one on the
+    // same portal session and start over with the software encoder.
+    // m_gstStarting is unchanged: if the failed pipeline already reported
+    // PLAYING the countdown keeps running, otherwise the retry starts it.
+    const int generation = m_startGeneration;
+    auto fail = [this](const QString &error) {
+        stopSystemAudioCapture();
+        removeRecordingFiles();
+        cleanupProcess();
+        emit recordingFailed(error.isEmpty() ? QStringLiteral("cannot start gstreamer") : error);
+    };
+    LinuxPortalScreenCast::openPipeWireRemoteAsync(
+        m_portalSessionHandle, this, [this, generation, fail](QSharedPointer<int> fd) {
+        // stop() during the gap already finished (and reported) the recording.
+        if (generation != m_startGeneration || !m_recording || m_canceling || m_stopping)
+            return;
+        QFile::remove(m_outputPath);
+        // The segment count restarts so the retry is the first pipeline again.
+        m_segmentCount = 0;
+        QString error;
+        if (!startGstSegment(fd, m_outputPath, &error))
+            fail(error);
     });
 }
 

@@ -90,6 +90,7 @@ set(SOURCES
     src/recording/GifEncoder.cpp
     src/recording/GifEncodeWorker.cpp
     src/recording/LinuxRecordingSupport.cpp
+    src/recording/GstH264EncoderProbe.cpp
     src/recording/RecordingSettingsPolicy.cpp
     src/recording/RecordingDrawerPolicy.cpp
     src/recording/VideoRecordingCompletionPolicy.cpp
@@ -173,6 +174,7 @@ set(HEADERS
     src/recording/GifEncoder.h
     src/recording/GifEncodeWorker.h
     src/recording/LinuxRecordingSupport.h
+    src/recording/GstH264EncoderProbe.h
     src/recording/RecordingSettingsPolicy.h
     src/recording/RecordingDrawerPolicy.h
     src/recording/VideoRecordingCompletionPolicy.h

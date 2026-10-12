@@ -280,6 +280,7 @@ private slots:
         QVERIFY(rate < crop && crop < convert && convert < encoder);
         QCOMPARE(args.at(rate + 1), QStringLiteral("drop-only=true"));
         QCOMPARE(args.at(rate + 2), QStringLiteral("max-rate=30"));
+        QCOMPARE(args.at(rate + 3), QStringLiteral("skip-to-first=true"));
         QVERIFY(!args.contains(QStringLiteral("videoscale")));
         QVERIFY(args.contains(QStringLiteral("right=%1").arg(1920 - 10 - 642)));
         QVERIFY(args.contains(QStringLiteral("video/x-raw,format=I420,width=642,height=480,framerate=30/1")));
@@ -342,6 +343,214 @@ private slots:
         QCOMPARE(openh264.first(), QStringLiteral("openh264enc"));
         QVERIFY(openh264.contains(QStringLiteral("gop-size=60")));
         QVERIFY(openh264.contains(QStringLiteral("usage-type=screen")));
+    }
+
+    void listsHardwareEncodersInPreferenceOrder()
+    {
+        QCOMPARE(hardwareGstH264Encoders(), (QStringList{QStringLiteral("vah264enc"),
+                                                         QStringLiteral("vah264lpenc"),
+                                                         QStringLiteral("nvh264enc")}));
+        QVERIFY(isHardwareGstH264Encoder(QStringLiteral("nvh264enc")));
+        QVERIFY(!isHardwareGstH264Encoder(QStringLiteral("x264enc")));
+        QVERIFY(!isHardwareGstH264Encoder(QStringLiteral("openh264enc")));
+
+        const QStringList catalog = {
+            QStringLiteral("va:  vah264enc: VA-API H.264 Encoder"),
+            QStringLiteral("nvh264enc"), QStringLiteral("cudaupload"),
+            QStringLiteral("x264enc")};
+        // vah264enc without vapostproc and nvh264enc without cudaconvertscale
+        // cannot be fed.
+        QVERIFY(installedHardwareGstH264Encoders(catalog).isEmpty());
+        QCOMPARE(installedHardwareGstH264Encoders(catalog + QStringList{
+                     QStringLiteral("vapostproc"), QStringLiteral("cudaconvertscale")}),
+                 (QStringList{QStringLiteral("vah264enc"), QStringLiteral("nvh264enc")}));
+
+        const QStringList optional = optionalPortalRecordingElements();
+        QVERIFY(optional.contains(QStringLiteral("vapostproc")));
+        QVERIFY(optional.contains(QStringLiteral("cudaconvertscale")));
+        QCOMPARE(optional.count(QStringLiteral("vapostproc")), 1);
+        QVERIFY(!optional.contains(QStringLiteral("x264enc")));
+    }
+
+    void hardwareEncodersAreOptionalInThePreflight()
+    {
+        const QStringList base = {
+            QStringLiteral("pipewiresrc"), QStringLiteral("videorate"), QStringLiteral("videocrop"),
+            QStringLiteral("videoconvert"), QStringLiteral("h264parse"), QStringLiteral("mp4mux"),
+            QStringLiteral("splitmuxsrc")};
+        // Hardware alone is not enough: the software fallback is required.
+        QCOMPARE(missingPortalRecordingElements(base + QStringList{QStringLiteral("vah264enc"),
+                                                                   QStringLiteral("vapostproc")},
+                                                false, false, true),
+                 QStringList{QStringLiteral("x264enc")});
+        QVERIFY(missingPortalRecordingElements(base + QStringList{QStringLiteral("x264enc")},
+                                               false, false, true).isEmpty());
+    }
+
+    void selectsAWorkingHardwareEncoderForVideoOnly()
+    {
+        const QSize hd(1920, 1080);
+        const QStringList both = {QStringLiteral("nvh264enc"), QStringLiteral("vah264enc")};
+        QCOMPARE(selectPortalH264Encoder(both, QStringLiteral("x264enc"), true, false, hd),
+                 QStringLiteral("vah264enc"));
+        QCOMPARE(selectPortalH264Encoder({QStringLiteral("nvh264enc")}, QStringLiteral("x264enc"),
+                                         true, false, hd),
+                 QStringLiteral("nvh264enc"));
+        // Setting off, GIF intermediate, nothing probed yet, unsupported sizes.
+        QCOMPARE(selectPortalH264Encoder(both, QStringLiteral("x264enc"), false, false, hd),
+                 QStringLiteral("x264enc"));
+        QCOMPARE(selectPortalH264Encoder(both, QStringLiteral("x264enc"), true, true, hd),
+                 QStringLiteral("x264enc"));
+        QCOMPARE(selectPortalH264Encoder({}, QStringLiteral("openh264enc"), true, false, hd),
+                 QStringLiteral("openh264enc"));
+        QCOMPARE(selectPortalH264Encoder({}, QString(), true, false, hd), QStringLiteral("x264enc"));
+        QCOMPARE(selectPortalH264Encoder(both, QStringLiteral("x264enc"), true, false, QSize(100, 300)),
+                 QStringLiteral("x264enc"));
+        QCOMPARE(selectPortalH264Encoder(both, QStringLiteral("x264enc"), true, false, QSize(150, 150)),
+                 QStringLiteral("vah264enc"));
+        QCOMPARE(selectPortalH264Encoder({QStringLiteral("nvh264enc")}, QStringLiteral("x264enc"),
+                                         true, false, QSize(150, 150)),
+                 QStringLiteral("x264enc"));
+        QCOMPARE(selectPortalH264Encoder(both, QStringLiteral("x264enc"), true, false, QSize(5120, 1440)),
+                 QStringLiteral("x264enc"));
+        QVERIFY(gstH264EncoderSupportsSize(QStringLiteral("x264enc"), QSize(5120, 1440)));
+        QVERIFY(gstH264EncoderSupportsSize(QStringLiteral("nvh264enc"), QSize(160, 64)));
+        QVERIFY(!gstH264EncoderSupportsSize(QStringLiteral("vah264enc"), QSize(160, 64)));
+    }
+
+    void buildsTheVaapiBranch()
+    {
+        PortalVideoPipelineOptions options;
+        options.pipewireFd = 7;
+        options.crop = portalCropGeometry(QRect(10, 20, 1279, 719), QRect(), QPoint(0, 0),
+                                          QSize(1920, 1080), QSize(1279, 719));
+        options.fps = 30;
+        options.crf = 24;
+        options.h264Encoder = QStringLiteral("vah264enc");
+        const QStringList args = portalVideoBranchArguments(options);
+        const qsizetype crop = args.indexOf(QStringLiteral("videocrop"));
+        const qsizetype post = args.indexOf(QStringLiteral("vapostproc"));
+        const qsizetype encoder = args.indexOf(QStringLiteral("vah264enc"));
+        QVERIFY(crop > 0 && crop < post && post < encoder);
+        QVERIFY(!args.contains(QStringLiteral("videoconvert")));
+        QVERIFY(args.contains(QStringLiteral(
+            "video/x-raw(memory:VAMemory),format=NV12,width=1280,height=720,framerate=30/1")));
+        QCOMPARE(args.mid(encoder, 6), (QStringList{
+            QStringLiteral("vah264enc"), QStringLiteral("rate-control=cqp"),
+            QStringLiteral("qpi=24"), QStringLiteral("qpp=26"), QStringLiteral("qpb=28"),
+            QStringLiteral("key-int-max=60")}));
+        QCOMPARE(args.last(), QStringLiteral("h264parse"));
+
+        // vapostproc also scales; no CPU videoscale.
+        options.crop = portalCropGeometry(QRect(0, 0, 1920, 1080), QRect(), QPoint(0, 0),
+                                          QSize(1920, 1080), QSize(1280, 720));
+        const QStringList scaled = portalVideoBranchArguments(options);
+        QVERIFY(!scaled.contains(QStringLiteral("videoscale")));
+        QVERIFY(scaled.contains(QStringLiteral(
+            "video/x-raw(memory:VAMemory),format=NV12,width=1280,height=720,framerate=30/1")));
+    }
+
+    void buildsTheNvencBranch()
+    {
+        PortalVideoPipelineOptions options;
+        options.pipewireFd = 7;
+        options.crop = portalCropGeometry(QRect(0, 0, 1920, 1080), QRect(), QPoint(0, 0),
+                                          QSize(1920, 1080), QSize(1920, 1080));
+        options.fps = 60;
+        options.crf = 30;
+        options.h264Encoder = QStringLiteral("nvh264enc");
+        const QStringList args = portalVideoBranchArguments(options);
+        const qsizetype upload = args.indexOf(QStringLiteral("cudaupload"));
+        const qsizetype convert = args.indexOf(QStringLiteral("cudaconvertscale"));
+        const qsizetype encoder = args.indexOf(QStringLiteral("nvh264enc"));
+        QVERIFY(args.indexOf(QStringLiteral("videocrop")) < upload);
+        QVERIFY(upload < convert && convert < encoder);
+        QVERIFY(args.contains(QStringLiteral(
+            "video/x-raw(memory:CUDAMemory),format=NV12,width=1920,height=1080,framerate=60/1")));
+        QVERIFY(args.contains(QStringLiteral("rc-mode=vbr")));
+        QVERIFY(args.contains(QStringLiteral("const-quality=32")));
+        QVERIFY(args.contains(QStringLiteral("gop-size=120")));
+        QVERIFY(args.contains(QStringLiteral("preset=p2")));
+        QVERIFY(args.contains(QStringLiteral("video/x-h264,profile=high")));
+        QCOMPARE(args.last(), QStringLiteral("h264parse"));
+
+        QCOMPARE(hardwareH264QpForCrf(10), 20);
+        QCOMPARE(hardwareH264QpForCrf(24), 26);
+        QCOMPARE(hardwareH264QpForCrf(40), 34);
+    }
+
+    void probesWithTheRecordingChain()
+    {
+        const QStringList va = gstH264EncoderProbeArguments(QStringLiteral("vah264enc"));
+        QCOMPARE(va.first(), QStringLiteral("-q"));
+        QVERIFY(va.contains(QStringLiteral("num-buffers=5")));
+        QVERIFY(va.contains(QStringLiteral("video/x-raw,format=BGRx,width=320,height=240,framerate=30/1")));
+        QVERIFY(va.contains(QStringLiteral("vapostproc")));
+        QVERIFY(va.contains(QStringLiteral("rate-control=cqp")));
+        QCOMPARE(va.mid(va.size() - 3), (QStringList{QStringLiteral("h264parse"), QStringLiteral("!"),
+                                                     QStringLiteral("fakesink")}));
+        const QStringList nv = gstH264EncoderProbeArguments(QStringLiteral("nvh264enc"));
+        QVERIFY(nv.contains(QStringLiteral("cudaupload")));
+        QVERIFY(nv.contains(QStringLiteral("video/x-h264,profile=high")));
+        QVERIFY(gstH264EncoderProbeTimeoutMs() >= 5000);
+    }
+
+    void probesUntilTheFirstWorkingEncoder()
+    {
+        GstH264ProbeState state;
+        QCOMPARE(nextGstH264EncoderToProbe(state), QStringLiteral("vah264enc"));
+        state.working = {QStringLiteral("vah264enc")};
+        // VA-API works: the NVIDIA GPU is never woken for a probe.
+        QVERIFY(nextGstH264EncoderToProbe(state).isEmpty());
+        state.working.clear();
+        state.failed = {QStringLiteral("vah264enc")};
+        QCOMPARE(nextGstH264EncoderToProbe(state), QStringLiteral("vah264lpenc"));
+        state.failed << QStringLiteral("vah264lpenc");
+        QCOMPARE(nextGstH264EncoderToProbe(state), QStringLiteral("nvh264enc"));
+        state.failed << QStringLiteral("nvh264enc");
+        QVERIFY(nextGstH264EncoderToProbe(state).isEmpty());
+        state.failed = {QStringLiteral("vah264enc"), QStringLiteral("vah264lpenc")};
+        state.working = {QStringLiteral("nvh264enc")};
+        QVERIFY(nextGstH264EncoderToProbe(state).isEmpty());
+    }
+
+    void forgetsProbeResultsOfAnotherInstallation()
+    {
+        const QString signature = gstH264ProbeSignature(
+            QStringLiteral("/usr/bin/gst-launch-1.0"), 100, {200, 300}, QStringLiteral("NVRM 580\n"));
+        QVERIFY(signature.contains(QStringLiteral("/usr/bin/gst-launch-1.0")));
+        QVERIFY(signature.contains(QStringLiteral("NVRM 580")));
+        QVERIFY(signature != gstH264ProbeSignature(QStringLiteral("/usr/bin/gst-launch-1.0"), 100,
+                                                   {200, 301}, QStringLiteral("NVRM 580")));
+
+        GstH264ProbeState stored{signature, {QStringLiteral("vah264enc")}, {QStringLiteral("nvh264enc")}};
+        const GstH264ProbeState same = gstH264ProbeStateForSignature(stored, signature);
+        QCOMPARE(same.working, stored.working);
+        QCOMPARE(same.failed, stored.failed);
+        const GstH264ProbeState other = gstH264ProbeStateForSignature(stored, QStringLiteral("new"));
+        QCOMPARE(other.signature, QStringLiteral("new"));
+        QVERIFY(other.working.isEmpty());
+        QVERIFY(other.failed.isEmpty());
+    }
+
+    void retriesAFailedHardwareStartWithSoftware()
+    {
+        const QString va = QStringLiteral("vah264enc");
+        QVERIFY(shouldRetryPortalStartWithSoftwareEncoder(va, true, false, false, false, 300, false));
+        QVERIFY(shouldRetryPortalStartWithSoftwareEncoder(va, true, false, false, true, 2500, false));
+        QVERIFY(!shouldRetryPortalStartWithSoftwareEncoder(va, true, false, false, true, 60000, false));
+        QVERIFY(!shouldRetryPortalStartWithSoftwareEncoder(QStringLiteral("x264enc"),
+                                                           true, false, false, false, 300, false));
+        QVERIFY(!shouldRetryPortalStartWithSoftwareEncoder(va, false, false, false, false, 300, false));
+        QVERIFY(!shouldRetryPortalStartWithSoftwareEncoder(va, true, true, false, false, 300, false));
+        QVERIFY(!shouldRetryPortalStartWithSoftwareEncoder(va, true, false, true, false, 300, false));
+        QVERIFY(!shouldRetryPortalStartWithSoftwareEncoder(va, true, false, false, false, 300, true));
+    }
+
+    void joinsPausedPartsWithFfmpegWhenInstalled()
+    {
+        QVERIFY(joinPortalSegmentsWithFfmpeg(true));
+        QVERIFY(!joinPortalSegmentsWithFfmpeg(false));
     }
 
     void timingHelpersStayInRange()
