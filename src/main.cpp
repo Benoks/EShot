@@ -770,7 +770,7 @@ public slots:
 #ifdef Q_OS_WIN
                                             "__wasapi__"
 #else
-                                            "@DEFAULT_SINK@.monitor"
+                                            "@DEFAULT_MONITOR@"
 #endif
                                             ).toString();
         const bool microphoneAudio = loadRecordingAudioEnabled(s, RecordingAudioSource::Microphone);

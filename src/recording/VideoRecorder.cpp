@@ -40,6 +40,7 @@
 #include <fcntl.h>
 #include <signal.h>
 #include <sys/prctl.h>
+#include <sys/types.h>
 #endif
 
 namespace {
@@ -55,11 +56,17 @@ bool containsDevice(const QStringList &devices, const QString &name)
 
 QStringList platformAudioDevices()
 {
-    QStringList devices;
-    devices << QStringLiteral("default")
-            << QStringLiteral("@DEFAULT_SOURCE@")
-            << QStringLiteral("@DEFAULT_SINK@.monitor");
-    for (const auto &device : discoverLinuxMicrophoneDevices()) devices << device.second;
+    // The first entry is what "default" records. It is left out when pactl
+    // lists no microphone at all, so the missing-microphone warning fires;
+    // without pactl the default source is used unverified.
+    bool discoveryOk = false;
+    const QList<QPair<QString, QString>> microphones = discoverLinuxMicrophoneDevices(&discoveryOk);
+    const LinuxMicrophoneResolution resolved = resolveLinuxMicrophoneDevice(
+        QStringLiteral("default"), microphones, discoveryOk);
+    if (resolved.missing)
+        return {};
+    QStringList devices{resolved.device};
+    for (const auto &device : microphones) devices << device.second;
     devices.removeDuplicates();
     return devices;
 }
@@ -388,8 +395,7 @@ void VideoRecorder::start(const QRect &captureRect, int fps, int maxSeconds, int
         && m_desktopAudioDevice == QStringLiteral("__wasapi__");
 #else
     m_systemAudioLoopback = false;
-    if (m_desktopAudioDevice.isEmpty() || m_desktopAudioDevice == QStringLiteral("__wasapi__"))
-        m_desktopAudioDevice = QStringLiteral("@DEFAULT_SINK@.monitor");
+    m_desktopAudioDevice = linuxDesktopAudioDevice(m_desktopAudioDevice);
 #endif
     m_microphoneEnabled = microphoneEnabled;
     m_microphoneVolume = qBound(0, microphoneVolume, 100);
@@ -829,11 +835,22 @@ void VideoRecorder::requestEncoderStop()
         return;
     m_process->setProperty("eshotStopRequested", true);
 #if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
-    if (m_usesGStreamer && m_process->processId() > 0)
-        QProcess::execute(QStringLiteral("kill"),
-                          {QStringLiteral("-INT"), QString::number(m_process->processId())});
-    else
-        m_process->write("q\n");
+    if (m_usesGStreamer) {
+        // gst-launch only turns SIGINT into EOS; SIGTERM would kill it
+        // before mp4mux writes the last fragment. A process that is not
+        // running yet (or never started) is killed outright.
+        const QPointer<QProcess> process(m_process);
+        if (m_process->processId() > 0 && m_process->state() == QProcess::Running)
+            ::kill(static_cast<pid_t>(m_process->processId()), SIGINT);
+        else
+            m_process->kill();
+        QTimer::singleShot(gstStopGraceMs(activeElapsedMs()), this, [process]() {
+            if (process && process->state() != QProcess::NotRunning)
+                process->kill();
+        });
+        return;
+    }
+    m_process->write("q\n");
 #else
     m_process->write("q\n");
 #endif
@@ -909,7 +926,7 @@ void VideoRecorder::cancel()
 void VideoRecorder::pause()
 {
     // Pausing while the encoder finalizes would corrupt the file.
-    if (!m_recording || m_paused || m_stopping || !m_process)
+    if (!m_recording || m_paused || m_stopping || !m_process || m_starting || m_gstStarting)
         return;
     // The encoder timestamps frames by wall clock, so suspending it would
     // leave the paused time in the file as a frozen frame. Close the segment
@@ -925,6 +942,12 @@ void VideoRecorder::resume()
 {
     if (!m_recording || !m_paused || m_stopping)
         return;
+#if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
+    if (m_usesGStreamer) {
+        resumePortalRecording();
+        return;
+    }
+#endif
     if (m_process) {
         // The previous segment is still being finalized.
         m_resumePending = true;
@@ -947,18 +970,8 @@ void VideoRecorder::resume()
 
 bool VideoRecorder::startNextSegment(QString *error)
 {
+    // Portal (GStreamer) recordings resume through resumePortalRecording().
     const QString path = recordingSegmentPath(m_segmentDirectory, m_segmentStamp, m_segmentCount);
-#if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
-    if (m_usesGStreamer) {
-        const QSharedPointer<int> fd = LinuxPortalScreenCast::openPipeWireRemote(m_portalSessionHandle);
-        if (!fd || *fd < 0) {
-            if (error)
-                *error = QStringLiteral("Wayland PipeWire remote could not be opened");
-            return false;
-        }
-        return startGstSegment(*fd, path, error);
-    }
-#endif
     return startFfmpegSegment(path, error);
 }
 
@@ -967,6 +980,12 @@ void VideoRecorder::onProcessFinished(int exitCode, QProcess::ExitStatus status)
     QProcess *process = qobject_cast<QProcess *>(sender());
     if (!process || process != m_process)
         return;
+#if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
+    if (m_usesGStreamer) {
+        handleGstSegmentEnded(exitCode, status, QString());
+        return;
+    }
+#endif
 
 #ifdef Q_OS_WIN
     readFfmpegOutput(process);
@@ -1369,8 +1388,11 @@ bool VideoRecorder::prepareSource(const QRect &captureRect, const QRect &display
 #if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
     if (isRecording() || !LinuxPortalScreenCast::isWaylandSession())
         return true;
-    if (gstLaunchPath().isEmpty()) {
-        emit recordingFailed(QStringLiteral("gstreamer not found"));
+    // Audio settings are only known in start(); check the video elements
+    // here so a missing encoder is reported before the picker opens.
+    const QString missing = portalPreflightError(false);
+    if (!missing.isEmpty()) {
+        emit recordingFailed(missing);
         return false;
     }
     QString error;
@@ -1393,73 +1415,110 @@ void VideoRecorder::discardPreparedSource()
     m_preparedStream = {};
 }
 
-bool VideoRecorder::startWaylandPortalRecording(const QRect &captureRect)
+QString VideoRecorder::portalPreflightError(bool includeAudio)
 {
 #if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
     const QString gst = gstLaunchPath();
-    if (gst.isEmpty()) {
-        emit recordingFailed(QStringLiteral("gstreamer not found"));
-        return false;
-    }
-    if (!LinuxPortalScreenCast::isAvailable()) {
-        emit recordingFailed(QStringLiteral("Wayland ScreenCast portal is not available"));
-        return false;
-    }
+    if (gst.isEmpty())
+        return QStringLiteral("gstreamer not found");
 
-    QString persistenceId;
-    if (m_displayRect.isValid()) {
-        if (QScreen *screen = QGuiApplication::screenAt(m_displayRect.center()))
-            persistenceId = screen->name();
+    const bool wantDesktopAudio = m_desktopAudioEnabled && m_desktopVolume > 0 && !m_desktopAudioDevice.isEmpty();
+    const bool wantMicrophoneAudio = m_microphoneEnabled && m_microphoneVolume > 0 && !m_microphoneDevice.isEmpty();
+    const bool withAudio = includeAudio && (wantDesktopAudio || wantMicrophoneAudio);
+
+    bool catalogOk = false;
+    const QStringList elements = cachedGstElements(gstInspectPathFor(gst), &catalogOk);
+    if (!catalogOk) {
+        // gst-inspect-1.0 could not run: keep the previous behaviour and let
+        // gst-launch report problems, but an AAC encoder cannot be guessed.
+        m_gstH264Encoder = QStringLiteral("x264enc");
+        m_gstAacEncoder.clear();
+        return withAudio ? QStringLiteral("No GStreamer AAC encoder is installed") : QString();
     }
+    const QStringList missing = missingPortalRecordingElements(
+        elements, withAudio, wantDesktopAudio && wantMicrophoneAudio, true);
+    if (!missing.isEmpty()) {
+        // Check again next time; the user may install the plugins meanwhile.
+        invalidateGstElementCache();
+        return gstMissingElementsReason(missing);
+    }
+    m_gstH264Encoder = preferredGstH264Encoder(elements);
+    m_gstAacEncoder = withAudio ? preferredGstAacEncoder(elements) : QString();
+    return {};
+#else
+    Q_UNUSED(includeAudio);
+    return {};
+#endif
+}
+
+bool VideoRecorder::startWaylandPortalRecording(const QRect &captureRect)
+{
+#if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
+    const bool wantDesktopAudio = m_desktopAudioEnabled && m_desktopVolume > 0 && !m_desktopAudioDevice.isEmpty();
+    const bool wantMicrophoneAudio = m_microphoneEnabled && m_microphoneVolume > 0 && !m_microphoneDevice.isEmpty();
+    m_gstHasAudio = wantDesktopAudio || wantMicrophoneAudio;
+
+    // Report missing GStreamer elements before the source picker opens.
+    QString error = portalPreflightError(true);
+    if (!error.isEmpty()) {
+        discardPreparedSource();
+        emit recordingFailed(error);
+        return false;
+    }
+    m_gstPath = gstLaunchPath();
+
     // A stream picked by prepareSource() already covers the region.
-    LinuxPortalScreenCast::Stream stream = m_preparedStream.isValid()
-        ? std::exchange(m_preparedStream, {})
-        : LinuxPortalScreenCast::selectStream(nullptr, 120000, persistenceId);
-    if (!stream.isValid()) {
-        emit recordingFailed(QStringLiteral("Wayland screen recording permission was not granted"));
-        return false;
-    }
-
-    PortalCropGeometry crop = portalCropGeometry(
-        captureRect, m_displayRect, stream.position, stream.size, captureRect.size());
-    if (!crop.valid && stream.usedRestoreToken) {
-        LinuxPortalScreenCast::closeSession(stream.sessionHandle);
-        LinuxPortalScreenCast::clearRestoreToken(persistenceId);
-        stream = LinuxPortalScreenCast::selectStream(nullptr, 120000, persistenceId);
-        if (stream.isValid()) {
-            crop = portalCropGeometry(
-                captureRect, m_displayRect, stream.position, stream.size, captureRect.size());
+    LinuxPortalScreenCast::Stream stream;
+    if (m_preparedStream.isValid()) {
+        stream = std::exchange(m_preparedStream, {});
+    } else {
+        stream = selectPortalRecordingStream(captureRect, m_displayRect, &error);
+        if (!stream.isValid()) {
+            emit recordingFailed(error);
+            return false;
         }
     }
-    if (!stream.isValid() || !crop.valid) {
+
+    const PortalCropGeometry crop = portalCropGeometry(
+        captureRect, m_displayRect, stream.position, stream.size, captureRect.size());
+    if (!crop.valid) {
         LinuxPortalScreenCast::closeSession(stream.sessionHandle);
         emit recordingFailed(QStringLiteral("Wayland recording source does not contain the selected region"));
         return false;
     }
+    const QSharedPointer<int> remoteFd = stream.pipewireFd;
+    if (!remoteFd || *remoteFd < 0) {
+        LinuxPortalScreenCast::closeSession(stream.sessionHandle);
+        emit recordingFailed(QStringLiteral("Wayland PipeWire remote could not be opened"));
+        return false;
+    }
     m_portalSessionHandle = stream.sessionHandle;
-    m_gstPath = gst;
     m_portalSourcePath = pipeWireSourcePath(stream.nodeId, stream.pipewireSerial);
     m_portalCrop = crop;
-
-    const bool wantDesktopAudio = m_desktopAudioEnabled && m_desktopVolume > 0 && !m_desktopAudioDevice.isEmpty();
-    const bool wantMicrophoneAudio = m_microphoneEnabled && m_microphoneVolume > 0 && !m_microphoneDevice.isEmpty();
-    m_gstHasAudio = wantDesktopAudio || wantMicrophoneAudio;
-    m_gstAacEncoder = m_gstHasAudio ? discoverGstAacEncoder() : QString();
-    if (m_gstHasAudio && m_gstAacEncoder.isEmpty()) {
-        cleanupProcess();
-        emit recordingFailed(QStringLiteral("No GStreamer AAC encoder is installed"));
-        return false;
-    }
-
     m_usesGStreamer = true;
-    QString error;
-    if (!startGstSegment(stream.remoteFd(), m_outputPath, &error)) {
-        cleanupProcess();
-        emit recordingFailed(error.isEmpty() ? QStringLiteral("cannot start gstreamer") : error);
-        return false;
-    }
+    m_recording = true;
+    m_gstStarting = true;
+    m_resuming = false;
 
-    startCountdown();
+    // Stopping the share from the desktop ends the recording and keeps it.
+    m_sessionWatcher = new LinuxPortalSessionWatcher(m_portalSessionHandle, this);
+    connect(m_sessionWatcher, &LinuxPortalSessionWatcher::closed,
+            this, &VideoRecorder::onPortalSessionClosed);
+
+    // The selection overlay or the start countdown has just been hidden;
+    // give the compositor a moment so they do not end up in the first frame.
+    const int generation = m_startGeneration;
+    QTimer::singleShot(250, this, [this, generation, remoteFd]() {
+        if (generation != m_startGeneration || !m_recording || m_canceling || m_stopping)
+            return;
+        QString startError;
+        if (!startGstSegment(remoteFd, m_outputPath, &startError)) {
+            cleanupProcess();
+            removeRecordingFiles();
+            emit recordingFailed(startError.isEmpty() ? QStringLiteral("cannot start gstreamer") : startError);
+        }
+    });
+    // recordingStarted() follows once the pipeline is running.
     return true;
 #else
     Q_UNUSED(captureRect);
@@ -1469,96 +1528,83 @@ bool VideoRecorder::startWaylandPortalRecording(const QRect &captureRect)
 
 QStringList VideoRecorder::gstCaptureArguments(int pipewireFd, const QString &outputPath) const
 {
-    const PortalCropGeometry &crop = m_portalCrop;
-    QStringList args;
-    args << QStringLiteral("-e")
-         << QStringLiteral("mp4mux")
-         << QStringLiteral("name=mux")
-         << QStringLiteral("!")
-         << QStringLiteral("filesink")
-         << QStringLiteral("location=%1").arg(outputPath)
-         << QStringLiteral("pipewiresrc")
-         << QStringLiteral("fd=%1").arg(pipewireFd)
-         << m_portalSourcePath
-         << QStringLiteral("do-timestamp=true")
-         << QStringLiteral("!")
-         << QStringLiteral("queue")
-         << QStringLiteral("!")
-         << QStringLiteral("videoconvert")
-         << QStringLiteral("!")
-         << QStringLiteral("videocrop")
-         << QStringLiteral("left=%1").arg(crop.left)
-         << QStringLiteral("right=%1").arg(crop.right)
-         << QStringLiteral("top=%1").arg(crop.top)
-         << QStringLiteral("bottom=%1").arg(crop.bottom)
-         << QStringLiteral("!")
-         << QStringLiteral("videoscale")
-         << QStringLiteral("!")
-         << QStringLiteral("videorate")
-         << QStringLiteral("!")
-         << QStringLiteral("video/x-raw,width=%1,height=%2,framerate=%3/1")
-                .arg(crop.outputSize.width())
-                .arg(crop.outputSize.height())
-                .arg(m_fps)
-         << QStringLiteral("!")
-         << QStringLiteral("x264enc")
-         << QStringLiteral("speed-preset=veryfast")
-         << QStringLiteral("tune=zerolatency")
-         << QStringLiteral("pass=qual")
-         << QStringLiteral("quantizer=%1").arg(qBound(18, m_crf, 32))
-         << QStringLiteral("!")
-         << QStringLiteral("h264parse")
-         << QStringLiteral("!")
-         << QStringLiteral("queue")
-         << QStringLiteral("!")
-         << QStringLiteral("mux.");
+    PortalVideoPipelineOptions options;
+    options.pipewireFd = pipewireFd;
+    options.sourcePath = m_portalSourcePath;
+    options.crop = m_portalCrop;
+    options.fps = m_fps;
+    options.crf = m_crf;
+    options.h264Encoder = m_gstH264Encoder;
 
     const bool wantDesktopAudio = m_desktopAudioEnabled && m_desktopVolume > 0 && !m_desktopAudioDevice.isEmpty();
     const bool wantMicrophoneAudio = m_microphoneEnabled && m_microphoneVolume > 0 && !m_microphoneDevice.isEmpty();
-    args << waylandRecordingAudioArguments(
-        wantDesktopAudio, m_desktopVolume, m_desktopAudioDevice,
-        wantMicrophoneAudio, m_microphoneVolume, m_microphoneDevice,
-        m_gstAacEncoder);
-    return args;
+    return portalRecordingPipelineArguments(
+        options, outputPath,
+        waylandRecordingAudioArguments(
+            wantDesktopAudio, m_desktopVolume, m_desktopAudioDevice,
+            wantMicrophoneAudio, m_microphoneVolume, m_microphoneDevice,
+            m_gstAacEncoder));
 }
 
-bool VideoRecorder::startGstSegment(int pipewireFd, const QString &outputPath, QString *error)
+bool VideoRecorder::startGstSegment(const QSharedPointer<int> &pipewireFd, const QString &outputPath,
+                                    QString *error)
 {
 #if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
+    if (!pipewireFd || *pipewireFd < 0) {
+        if (error)
+            *error = QStringLiteral("Wayland PipeWire remote could not be opened");
+        return false;
+    }
     QProcess *process = new QProcess(this);
     process->setProgram(m_gstPath);
-    process->setArguments(gstCaptureArguments(pipewireFd, outputPath));
+    process->setArguments(gstCaptureArguments(*pipewireFd, outputPath));
     process->setProcessChannelMode(QProcess::MergedChannels);
+    // English output: the PLAYING marker and ERROR lines are parsed.
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    env.insert(QStringLiteral("LANGUAGE"), QStringLiteral("en"));
+    process->setProcessEnvironment(env);
     stopRecorderWhenParentExits(process);
-    if (!configurePipeWireRemote(process, pipewireFd)) {
+    if (!configurePipeWireRemote(process, *pipewireFd)) {
         process->deleteLater();
         if (error)
             *error = QStringLiteral("Wayland PipeWire remote could not be opened");
         return false;
     }
-    process->start();
-    if (!process->waitForStarted(3000)) {
-        if (error)
-            *error = process->errorString();
-        process->kill();
-        process->deleteLater();
-        return false;
-    }
-    if (process->waitForFinished(700)) {
-        if (error) {
-            const QString reason = QString::fromLocal8Bit(process->readAll()).trimmed();
-            *error = reason.isEmpty() ? QStringLiteral("gstreamer pipeline exited during startup") : reason;
-        }
-        process->deleteLater();
-        QFile::remove(outputPath);
-        return false;
-    }
-    // gst-launch may exit through the SIGINT sent by stop() or pause();
-    // onProcessFinished() judges the file either way.
-    connect(process, &QProcess::finished, this, &VideoRecorder::onProcessFinished);
+
     m_process = process;
     m_segmentPath = outputPath;
+    m_segmentRemoteFd = pipewireFd;
+    m_processLog.clear();
+    m_segmentPlaying = false;
+    m_segmentRunClock.start();
     ++m_segmentCount;
+
+    connect(process, &QProcess::readyRead, this, [this, process]() {
+        if (process != m_process)
+            return;
+        m_processLog += process->readAll();
+        if (!m_segmentPlaying && gstPipelineReachedPlaying(QString::fromLocal8Bit(m_processLog)))
+            onGstSegmentPlaying();
+        if (m_processLog.size() > 64 * 1024)
+            m_processLog = m_processLog.right(32 * 1024);
+    });
+    connect(process, &QProcess::errorOccurred, this, [this, process](QProcess::ProcessError processError) {
+        if (processError == QProcess::FailedToStart && process == m_process)
+            handleGstSegmentEnded(-1, QProcess::CrashExit, process->errorString());
+    });
+    // gst-launch may exit through the SIGINT sent by stop() or pause();
+    // handleGstSegmentEnded() judges the file either way.
+    connect(process, &QProcess::finished, this, &VideoRecorder::onProcessFinished);
+    process->start();
+
+    // Without the PLAYING line (unexpected output) count a pipeline that is
+    // still alive after a few seconds as running.
+    const QPointer<QProcess> guard(process);
+    QTimer::singleShot(3000, this, [this, guard]() {
+        if (guard && guard == m_process && !m_segmentPlaying
+            && guard->state() == QProcess::Running)
+            onGstSegmentPlaying();
+    });
     return true;
 #else
     Q_UNUSED(pipewireFd);
@@ -1566,6 +1612,172 @@ bool VideoRecorder::startGstSegment(int pipewireFd, const QString &outputPath, Q
     Q_UNUSED(error);
     return false;
 #endif
+}
+
+void VideoRecorder::onGstSegmentPlaying()
+{
+    if (m_segmentPlaying)
+        return;
+    m_segmentPlaying = true;
+    // The child inherited the PipeWire remote; our copy is no longer needed.
+    m_segmentRemoteFd.reset();
+    if (m_gstStarting) {
+        // The elapsed clock starts with the first captured frame, not with
+        // the portal dialog or the process launch.
+        m_gstStarting = false;
+        startCountdown();
+        return;
+    }
+    if (m_resuming) {
+        m_resuming = false;
+        m_pausedMs += qMax<qint64>(0, m_elapsed.elapsed() - m_pauseStartedMs);
+        m_pauseStartedMs = 0;
+        m_paused = false;
+        m_audioPaused.store(false);
+        emit pausedChanged(false);
+    }
+}
+
+void VideoRecorder::handleGstSegmentEnded(int exitCode, QProcess::ExitStatus status,
+                                          const QString &launchError)
+{
+    QProcess *process = m_process;
+    if (!process)
+        return;
+    m_processLog += process->readAll();
+    const QString failureText = launchError.isEmpty()
+        ? gstFailureReason(QString::fromLocal8Bit(m_processLog)) : launchError;
+    const qint64 runMs = m_segmentRunClock.isValid() ? m_segmentRunClock.elapsed() : -1;
+    const bool reachedPlaying = m_segmentPlaying;
+    const QString segment = m_segmentPath;
+    disconnect(process, nullptr, this, nullptr);
+    process->deleteLater();
+    m_process = nullptr;
+    m_segmentPath.clear();
+    m_segmentRemoteFd.reset();
+    m_segmentRunClock.invalidate();
+    m_processLog.clear();
+    m_segmentPlaying = false;
+
+    if (m_canceling) {
+        stopSystemAudioCapture();
+        QFile::remove(segment);
+        removeRecordingFiles();
+        cleanupProcess();
+        return;
+    }
+
+    const bool firstSegment = m_gstStarting;
+    const bool resumeSegment = m_resuming;
+    const bool expectedStop = m_stopping || (m_paused && !resumeSegment)
+        || (m_maxSeconds > 0 && activeElapsedMs() / 1000 >= m_maxSeconds);
+    const bool succeeded = videoRecordingProcessSucceeded(true, expectedStop, status, exitCode,
+                                                          QFileInfo(segment).size());
+    const bool startupFailure = !expectedStop
+        && (!reachedPlaying || recordingProcessFailedAtStartup(runMs, expectedStop));
+    const RecordingSegmentDisposition disposition = recordingSegmentDisposition(
+        succeeded, startupFailure, mp4FileLooksPlayable(segment));
+    auto warnEndNotSaved = [this]() {
+        const QString warning = TranslationManager::tr("recWarnEndNotSaved");
+        if (!m_warnings.contains(warning))
+            m_warnings << warning;
+    };
+    switch (disposition) {
+    case RecordingSegmentDisposition::Keep:
+        m_segmentPaths.append(segment);
+        break;
+    case RecordingSegmentDisposition::Salvage:
+        // A crashed or killed encoder still leaves the fragments written so
+        // far; keep them instead of losing the whole span.
+        m_segmentPaths.append(segment);
+        warnEndNotSaved();
+        qWarning() << "VideoRecorder: kept the playable part of an interrupted segment" << segment << failureText;
+        break;
+    case RecordingSegmentDisposition::Drop:
+        QFile::remove(segment);
+        qWarning() << "VideoRecorder: dropped unusable recording segment" << segment << failureText;
+        break;
+    }
+
+    if (firstSegment && m_segmentPaths.isEmpty()) {
+        stopSystemAudioCapture();
+        removeRecordingFiles();
+        cleanupProcess();
+        emit recordingFailed(failureText.isEmpty()
+                                 ? QStringLiteral("gstreamer pipeline exited during startup")
+                                 : failureText);
+        return;
+    }
+
+    if (resumeSegment) {
+        m_resuming = false;
+        if (!expectedStop && disposition == RecordingSegmentDisposition::Drop) {
+            m_warnings << TranslationManager::tr("recWarnResumeFailed")
+                              .arg(failureText.isEmpty() ? QStringLiteral("encoder did not start") : failureText);
+        }
+        m_stopping = true;
+        finishRecording();
+        return;
+    }
+
+    if (m_paused && !m_stopping) {
+        if (m_resumePending) {
+            m_resumePending = false;
+            resume();
+        }
+        return;
+    }
+
+    if (m_segmentPaths.isEmpty()) {
+        stopSystemAudioCapture();
+        removeRecordingFiles();
+        cleanupProcess();
+        emit recordingFailed(failureText.isEmpty()
+                                 ? QStringLiteral("gstreamer exited with code %1").arg(exitCode)
+                                 : failureText);
+        return;
+    }
+    if (disposition == RecordingSegmentDisposition::Drop)
+        warnEndNotSaved();
+    finishRecording();
+}
+
+void VideoRecorder::resumePortalRecording()
+{
+    if (m_resuming)
+        return;
+    if (m_process) {
+        // The previous segment is still being finalized.
+        m_resumePending = true;
+        return;
+    }
+    m_resuming = true;
+    // The pause ends when the new segment runs (see onGstSegmentPlaying()),
+    // so the elapsed time matches the saved video.
+    const int generation = m_startGeneration;
+    const QString path = recordingSegmentPath(m_segmentDirectory, m_segmentStamp, m_segmentCount);
+    LinuxPortalScreenCast::openPipeWireRemoteAsync(
+        m_portalSessionHandle, this, [this, generation, path](QSharedPointer<int> fd) {
+        if (generation != m_startGeneration || !m_resuming || m_stopping || !m_recording)
+            return;
+        QString error;
+        if (startGstSegment(fd, path, &error))
+            return;
+        m_resuming = false;
+        m_warnings << TranslationManager::tr("recWarnResumeFailed")
+                          .arg(error.isEmpty() ? QStringLiteral("encoder did not start") : error);
+        m_stopping = true;
+        finishRecording();
+    });
+}
+
+void VideoRecorder::onPortalSessionClosed()
+{
+    if (!m_recording || m_stopping)
+        return;
+    qInfo() << "VideoRecorder: screen sharing was stopped from the desktop; saving the recording";
+    m_warnings << TranslationManager::tr("recWarnSharingStopped");
+    stop();
 }
 
 QString VideoRecorder::ffmpegPath() const
@@ -1635,6 +1847,16 @@ qint64 VideoRecorder::activeElapsedMs() const
 
 void VideoRecorder::cleanupProcess()
 {
+    // Invalidates pending deferred starts and resume callbacks.
+    ++m_startGeneration;
+    m_gstStarting = false;
+    m_resuming = false;
+    if (m_sessionWatcher) {
+        // Our own Close below must not look like the user stopping the share.
+        m_sessionWatcher->disconnect(this);
+        m_sessionWatcher->deleteLater();
+        m_sessionWatcher = nullptr;
+    }
     if (!m_portalSessionHandle.isEmpty()) {
         LinuxPortalScreenCast::closeSession(m_portalSessionHandle);
         m_portalSessionHandle.clear();

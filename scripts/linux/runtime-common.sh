@@ -220,10 +220,17 @@ eshot_runtime_ready() {
     command -v "${command_name}" >/dev/null 2>&1 || return 1
   done
 
+  # Keep in sync with missingPortalRecordingElements() in
+  # src/recording/LinuxRecordingSupport.cpp.
   local plugin
-  for plugin in pipewiresrc pulsesrc x264enc h264parse mp4mux; do
+  for plugin in pipewiresrc videorate videocrop videoconvert h264parse mp4mux \
+                splitmuxsrc pulsesrc audioconvert audioresample volume audiomixer; do
     gst-inspect-1.0 "${plugin}" >/dev/null 2>&1 || return 1
   done
+  if ! gst-inspect-1.0 x264enc >/dev/null 2>&1 \
+     && ! gst-inspect-1.0 openh264enc >/dev/null 2>&1; then
+    return 1
+  fi
   if ! gst-inspect-1.0 fdkaacenc >/dev/null 2>&1 \
      && ! gst-inspect-1.0 avenc_aac >/dev/null 2>&1 \
      && ! gst-inspect-1.0 faac >/dev/null 2>&1 \

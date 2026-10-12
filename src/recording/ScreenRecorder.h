@@ -8,6 +8,7 @@
 #include <QRect>
 #include <QImage>
 #include <QProcess>
+#include <QSharedPointer>
 #include <QSize>
 #include <QString>
 #include <QStringList>
@@ -62,6 +63,7 @@ private slots:
     void captureFrame();
     void onPortalProcessFinished(int exitCode, QProcess::ExitStatus status);
     void onPortalConversionFinished(int exitCode, QProcess::ExitStatus status);
+    void onPortalSessionClosed();
 
 private:
     enum class ConversionStage { Concat, Palette, Encode };
@@ -83,8 +85,13 @@ private:
     void cleanupPortalConversion();
     void closePortalSession();
     QStringList portalCaptureArguments(int pipewireFd, const QString &outputPath) const;
-    bool startPortalSegment(int pipewireFd, const QString &outputPath, QString *error);
-    bool startNextPortalSegment(QString *error);
+    bool startPortalSegment(const QSharedPointer<int> &pipewireFd, const QString &outputPath,
+                            QString *error);
+    void onPortalSegmentPlaying();
+    void handlePortalSegmentEnded(int exitCode, QProcess::ExitStatus status, const QString &launchError);
+    void resumePortalRecording();
+    void startPortalCountdown();
+    QString portalPreflightError();
     void requestPortalProcessStop();
     void finishPortalRecording();
     void startPortalConversionStage(ConversionStage stage, const QStringList &arguments, int timeoutMs);
@@ -132,6 +139,19 @@ private:
     int m_loopCount = 0;
     QString m_portalSessionHandle;
     LinuxPortalScreenCast::Stream m_preparedStream;
+    QString m_gstH264Encoder = QStringLiteral("x264enc");
+    // GIF size when the recorded region is larger than the GIF limit.
+    QSize m_portalGifScale;
+    // Portal segment state: launch-to-exit clock, the output read so far
+    // and whether gst-launch reported PLAYING.
+    QElapsedTimer m_portalSegmentClock;
+    QByteArray m_portalProcessLog;
+    QSharedPointer<int> m_portalRemoteFd;
+    bool m_portalSegmentPlaying = false;
+    bool m_portalStarting = false;
+    bool m_portalResuming = false;
+    int m_portalGeneration = 0;
+    LinuxPortalSessionWatcher *m_sessionWatcher = nullptr;
     RecordingTimeline m_timeline;
     QElapsedTimer m_monotonicClock;
 

@@ -51,7 +51,7 @@ private slots:
             QStringLiteral("/g/in.mp4"), QStringLiteral("/g/.p.png"), 12);
         QCOMPARE(palette.at(palette.indexOf(QStringLiteral("-i")) + 1), QStringLiteral("/g/in.mp4"));
         QCOMPARE(palette.at(palette.indexOf(QStringLiteral("-vf")) + 1),
-                 QStringLiteral("fps=12,palettegen=max_colors=256"));
+                 QStringLiteral("fps=12,palettegen=max_colors=256:stats_mode=diff"));
         QCOMPARE(palette.last(), QStringLiteral("/g/.p.png"));
 
         const QStringList encode = portalGifEncodeArguments(
@@ -59,10 +59,24 @@ private slots:
         QCOMPARE(encode.count(QStringLiteral("-i")), 2);
         QVERIFY(encode.contains(QStringLiteral("/g/.p.png")));
         QCOMPARE(encode.at(encode.indexOf(QStringLiteral("-lavfi")) + 1),
-                 QStringLiteral("fps=12[x];[x][1:v]paletteuse=dither=sierra2_4a"));
+                 QStringLiteral("fps=12[x];[x][1:v]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle"));
         QCOMPARE(encode.at(encode.indexOf(QStringLiteral("-loop")) + 1), QStringLiteral("0"));
         QCOMPARE(encode.last(), QStringLiteral("/g/out.gif"));
         QVERIFY(!encode.join(QLatin1Char(' ')).contains(QStringLiteral("split")));
+    }
+
+    void gifConversionScalesWithLanczosInBothPasses()
+    {
+        const QStringList palette = portalGifPaletteArguments(
+            QStringLiteral("/g/in.mp4"), QStringLiteral("/g/.p.png"), 10, QSize(1280, 720));
+        QCOMPARE(palette.at(palette.indexOf(QStringLiteral("-vf")) + 1),
+                 QStringLiteral("fps=10,scale=1280:720:flags=lanczos,palettegen=max_colors=256:stats_mode=diff"));
+        const QStringList encode = portalGifEncodeArguments(
+            QStringLiteral("/g/in.mp4"), QStringLiteral("/g/.p.png"), 10, 0,
+            QStringLiteral("/g/out.gif"), QSize(1280, 720));
+        QCOMPARE(encode.at(encode.indexOf(QStringLiteral("-lavfi")) + 1),
+                 QStringLiteral("fps=10,scale=1280:720:flags=lanczos[x];"
+                                "[x][1:v]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle"));
     }
 
     void failedGifKeepsVideoNextToIt()

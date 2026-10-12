@@ -8,6 +8,8 @@
 #include <QVariantMap>
 #include <QList>
 
+#include <functional>
+
 class QWidget;
 class QEventLoop;
 
@@ -24,6 +26,8 @@ public:
         QVariantMap properties;
         QString sessionHandle;
         bool usedRestoreToken = false;
+        // The user closed the source picker (portal response 1); not an error.
+        bool canceled = false;
         bool isValid() const { return nodeId != 0 || pipewireSerial != 0; }
         int remoteFd() const { return pipewireFd ? *pipewireFd : -1; }
     };
@@ -43,6 +47,10 @@ public:
     // A fresh PipeWire connection to an already started session, e.g. for
     // the encoder that continues a paused recording.
     static QSharedPointer<int> openPipeWireRemote(const QString &sessionHandle);
+    // Same without blocking the caller; `done` runs on `context`'s thread
+    // with a null pointer on failure, and not at all once context is gone.
+    static void openPipeWireRemoteAsync(const QString &sessionHandle, QObject *context,
+                                        const std::function<void(QSharedPointer<int>)> &done);
 
 private slots:
     void onPortalResponse(uint response, const QVariantMap &results);
@@ -62,6 +70,26 @@ private:
     bool m_finished = false;
     bool m_selectInProgress = false;
     QEventLoop *m_loop = nullptr;
+};
+
+// Emits closed() when the portal ends a screen cast session on its own, e.g.
+// when the user stops sharing from the desktop's sharing indicator.
+class LinuxPortalSessionWatcher : public QObject {
+    Q_OBJECT
+
+public:
+    explicit LinuxPortalSessionWatcher(const QString &sessionHandle, QObject *parent = nullptr);
+    ~LinuxPortalSessionWatcher() override;
+
+signals:
+    void closed();
+
+private slots:
+    void onSessionClosed(const QVariantMap &details);
+
+private:
+    QString m_sessionHandle;
+    bool m_connected = false;
 };
 
 #endif

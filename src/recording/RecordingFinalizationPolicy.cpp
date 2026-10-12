@@ -44,15 +44,28 @@ int portalGifPassTimeoutMs(qint64 recordedMs)
     return scaledTimeoutMs(recordedMs, 60000, 4000);
 }
 
-QStringList portalGifPaletteArguments(const QString &inputPath, const QString &palettePath,
-                                      int fps)
+namespace {
+QString gifFrameFilter(int fps, const QSize &scaleTo)
 {
+    QString filter = QStringLiteral("fps=%1").arg(qMax(1, fps));
+    if (scaleTo.isValid())
+        filter += QStringLiteral(",scale=%1:%2:flags=lanczos").arg(scaleTo.width()).arg(scaleTo.height());
+    return filter;
+}
+}
+
+QStringList portalGifPaletteArguments(const QString &inputPath, const QString &palettePath,
+                                      int fps, const QSize &scaleTo)
+{
+    // stats_mode=diff builds the palette from what changes between frames,
+    // so moving content is not starved of colours by a static background.
     return {
         QStringLiteral("-y"), QStringLiteral("-hide_banner"),
         QStringLiteral("-loglevel"), QStringLiteral("error"),
         QStringLiteral("-i"), inputPath,
         QStringLiteral("-vf"),
-        QStringLiteral("fps=%1,palettegen=max_colors=256").arg(qMax(1, fps)),
+        gifFrameFilter(fps, scaleTo)
+            + QStringLiteral(",palettegen=max_colors=256:stats_mode=diff"),
         QStringLiteral("-frames:v"), QStringLiteral("1"),
         QStringLiteral("-update"), QStringLiteral("1"),
         palettePath
@@ -60,15 +73,19 @@ QStringList portalGifPaletteArguments(const QString &inputPath, const QString &p
 }
 
 QStringList portalGifEncodeArguments(const QString &inputPath, const QString &palettePath,
-                                     int fps, int loopCount, const QString &outputPath)
+                                     int fps, int loopCount, const QString &outputPath,
+                                     const QSize &scaleTo)
 {
+    // Ordered (bayer) dither stays put between frames and diff_mode only
+    // re-dithers the changed rectangle: no crawling noise, smaller files.
     return {
         QStringLiteral("-y"), QStringLiteral("-hide_banner"),
         QStringLiteral("-loglevel"), QStringLiteral("error"),
         QStringLiteral("-i"), inputPath,
         QStringLiteral("-i"), palettePath,
         QStringLiteral("-lavfi"),
-        QStringLiteral("fps=%1[x];[x][1:v]paletteuse=dither=sierra2_4a").arg(qMax(1, fps)),
+        gifFrameFilter(fps, scaleTo)
+            + QStringLiteral("[x];[x][1:v]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle"),
         QStringLiteral("-loop"), QString::number(loopCount),
         outputPath
     };

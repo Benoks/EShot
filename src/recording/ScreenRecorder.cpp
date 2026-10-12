@@ -23,6 +23,7 @@
 #include <QFile>
 #include <QDebug>
 #include <QPointer>
+#include <QProcessEnvironment>
 #include <QSharedPointer>
 #include <QStringList>
 #include <cstring>
@@ -36,6 +37,7 @@
 #include <fcntl.h>
 #include <csignal>
 #include <sys/prctl.h>
+#include <sys/types.h>
 #endif
 
 namespace {
@@ -266,7 +268,7 @@ void ScreenRecorder::pause()
     // gst-launch timestamps frames by wall clock, so suspending it would keep
     // the paused time as a frozen frame. Close the current segment instead;
     // resume() starts the next one.
-    if (m_portalRecording && (!m_process || m_stopping))
+    if (m_portalRecording && (!m_process || m_stopping || m_portalStarting))
         return;
     if (!m_timeline.pause(nowMs()))
         return;
@@ -287,18 +289,8 @@ void ScreenRecorder::resume()
     if (m_portalRecording) {
         if (m_stopping)
             return;
-        if (m_process) {
-            // The previous segment is still being finalized.
-            m_portalResumePending = true;
-            return;
-        }
-        QString error;
-        if (!startNextPortalSegment(&error)) {
-            qWarning() << "ScreenRecorder: cannot resume portal recording:" << error;
-            m_stopping = true;
-            finishPortalRecording();
-            return;
-        }
+        resumePortalRecording();
+        return;
     }
     if (!m_timeline.resume(nowMs()))
         return;
@@ -358,21 +350,64 @@ void ScreenRecorder::onPortalProcessFinished(int exitCode, QProcess::ExitStatus 
     QProcess *process = qobject_cast<QProcess *>(sender());
     if (!process || process != m_process)
         return;
-    const QString stderrText = gstFailureReason(QString::fromLocal8Bit(process->readAll()));
+    handlePortalSegmentEnded(exitCode, status, QString());
+}
+
+void ScreenRecorder::handlePortalSegmentEnded(int exitCode, QProcess::ExitStatus status,
+                                              const QString &launchError)
+{
+    QProcess *process = m_process;
+    if (!process)
+        return;
+    m_portalProcessLog += process->readAll();
+    const QString stderrText = launchError.isEmpty()
+        ? gstFailureReason(QString::fromLocal8Bit(m_portalProcessLog)) : launchError;
+    const qint64 runMs = m_portalSegmentClock.isValid() ? m_portalSegmentClock.elapsed() : -1;
+    const bool reachedPlaying = m_portalSegmentPlaying;
     const QString segment = m_portalSegmentPath;
-    m_process->deleteLater();
+    disconnect(process, nullptr, this, nullptr);
+    process->deleteLater();
     m_process = nullptr;
     m_portalSegmentPath.clear();
+    m_portalRemoteFd.reset();
+    m_portalSegmentClock.invalidate();
+    m_portalProcessLog.clear();
+    m_portalSegmentPlaying = false;
 
+    const bool firstSegment = m_portalStarting;
+    const bool resumeSegment = m_portalResuming;
     // gst-launch may report the SIGINT sent by stop() or pause() as its exit
     // status once the MP4 is finalized; the conversion validates it either way.
-    const bool ok = videoRecordingProcessSucceeded(true, m_stopping || m_paused, status, exitCode,
-                                                   QFileInfo(segment).size());
-    if (ok) {
+    const bool expectedStop = m_stopping || (m_paused && !resumeSegment);
+    const bool succeeded = videoRecordingProcessSucceeded(true, expectedStop, status, exitCode,
+                                                          QFileInfo(segment).size());
+    const bool startupFailure = !expectedStop
+        && (!reachedPlaying || recordingProcessFailedAtStartup(runMs, expectedStop));
+    const RecordingSegmentDisposition disposition = recordingSegmentDisposition(
+        succeeded, startupFailure, mp4FileLooksPlayable(segment));
+    switch (disposition) {
+    case RecordingSegmentDisposition::Keep:
         m_portalSegments.append(segment);
-    } else {
+        break;
+    case RecordingSegmentDisposition::Salvage:
+        // A crashed or killed encoder still leaves the fragments written so
+        // far; convert those instead of losing the recording.
+        m_portalSegments.append(segment);
+        qWarning() << "ScreenRecorder: kept the playable part of an interrupted segment" << segment << stderrText;
+        break;
+    case RecordingSegmentDisposition::Drop:
         QFile::remove(segment);
         qWarning() << "ScreenRecorder: dropped unusable recording segment" << segment << stderrText;
+        break;
+    }
+
+    if (resumeSegment) {
+        m_portalResuming = false;
+        if (!expectedStop)
+            qWarning() << "ScreenRecorder: cannot resume portal recording:" << stderrText;
+        m_stopping = true;
+        finishPortalRecording();
+        return;
     }
 
     if (m_paused && !m_stopping) {
@@ -393,7 +428,12 @@ void ScreenRecorder::onPortalProcessFinished(int exitCode, QProcess::ExitStatus 
         if (QFileInfo::exists(m_outputPath))
             QFile::remove(m_outputPath);
         removePortalIntermediates();
-        emit recordingFailed(stderrText.isEmpty() ? QStringLiteral("gstreamer exited with code %1").arg(exitCode) : stderrText);
+        QString reason = stderrText;
+        if (reason.isEmpty()) {
+            reason = firstSegment ? QStringLiteral("gstreamer pipeline exited during startup")
+                                  : QStringLiteral("gstreamer exited with code %1").arg(exitCode);
+        }
+        emit recordingFailed(reason);
         return;
     }
     finishPortalRecording();
@@ -453,7 +493,8 @@ void ScreenRecorder::onPortalConversionFinished(int exitCode, QProcess::ExitStat
         QFile::remove(m_portalConcatListPath);
         m_portalConcatListPath.clear();
         startPortalConversionStage(ConversionStage::Palette,
-                                   portalGifPaletteArguments(m_portalVideoPath, m_portalPalettePath, m_fps),
+                                   portalGifPaletteArguments(m_portalVideoPath, m_portalPalettePath, m_fps,
+                                                             m_portalGifScale),
                                    portalGifPassTimeoutMs(m_recordedMs));
         return;
     case ConversionStage::Palette:
@@ -463,7 +504,8 @@ void ScreenRecorder::onPortalConversionFinished(int exitCode, QProcess::ExitStat
         }
         startPortalConversionStage(ConversionStage::Encode,
                                    portalGifEncodeArguments(m_portalVideoPath, m_portalPalettePath,
-                                                            m_fps, m_loopCount, m_outputPath),
+                                                            m_fps, m_loopCount, m_outputPath,
+                                                            m_portalGifScale),
                                    portalGifPassTimeoutMs(m_recordedMs));
         return;
     case ConversionStage::Encode:
@@ -619,8 +661,9 @@ bool ScreenRecorder::prepareSource(const QRect &captureRect, const QRect &displa
 #if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
     if (isRecording() || !LinuxPortalScreenCast::isWaylandSession())
         return true;
-    if (gstLaunchPath().isEmpty()) {
-        emit recordingFailed(QStringLiteral("gstreamer not found"));
+    const QString missing = portalPreflightError();
+    if (!missing.isEmpty()) {
+        emit recordingFailed(missing);
         return false;
     }
     QString error;
@@ -643,72 +686,119 @@ void ScreenRecorder::discardPreparedSource()
     m_preparedStream = {};
 }
 
-bool ScreenRecorder::startWaylandPortalRecording(const QRect &captureRect)
+QString ScreenRecorder::portalPreflightError()
 {
 #if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
     const QString gst = gstLaunchPath();
-    if (gst.isEmpty()) {
-        emit recordingFailed(QStringLiteral("gstreamer not found"));
-        return false;
-    }
+    if (gst.isEmpty())
+        return QStringLiteral("gstreamer not found");
     // The portal recording is converted to GIF with ffmpeg afterwards; check
     // now instead of discarding the finished recording.
-    if (ffmpegPath().isEmpty()) {
-        emit recordingFailed(QStringLiteral("ffmpeg not found"));
-        return false;
+    if (ffmpegPath().isEmpty())
+        return QStringLiteral("ffmpeg not found");
+    bool catalogOk = false;
+    const QStringList elements = cachedGstElements(gstInspectPathFor(gst), &catalogOk);
+    if (!catalogOk) {
+        // gst-inspect-1.0 could not run; let gst-launch report problems.
+        m_gstH264Encoder = QStringLiteral("x264enc");
+        return {};
     }
-    if (!LinuxPortalScreenCast::isAvailable()) {
-        emit recordingFailed(QStringLiteral("Wayland ScreenCast portal is not available"));
-        return false;
+    // Paused parts are joined with ffmpeg, so splitmuxsrc is not needed.
+    const QStringList missing = missingPortalRecordingElements(elements, false, false, false);
+    if (!missing.isEmpty()) {
+        invalidateGstElementCache();
+        return gstMissingElementsReason(missing);
     }
+    m_gstH264Encoder = preferredGstH264Encoder(elements);
+    return {};
+#else
+    return {};
+#endif
+}
 
-    QString persistenceId;
-    if (m_displayRect.isValid()) {
-        if (QScreen *screen = QGuiApplication::screenAt(m_displayRect.center()))
-            persistenceId = screen->name();
+bool ScreenRecorder::startWaylandPortalRecording(const QRect &captureRect)
+{
+#if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
+    // Report missing tools before the source picker opens.
+    QString error = portalPreflightError();
+    if (!error.isEmpty()) {
+        discardPreparedSource();
+        emit recordingFailed(error);
+        return false;
     }
+    m_gstPath = gstLaunchPath();
+
     // A stream picked by prepareSource() already covers the region.
-    LinuxPortalScreenCast::Stream stream = m_preparedStream.isValid()
-        ? std::exchange(m_preparedStream, {})
-        : LinuxPortalScreenCast::selectStream(nullptr, 120000, persistenceId);
-    if (!stream.isValid()) {
-        emit recordingFailed(QStringLiteral("Wayland screen recording permission was not granted"));
-        return false;
-    }
-
-    PortalCropGeometry crop = portalCropGeometry(
-        captureRect, m_displayRect, stream.position, stream.size, m_outputSize);
-    if (!crop.valid && stream.usedRestoreToken) {
-        LinuxPortalScreenCast::closeSession(stream.sessionHandle);
-        LinuxPortalScreenCast::clearRestoreToken(persistenceId);
-        stream = LinuxPortalScreenCast::selectStream(nullptr, 120000, persistenceId);
-        if (stream.isValid()) {
-            crop = portalCropGeometry(
-                captureRect, m_displayRect, stream.position, stream.size, m_outputSize);
+    LinuxPortalScreenCast::Stream stream;
+    if (m_preparedStream.isValid()) {
+        stream = std::exchange(m_preparedStream, {});
+    } else {
+        stream = selectPortalRecordingStream(captureRect, m_displayRect, &error);
+        if (!stream.isValid()) {
+            emit recordingFailed(error);
+            return false;
         }
     }
-    if (!stream.isValid() || !crop.valid) {
+
+    // Record the region at full size; the GIF conversion scales it down
+    // with lanczos once, instead of a lower quality scale per frame here.
+    const PortalCropGeometry crop = portalCropGeometry(
+        captureRect, m_displayRect, stream.position, stream.size, captureRect.size());
+    if (!crop.valid) {
         LinuxPortalScreenCast::closeSession(stream.sessionHandle);
         emit recordingFailed(QStringLiteral("Wayland recording source does not contain the selected region"));
         return false;
     }
+    const QSharedPointer<int> remoteFd = stream.pipewireFd;
+    if (!remoteFd || *remoteFd < 0) {
+        LinuxPortalScreenCast::closeSession(stream.sessionHandle);
+        emit recordingFailed(QStringLiteral("Wayland PipeWire remote could not be opened"));
+        return false;
+    }
     m_portalSessionHandle = stream.sessionHandle;
-    m_gstPath = gst;
     m_portalSourcePath = pipeWireSourcePath(stream.nodeId, stream.pipewireSerial);
     m_portalCrop = crop;
+    const QSize gifSize = boundedOutputSize(crop.cropSize);
+    m_portalGifScale = gifSize != crop.cropSize ? gifSize : QSize();
+    m_timeline = RecordingTimeline();
     m_portalVideoPath = m_outputPath + QStringLiteral(".portal.mp4");
     m_portalSegmentStamp = QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd_hhmmss_zzz"));
     QFile::remove(m_portalVideoPath);
 
-    QString error;
-    if (!startPortalSegment(stream.remoteFd(), m_portalVideoPath, &error)) {
-        closePortalSession();
-        emit recordingFailed(error.isEmpty() ? QStringLiteral("cannot start gstreamer") : error);
-        return false;
-    }
-
     m_recording = true;
     m_portalRecording = true;
+    m_portalStarting = true;
+    m_portalResuming = false;
+
+    // Stopping the share from the desktop ends the recording and keeps it.
+    m_sessionWatcher = new LinuxPortalSessionWatcher(m_portalSessionHandle, this);
+    connect(m_sessionWatcher, &LinuxPortalSessionWatcher::closed,
+            this, &ScreenRecorder::onPortalSessionClosed);
+
+    // The selection overlay or the start countdown has just been hidden;
+    // give the compositor a moment so they do not end up in the first frame.
+    const int generation = m_portalGeneration;
+    QTimer::singleShot(250, this, [this, generation, remoteFd]() {
+        if (generation != m_portalGeneration || !m_recording || m_stopping)
+            return;
+        QString startError;
+        if (!startPortalSegment(remoteFd, m_portalVideoPath, &startError)) {
+            m_recording = false;
+            m_portalRecording = false;
+            closePortalSession();
+            emit recordingFailed(startError.isEmpty() ? QStringLiteral("cannot start gstreamer") : startError);
+        }
+    });
+    // recordingStarted() follows once the pipeline is running.
+    return true;
+#else
+    Q_UNUSED(captureRect);
+    return false;
+#endif
+}
+
+void ScreenRecorder::startPortalCountdown()
+{
     m_timeline.start(nowMs());
     emit recordingStarted();
     emit remainingTimeChanged(m_maxSeconds > 0 ? m_maxSeconds : -1);
@@ -727,93 +817,83 @@ bool ScreenRecorder::startWaylandPortalRecording(const QRect &captureRect)
             stop();
     });
     m_countdownTimer->start();
-    return true;
-#else
-    Q_UNUSED(captureRect);
-    return false;
-#endif
 }
 
 QStringList ScreenRecorder::portalCaptureArguments(int pipewireFd, const QString &outputPath) const
 {
-    const PortalCropGeometry &crop = m_portalCrop;
-    QStringList args;
-    args << QStringLiteral("-e")
-         << QStringLiteral("pipewiresrc")
-         << QStringLiteral("fd=%1").arg(pipewireFd)
-         << m_portalSourcePath
-         << QStringLiteral("do-timestamp=true")
-         << QStringLiteral("!")
-         << QStringLiteral("queue")
-         << QStringLiteral("!")
-         << QStringLiteral("videoconvert")
-         << QStringLiteral("!")
-         << QStringLiteral("videocrop")
-         << QStringLiteral("left=%1").arg(crop.left)
-         << QStringLiteral("right=%1").arg(crop.right)
-         << QStringLiteral("top=%1").arg(crop.top)
-         << QStringLiteral("bottom=%1").arg(crop.bottom)
-         << QStringLiteral("!")
-         << QStringLiteral("videoscale")
-         << QStringLiteral("!")
-         << QStringLiteral("videorate")
-         << QStringLiteral("!")
-         << QStringLiteral("video/x-raw,width=%1,height=%2,framerate=%3/1")
-                .arg(crop.outputSize.width())
-                .arg(crop.outputSize.height())
-                .arg(m_fps)
-         << QStringLiteral("!")
-         << QStringLiteral("x264enc")
-         << QStringLiteral("speed-preset=veryfast")
-         << QStringLiteral("tune=zerolatency")
-         << QStringLiteral("!")
-         << QStringLiteral("h264parse")
-         << QStringLiteral("!")
-         << QStringLiteral("mp4mux")
-         << QStringLiteral("!")
-         << QStringLiteral("filesink")
-         << QStringLiteral("location=%1").arg(outputPath);
-    return args;
+    PortalVideoPipelineOptions options;
+    options.pipewireFd = pipewireFd;
+    options.sourcePath = m_portalSourcePath;
+    options.crop = m_portalCrop;
+    options.fps = m_fps;
+    options.h264Encoder = m_gstH264Encoder;
+    // The GIF is built from this file: keep it (near) lossless so the
+    // palette pass sees the real colours instead of encoder artefacts.
+    options.losslessIntermediate = true;
+    return portalRecordingPipelineArguments(options, outputPath);
 }
 
-bool ScreenRecorder::startPortalSegment(int pipewireFd, const QString &outputPath, QString *error)
+bool ScreenRecorder::startPortalSegment(const QSharedPointer<int> &pipewireFd, const QString &outputPath,
+                                        QString *error)
 {
 #if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
+    if (!pipewireFd || *pipewireFd < 0) {
+        if (error)
+            *error = QStringLiteral("Wayland PipeWire remote could not be opened");
+        return false;
+    }
     QProcess *process = new QProcess(this);
     process->setProgram(m_gstPath);
-    process->setArguments(portalCaptureArguments(pipewireFd, outputPath));
+    process->setArguments(portalCaptureArguments(*pipewireFd, outputPath));
     process->setProcessChannelMode(QProcess::MergedChannels);
+    // English output: the PLAYING marker and ERROR lines are parsed.
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    env.insert(QStringLiteral("LANGUAGE"), QStringLiteral("en"));
+    process->setProcessEnvironment(env);
     // Do not leave gst-launch encoding if EShot crashes or is killed.
     process->setChildProcessModifier([]() { prctl(PR_SET_PDEATHSIG, SIGINT); });
-    if (!configurePipeWireRemote(process, pipewireFd)) {
+    if (!configurePipeWireRemote(process, *pipewireFd)) {
         process->deleteLater();
         if (error)
             *error = QStringLiteral("Wayland PipeWire remote could not be opened");
         return false;
     }
-    process->start();
-    if (!process->waitForStarted(3000)) {
-        if (error)
-            *error = process->errorString();
-        process->kill();
-        process->deleteLater();
-        return false;
-    }
-    if (process->waitForFinished(700)) {
-        if (error) {
-            const QString reason = QString::fromLocal8Bit(process->readAll()).trimmed();
-            *error = reason.isEmpty() ? QStringLiteral("gstreamer pipeline exited during startup") : reason;
-        }
-        process->deleteLater();
-        QFile::remove(outputPath);
-        return false;
-    }
+
+    m_process = process;
+    m_portalSegmentPath = outputPath;
+    m_portalRemoteFd = pipewireFd;
+    m_portalProcessLog.clear();
+    m_portalSegmentPlaying = false;
+    m_portalSegmentClock.start();
+    ++m_portalSegmentCount;
+
+    connect(process, &QProcess::readyRead, this, [this, process]() {
+        if (process != m_process)
+            return;
+        m_portalProcessLog += process->readAll();
+        if (!m_portalSegmentPlaying
+            && gstPipelineReachedPlaying(QString::fromLocal8Bit(m_portalProcessLog)))
+            onPortalSegmentPlaying();
+        if (m_portalProcessLog.size() > 64 * 1024)
+            m_portalProcessLog = m_portalProcessLog.right(32 * 1024);
+    });
+    connect(process, &QProcess::errorOccurred, this, [this, process](QProcess::ProcessError processError) {
+        if (processError == QProcess::FailedToStart && process == m_process)
+            handlePortalSegmentEnded(-1, QProcess::CrashExit, process->errorString());
+    });
     // Crashes (including the SIGINT exit after stop()/pause()) are handled
     // in onPortalProcessFinished().
     connect(process, &QProcess::finished, this, &ScreenRecorder::onPortalProcessFinished);
-    m_process = process;
-    m_portalSegmentPath = outputPath;
-    ++m_portalSegmentCount;
+    process->start();
+
+    // Without the PLAYING line (unexpected output) count a pipeline that is
+    // still alive after a few seconds as running.
+    const QPointer<QProcess> guard(process);
+    QTimer::singleShot(3000, this, [this, guard]() {
+        if (guard && guard == m_process && !m_portalSegmentPlaying
+            && guard->state() == QProcess::Running)
+            onPortalSegmentPlaying();
+    });
     return true;
 #else
     Q_UNUSED(pipewireFd)
@@ -823,17 +903,56 @@ bool ScreenRecorder::startPortalSegment(int pipewireFd, const QString &outputPat
 #endif
 }
 
-bool ScreenRecorder::startNextPortalSegment(QString *error)
+void ScreenRecorder::onPortalSegmentPlaying()
 {
-    const QSharedPointer<int> fd = LinuxPortalScreenCast::openPipeWireRemote(m_portalSessionHandle);
-    if (!fd || *fd < 0) {
-        if (error)
-            *error = QStringLiteral("Wayland PipeWire remote could not be opened");
-        return false;
+    if (m_portalSegmentPlaying)
+        return;
+    m_portalSegmentPlaying = true;
+    m_portalRemoteFd.reset();
+    if (m_portalStarting) {
+        // The elapsed clock starts with the first captured frame.
+        m_portalStarting = false;
+        startPortalCountdown();
+        return;
     }
+    if (m_portalResuming) {
+        // The pause ends when the new segment runs, so the elapsed time
+        // matches the recorded video.
+        m_portalResuming = false;
+        if (!m_timeline.resume(nowMs()))
+            return;
+        m_paused = false;
+        if (m_countdownTimer)
+            m_countdownTimer->start();
+        emit pausedChanged(false);
+    }
+}
+
+void ScreenRecorder::resumePortalRecording()
+{
+    if (m_portalResuming)
+        return;
+    if (m_process) {
+        // The previous segment is still being finalized.
+        m_portalResumePending = true;
+        return;
+    }
+    m_portalResuming = true;
+    const int generation = m_portalGeneration;
     const QString path = recordingSegmentPath(QFileInfo(m_outputPath).absolutePath(),
                                               m_portalSegmentStamp, m_portalSegmentCount);
-    return startPortalSegment(*fd, path, error);
+    LinuxPortalScreenCast::openPipeWireRemoteAsync(
+        m_portalSessionHandle, this, [this, generation, path](QSharedPointer<int> fd) {
+        if (generation != m_portalGeneration || !m_portalResuming || m_stopping || !m_recording)
+            return;
+        QString error;
+        if (startPortalSegment(fd, path, &error))
+            return;
+        qWarning() << "ScreenRecorder: cannot resume portal recording:" << error;
+        m_portalResuming = false;
+        m_stopping = true;
+        finishPortalRecording();
+    });
 }
 
 void ScreenRecorder::requestPortalProcessStop()
@@ -842,24 +961,31 @@ void ScreenRecorder::requestPortalProcessStop()
     if (!m_process || m_process->property("eshotStopRequested").toBool())
         return;
     m_process->setProperty("eshotStopRequested", true);
+    const QPointer<QProcess> process(m_process);
 #if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
-    if (m_process->processId() > 0)
-        QProcess::execute(QStringLiteral("kill"),
-                          {QStringLiteral("-INT"), QString::number(m_process->processId())});
+    // gst-launch only turns SIGINT into EOS; SIGTERM would kill it before
+    // mp4mux writes the last fragment.
+    if (m_process->processId() > 0 && m_process->state() == QProcess::Running)
+        ::kill(static_cast<pid_t>(m_process->processId()), SIGINT);
+    else
+        m_process->kill();
 #else
     m_process->write("q\n");
 #endif
-    // Track the process itself so these deferred timers can never tear down
-    // the gst process of a later segment or recording.
-    const QPointer<QProcess> process(m_process);
-    QTimer::singleShot(2500, this, [process]() {
-        if (process && process->state() != QProcess::NotRunning)
-            process->terminate();
-    });
-    QTimer::singleShot(5000, this, [process]() {
+    // Track the process itself so the deferred kill can never tear down the
+    // gst process of a later segment or recording.
+    QTimer::singleShot(gstStopGraceMs(m_timeline.activeElapsedMs(nowMs())), this, [process]() {
         if (process && process->state() != QProcess::NotRunning)
             process->kill();
     });
+}
+
+void ScreenRecorder::onPortalSessionClosed()
+{
+    if (!m_recording || !m_portalRecording || m_stopping)
+        return;
+    qInfo() << "ScreenRecorder: screen sharing was stopped from the desktop; saving the recording";
+    stop();
 }
 
 qint64 ScreenRecorder::nowMs() const
@@ -890,6 +1016,16 @@ QString ScreenRecorder::ffmpegPath() const
 
 void ScreenRecorder::closePortalSession()
 {
+    // Invalidates pending deferred starts and resume callbacks.
+    ++m_portalGeneration;
+    m_portalStarting = false;
+    m_portalResuming = false;
+    if (m_sessionWatcher) {
+        // Our own Close below must not look like the user stopping the share.
+        m_sessionWatcher->disconnect(this);
+        m_sessionWatcher->deleteLater();
+        m_sessionWatcher = nullptr;
+    }
     if (m_portalSessionHandle.isEmpty()) return;
     LinuxPortalScreenCast::closeSession(m_portalSessionHandle);
     m_portalSessionHandle.clear();
@@ -912,7 +1048,8 @@ bool ScreenRecorder::startPortalVideoToGifConversion()
             m_portalSegments = {m_portalVideoPath};
         }
         startPortalConversionStage(ConversionStage::Palette,
-                                   portalGifPaletteArguments(m_portalVideoPath, m_portalPalettePath, m_fps),
+                                   portalGifPaletteArguments(m_portalVideoPath, m_portalPalettePath, m_fps,
+                                                             m_portalGifScale),
                                    portalGifPassTimeoutMs(m_recordedMs));
         return true;
     }

@@ -18,6 +18,8 @@
 #include <QDBusInterface>
 #include <QDBusMessage>
 #include <QDBusObjectPath>
+#include <QDBusPendingCallWatcher>
+#include <QDBusPendingReply>
 #include <QDBusReply>
 #include <QDBusUnixFileDescriptor>
 #include <QUuid>
@@ -157,11 +159,21 @@ LinuxPortalScreenCast::Stream LinuxPortalScreenCast::select(
     sessionOptions.insert(QStringLiteral("handle_token"), createToken);
     sessionOptions.insert(QStringLiteral("session_handle_token"), token + QStringLiteral("_session"));
 
+    // Response 1 means the user dismissed the dialog; report it apart from
+    // failures so recorders can end silently.
+    auto rejected = [this](const QString &sessionHandle) {
+        if (!sessionHandle.isEmpty())
+            closeSession(sessionHandle);
+        Stream stream;
+        stream.canceled = m_response == 1;
+        return stream;
+    };
+
     if (!callAndWait(screencast, QStringLiteral("CreateSession"),
                      {sessionOptions}, createToken, timeoutMs))
         return {};
     if (m_response != 0)
-        return {};
+        return rejected(QString());
 
     const QString sessionHandle = objectPathString(m_results.value(QStringLiteral("session_handle")));
     if (sessionHandle.isEmpty())
@@ -180,10 +192,8 @@ LinuxPortalScreenCast::Stream LinuxPortalScreenCast::select(
         closeSession(sessionHandle);
         return {};
     }
-    if (m_response != 0) {
-        closeSession(sessionHandle);
-        return {};
-    }
+    if (m_response != 0)
+        return rejected(sessionHandle);
 
     const bool isX11 = QGuiApplication::platformName().contains(QStringLiteral("xcb"), Qt::CaseInsensitive);
     const QString parentWindow = isX11 && parent && parent->windowHandle()
@@ -199,10 +209,8 @@ LinuxPortalScreenCast::Stream LinuxPortalScreenCast::select(
         closeSession(sessionHandle);
         return {};
     }
-    if (m_response != 0) {
-        closeSession(sessionHandle);
-        return {};
-    }
+    if (m_response != 0)
+        return rejected(sessionHandle);
 
     const QString refreshedRestoreToken = m_results.value(
         QStringLiteral("restore_token")).toString().trimmed();
@@ -359,6 +367,49 @@ QSharedPointer<int> LinuxPortalScreenCast::openPipeWireRemote(const QString &ses
 #endif
 }
 
+void LinuxPortalScreenCast::openPipeWireRemoteAsync(
+    const QString &sessionHandle, QObject *context,
+    const std::function<void(QSharedPointer<int>)> &done)
+{
+    if (!context)
+        return;
+#if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
+    if (!sessionHandle.isEmpty()) {
+        QDBusMessage call = QDBusMessage::createMethodCall(
+            QStringLiteral("org.freedesktop.portal.Desktop"),
+            QStringLiteral("/org/freedesktop/portal/desktop"),
+            QStringLiteral("org.freedesktop.portal.ScreenCast"),
+            QStringLiteral("OpenPipeWireRemote"));
+        call << QVariant::fromValue(QDBusObjectPath(sessionHandle)) << QVariantMap();
+        auto *watcher = new QDBusPendingCallWatcher(
+            QDBusConnection::sessionBus().asyncCall(call, 10000), context);
+        QObject::connect(watcher, &QDBusPendingCallWatcher::finished, context,
+                         [watcher, done](QDBusPendingCallWatcher *) {
+            watcher->deleteLater();
+            const QDBusPendingReply<QDBusUnixFileDescriptor> reply = *watcher;
+            QSharedPointer<int> fd;
+            if (!reply.isError() && reply.value().isValid()) {
+                const int duplicated = fcntl(reply.value().fileDescriptor(), F_DUPFD_CLOEXEC, 3);
+                if (duplicated >= 0) {
+                    fd = QSharedPointer<int>(new int(duplicated), [](int *value) {
+                        if (value) {
+                            if (*value >= 0)
+                                close(*value);
+                            delete value;
+                        }
+                    });
+                }
+            }
+            done(fd);
+        });
+        return;
+    }
+#else
+    Q_UNUSED(sessionHandle);
+#endif
+    QMetaObject::invokeMethod(context, [done]() { done({}); }, Qt::QueuedConnection);
+}
+
 QString LinuxPortalScreenCast::objectPathString(const QVariant &value) const
 {
 #if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
@@ -449,4 +500,37 @@ void LinuxPortalScreenCast::onPortalResponse(uint response, const QVariantMap &r
     m_finished = true;
     if (m_loop)
         m_loop->quit();
+}
+
+LinuxPortalSessionWatcher::LinuxPortalSessionWatcher(const QString &sessionHandle, QObject *parent)
+    : QObject(parent)
+    , m_sessionHandle(sessionHandle)
+{
+#if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
+    if (!m_sessionHandle.isEmpty()) {
+        m_connected = QDBusConnection::sessionBus().connect(
+            QStringLiteral("org.freedesktop.portal.Desktop"), m_sessionHandle,
+            QStringLiteral("org.freedesktop.portal.Session"), QStringLiteral("Closed"),
+            this, SLOT(onSessionClosed(QVariantMap)));
+    }
+#endif
+}
+
+LinuxPortalSessionWatcher::~LinuxPortalSessionWatcher()
+{
+#if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
+    if (m_connected) {
+        QDBusConnection::sessionBus().disconnect(
+            QStringLiteral("org.freedesktop.portal.Desktop"), m_sessionHandle,
+            QStringLiteral("org.freedesktop.portal.Session"), QStringLiteral("Closed"),
+            this, SLOT(onSessionClosed(QVariantMap)));
+    }
+#endif
+}
+
+void LinuxPortalSessionWatcher::onSessionClosed(const QVariantMap &details)
+{
+    Q_UNUSED(details);
+    qInfo() << "[LinuxScreenCast] portal session closed" << m_sessionHandle;
+    emit closed();
 }

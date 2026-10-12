@@ -8,6 +8,7 @@
 #include <QElapsedTimer>
 #include <QProcess>
 #include <QRect>
+#include <QSharedPointer>
 #include <QString>
 #include <QStringList>
 #include <QTimer>
@@ -60,6 +61,7 @@ private slots:
     void onProcessFinished(int exitCode, QProcess::ExitStatus status);
     void onMuxFinished(int exitCode, QProcess::ExitStatus status);
     void onConcatFinished(int exitCode, QProcess::ExitStatus status);
+    void onPortalSessionClosed();
 
 private:
     QString ffmpegPath() const;
@@ -70,7 +72,12 @@ private:
     QStringList ffmpegCaptureArguments(const QString &outputPath) const;
     QStringList gstCaptureArguments(int pipewireFd, const QString &outputPath) const;
     bool startFfmpegSegment(const QString &outputPath, QString *error);
-    bool startGstSegment(int pipewireFd, const QString &outputPath, QString *error);
+    bool startGstSegment(const QSharedPointer<int> &pipewireFd, const QString &outputPath,
+                         QString *error);
+    void onGstSegmentPlaying();
+    void handleGstSegmentEnded(int exitCode, QProcess::ExitStatus status, const QString &launchError);
+    void resumePortalRecording();
+    QString portalPreflightError(bool includeAudio);
     bool startNextSegment(QString *error);
     void requestEncoderStop();
     void finishRecording();
@@ -141,7 +148,19 @@ private:
     QString m_portalSourcePath;
     PortalCropGeometry m_portalCrop;
     QString m_gstAacEncoder;
+    QString m_gstH264Encoder = QStringLiteral("x264enc");
     bool m_gstHasAudio = false;
+    // Portal segment state: launch-to-exit clock, the output read so far
+    // and whether gst-launch reported PLAYING.
+    QElapsedTimer m_segmentRunClock;
+    QByteArray m_processLog;
+    QSharedPointer<int> m_segmentRemoteFd;
+    bool m_segmentPlaying = false;
+    // First segment launched but not running yet / resumed segment likewise.
+    bool m_gstStarting = false;
+    bool m_resuming = false;
+    int m_startGeneration = 0;
+    LinuxPortalSessionWatcher *m_sessionWatcher = nullptr;
     // One file per active span; m_segmentPath is the one being written.
     QStringList m_segmentPaths;
     QString m_segmentPath;

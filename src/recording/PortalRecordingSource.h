@@ -10,7 +10,8 @@
 // recorder start, so a start delay can run after the source was picked. A
 // stream restored from a saved token that does not cover the region is
 // dropped and the picker is shown once more. On failure the stream is invalid
-// and *error holds the same reason the recorders report from start().
+// and *error holds the same reason the recorders report from start();
+// portalCanceledReason() when the user closed the picker.
 LinuxPortalScreenCast::Stream selectPortalRecordingStream(const QRect &captureRect,
                                                           const QRect &displayRect,
                                                           QString *error);

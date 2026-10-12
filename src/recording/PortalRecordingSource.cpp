@@ -25,8 +25,11 @@ LinuxPortalScreenCast::Stream selectPortalRecordingStream(const QRect &captureRe
     }
     LinuxPortalScreenCast::Stream stream = LinuxPortalScreenCast::selectStream(
         nullptr, 120000, persistenceId);
-    if (!stream.isValid())
-        return fail(QStringLiteral("Wayland screen recording permission was not granted"));
+    if (!stream.isValid()) {
+        return fail(stream.canceled
+                        ? portalCanceledReason()
+                        : QStringLiteral("Wayland screen recording permission was not granted"));
+    }
 
     // Only the region check matters here; the recorders compute their own
     // output size when they build the pipeline.
@@ -40,6 +43,8 @@ LinuxPortalScreenCast::Stream selectPortalRecordingStream(const QRect &captureRe
             && portalCropGeometry(captureRect, displayRect, stream.position,
                                   stream.size, captureRect.size()).valid;
     }
+    if (!stream.isValid() && stream.canceled)
+        return fail(portalCanceledReason());
     if (!stream.isValid() || !covered) {
         LinuxPortalScreenCast::closeSession(stream.sessionHandle);
         return fail(QStringLiteral("Wayland recording source does not contain the selected region"));
