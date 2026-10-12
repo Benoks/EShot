@@ -571,11 +571,12 @@ QStringList portalVideoBranchArguments(const PortalVideoPipelineOptions &options
          << QStringLiteral("max-size-time=0")
          << QStringLiteral("leaky=downstream")
          << QStringLiteral("!")
-         // Drop surplus frames before the costly crop/convert; never
-         // duplicate them.
+         // Constant frame rate from the caps below, before the costly
+         // crop/convert. Not drop-only: the portal's keepalive resends can
+         // arrive without a timestamp, and passing those on makes mp4mux
+         // fail with "Could not multiplex stream" a few seconds in. The full
+         // mode drops them and repeats the last frame on a static screen.
          << QStringLiteral("videorate")
-         << QStringLiteral("drop-only=true")
-         << QStringLiteral("max-rate=%1").arg(fps)
          // Start the frame grid at the first frame: a late first frame (slow
          // portal or GPU encoder start) otherwise lets a burst of frames
          // through at the source rate.

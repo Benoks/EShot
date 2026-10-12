@@ -278,9 +278,9 @@ private slots:
         const qsizetype encoder = args.indexOf(QStringLiteral("x264enc"));
         QVERIFY(args.indexOf(QStringLiteral("queue")) < rate);
         QVERIFY(rate < crop && crop < convert && convert < encoder);
-        QCOMPARE(args.at(rate + 1), QStringLiteral("drop-only=true"));
-        QCOMPARE(args.at(rate + 2), QStringLiteral("max-rate=30"));
-        QCOMPARE(args.at(rate + 3), QStringLiteral("skip-to-first=true"));
+        // Timestamp-less keepalive frames must be dropped, not passed on.
+        QVERIFY(!args.contains(QStringLiteral("drop-only=true")));
+        QCOMPARE(args.at(rate + 1), QStringLiteral("skip-to-first=true"));
         QVERIFY(!args.contains(QStringLiteral("videoscale")));
         QVERIFY(args.contains(QStringLiteral("right=%1").arg(1920 - 10 - 642)));
         QVERIFY(args.contains(QStringLiteral("video/x-raw,format=I420,width=642,height=480,framerate=30/1")));
