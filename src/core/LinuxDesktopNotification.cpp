@@ -3,6 +3,7 @@
 #include <QDBusConnection>
 #include <QDBusInterface>
 #include <QDBusReply>
+#include <QDebug>
 #include <QUrl>
 #include <limits>
 
@@ -57,6 +58,20 @@ QVariantMap LinuxDesktopNotification::hintsForPath(const QString &path)
     return hints;
 }
 
+QVariantList LinuxDesktopNotification::notifyArguments(const QString &title,
+                                                       const QString &body,
+                                                       const QString &path,
+                                                       const QStringList &actionList,
+                                                       int timeoutMs)
+{
+    // The implicit "default" action fires when the notification body itself
+    // is activated, so a click always opens the captured file.
+    QStringList allActions = actionList;
+    allActions << QStringLiteral("default") << title;
+    return {QStringLiteral("EShot"), 0u, QStringLiteral("io.github.benoks.EShot-v4"),
+            title, body, allActions, hintsForPath(path), timeoutMs};
+}
+
 bool LinuxDesktopNotification::show(const QString &title, const QString &body,
                                     const QString &path, const QString &actionLabel,
                                     int timeoutMs)
@@ -83,18 +98,16 @@ bool LinuxDesktopNotification::notify(const QString &title, const QString &body,
     if (!notifications.isValid())
         return false;
 
-    // The implicit "default" action fires when the notification body itself
-    // is activated, so a click always opens the captured file.
-    actionList << QStringLiteral("default") << title;
-
-    const QDBusReply<uint> reply = notifications.call(
-        QStringLiteral("Notify"), QStringLiteral("EShot"), m_lastId,
-        QStringLiteral("io.github.benoks.EShot-v4"), title, body,
-        actionList, hintsForPath(path), timeoutMs);
-    if (!reply.isValid())
+    const QDBusReply<uint> reply = notifications.callWithArgumentList(
+        QDBus::Block, QStringLiteral("Notify"),
+        notifyArguments(title, body, path, actionList, timeoutMs));
+    if (!reply.isValid()) {
+        qWarning() << "[Notification] Notify failed:" << reply.error().name()
+                   << reply.error().message();
         return false;
+    }
 
-    m_lastId = reply.value();
+    const uint id = reply.value();
     // Cap the tracked paths so long sessions cannot grow the map unbounded.
     constexpr int kMaxTrackedPaths = 32;
     while (m_paths.size() >= kMaxTrackedPaths) {
@@ -103,7 +116,7 @@ bool LinuxDesktopNotification::notify(const QString &title, const QString &body,
             oldestId = qMin(oldestId, trackedId);
         m_paths.remove(oldestId);
     }
-    m_paths.insert(m_lastId, path);
+    m_paths.insert(id, path);
     return true;
 }
 

@@ -31,6 +31,14 @@ public:
     // Flattened key/label pairs for the Notify call, without "default".
     static QStringList actions(const QList<Action> &actions);
     static QVariantMap hintsForPath(const QString &path);
+    // Arguments of the org.freedesktop.Notifications.Notify call. Every
+    // notification is a new one (replaces_id 0): Plasma replaces an existing
+    // notification "atomically with no visual cues", so reusing the id of an
+    // earlier, already expired notification only updated that history entry
+    // and the new message never appeared as a popup.
+    static QVariantList notifyArguments(const QString &title, const QString &body,
+                                        const QString &path, const QStringList &actionList,
+                                        int timeoutMs);
 
 signals:
     void pathActivated(const QString &path);
@@ -45,7 +53,6 @@ private:
                 QStringList actionList, int timeoutMs);
 
     QHash<uint, QString> m_paths;
-    uint m_lastId = 0;
 };
 
 #endif
