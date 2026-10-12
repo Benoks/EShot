@@ -122,6 +122,13 @@ private slots:
         QCOMPARE(pauseSpy.count(), 0);
         QVERIFY(bar->isVisible());
 #else
+        if (indicator.canExcludeFromCapture() || QGuiApplication::screens().size() > 1) {
+            // Windows 10 2004+ leaves the bar out of the capture, and with a
+            // second monitor the bar moves there; either way it stays visible.
+            QVERIFY(!indicator.requiresCaptureSafePresentation());
+            QVERIFY(bar->isVisible());
+            return;
+        }
         QVERIFY(indicator.requiresCaptureSafePresentation());
         QVERIFY(!bar->isVisible());
 

@@ -254,14 +254,14 @@ endif()
 
 if(WIN32)
     target_link_libraries(${PROJECT_NAME} PRIVATE
-        User32
-        Gdi32
-        Shell32
-        Dwmapi
-        Advapi32
-        Ole32
-        OleAut32
-        Dxgi
+        user32
+        gdi32
+        shell32
+        dwmapi
+        advapi32
+        ole32
+        oleaut32
+        dxgi
     )
 endif()
 
@@ -410,7 +410,7 @@ if(BUILD_TESTING)
         target_link_libraries(eshot_secure_credential_store_tests PRIVATE PkgConfig::LIBSECRET)
     endif()
     if(WIN32)
-        target_link_libraries(eshot_secure_credential_store_tests PRIVATE Advapi32)
+        target_link_libraries(eshot_secure_credential_store_tests PRIVATE advapi32)
     endif()
 
     eshot_add_test(eshot_settings_translation_tests settings_translation
@@ -476,7 +476,7 @@ if(BUILD_TESTING)
         LIBS Qt6::Core
     )
     if(WIN32)
-        target_link_libraries(eshot_window_snap_policy_tests PRIVATE User32 Dwmapi)
+        target_link_libraries(eshot_window_snap_policy_tests PRIVATE user32 dwmapi)
     endif()
 
     eshot_add_test(eshot_recording_settings_policy_tests recording_settings_policy
@@ -521,7 +521,7 @@ if(BUILD_TESTING)
         LIBS Qt6::Core
     )
     if(WIN32)
-        target_link_libraries(eshot_audio_devices_tests PRIVATE Ole32 OleAut32)
+        target_link_libraries(eshot_audio_devices_tests PRIVATE ole32 oleaut32)
     endif()
 
     eshot_add_test(eshot_settings_layout_policy_tests settings_layout_policy
