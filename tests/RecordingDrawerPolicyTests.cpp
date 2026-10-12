@@ -19,6 +19,8 @@ private slots:
     void startDelayChoicesMatchTheDrawer();
     void customValuesAreNotAChoice();
     void enterStartsOnlyWhileTheDrawerIsOpen();
+    void remembersTheLastDrawerMode();
+    void gifToolbarButtonBecomesTheSingleRecordButton();
 };
 
 void RecordingDrawerPolicyTests::gifShowsOnlyGifEssentials()
@@ -107,6 +109,39 @@ void RecordingDrawerPolicyTests::enterStartsOnlyWhileTheDrawerIsOpen()
     QVERIFY(recordingDrawerStartsOnKey(Qt::Key_Enter, true));
     QVERIFY(!recordingDrawerStartsOnKey(Qt::Key_Return, false));
     QVERIFY(!recordingDrawerStartsOnKey(Qt::Key_Space, true));
+}
+
+void RecordingDrawerPolicyTests::remembersTheLastDrawerMode()
+{
+    QCOMPARE(recordingDrawerModeKey(RecordingDrawerMode::Gif), QStringLiteral("gif"));
+    QCOMPARE(recordingDrawerModeKey(RecordingDrawerMode::Video), QStringLiteral("video"));
+    QCOMPARE(recordingDrawerModeFromKey(recordingDrawerModeKey(RecordingDrawerMode::Gif)),
+             RecordingDrawerMode::Gif);
+    QCOMPARE(recordingDrawerModeFromKey(recordingDrawerModeKey(RecordingDrawerMode::Video)),
+             RecordingDrawerMode::Video);
+    QCOMPARE(recordingDrawerModeFromKey(QStringLiteral(" GIF ")), RecordingDrawerMode::Gif);
+    // Nothing stored yet, or garbage: the record button opens Video.
+    QCOMPARE(recordingDrawerModeFromKey(QString()), RecordingDrawerMode::Video);
+    QCOMPARE(recordingDrawerModeFromKey(QStringLiteral("none")), RecordingDrawerMode::Video);
+}
+
+void RecordingDrawerPolicyTests::gifToolbarButtonBecomesTheSingleRecordButton()
+{
+    // Old defaults: both buttons -> one record button.
+    QCOMPARE(toolbarControlsWithSingleRecordButton(
+                 {"Color", "Undo", "GoogleLens", "Gif", "Video"}),
+             QStringList({"Color", "Undo", "GoogleLens", "Video"}));
+    // Only the GIF button was visible: the record button takes its place.
+    QCOMPARE(toolbarControlsWithSingleRecordButton({"Color", "Gif", "Undo"}),
+             QStringList({"Color", "Video", "Undo"}));
+    // Both hidden stays hidden; already migrated lists are unchanged.
+    QCOMPARE(toolbarControlsWithSingleRecordButton({"Color", "Undo"}),
+             QStringList({"Color", "Undo"}));
+    QCOMPARE(toolbarControlsWithSingleRecordButton({"Video", "Color"}),
+             QStringList({"Video", "Color"}));
+    // No duplicates.
+    QCOMPARE(toolbarControlsWithSingleRecordButton({"Gif", "Video", "Gif", "Video"}),
+             QStringList({"Video"}));
 }
 
 QTEST_MAIN(RecordingDrawerPolicyTests)

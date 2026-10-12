@@ -69,11 +69,20 @@ RecordingQualityPreset videoQualityPresetFor(int crf, int fps);
 QString recordingQualityPresetKey(RecordingQualityPreset preset);
 RecordingQualityPreset recordingQualityPresetFromKey(const QString &key);
 
-// Current presets derived from the raw keys (which stay authoritative). The
-// GIF variant moves untouched pre-preset defaults (1280 px at 10 fps) to
-// Balanced once, so existing installs do not start out as "Custom".
+// Current presets derived from the raw keys (which stay authoritative). A
+// stored "custom" key keeps Custom even when the raw values happen to match
+// a preset: the user chose to edit the values. Untouched pre-preset defaults
+// move to Balanced once, so existing installs do not start out as "Custom":
+// GIF 1280 px at 10 fps, and video CRF 24 (the only default CRF there ever
+// was) at up to 30 fps. A video frame rate above 30 fps is kept as Custom.
 RecordingQualityPreset loadGifQualityPreset(QSettings &settings);
 RecordingQualityPreset loadVideoQualityPreset(QSettings &settings);
+// Longest-side choices for a custom GIF, in pixels.
+QList<int> gifMaxSideChoices();
+// Video quality as a "higher is better" slider position and back; the
+// encoder's CRF runs the other way (lower CRF = higher quality).
+int videoQualitySliderValue(int crf);
+int videoCrfFromQualitySlider(int sliderValue);
 // Write a preset's raw values plus the preset key; Custom only stores the key.
 void applyGifQualityPreset(QSettings &settings, RecordingQualityPreset preset);
 void applyVideoQualityPreset(QSettings &settings, RecordingQualityPreset preset);

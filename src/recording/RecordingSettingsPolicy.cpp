@@ -144,8 +144,19 @@ RecordingQualityPreset recordingQualityPresetFromKey(const QString &key)
     return RecordingQualityPreset::Custom;
 }
 
+namespace {
+bool storedPresetIsCustom(QSettings &settings, const char *key)
+{
+    return settings.contains(QLatin1String(key))
+        && recordingQualityPresetFromKey(settings.value(QLatin1String(key)).toString())
+               == RecordingQualityPreset::Custom;
+}
+}
+
 RecordingQualityPreset loadGifQualityPreset(QSettings &settings)
 {
+    if (storedPresetIsCustom(settings, GifPresetKey))
+        return RecordingQualityPreset::Custom;
     const int maxSide = settings.value(QStringLiteral("recordingMaxSide"), DefaultGifMaxSide).toInt();
     int fps = settings.value(QStringLiteral("recordingFps"), DefaultGifFps).toInt();
     if (!settings.contains(QLatin1String(GifPresetKey)) && settings.contains(QStringLiteral("recordingFps"))
@@ -158,9 +169,33 @@ RecordingQualityPreset loadGifQualityPreset(QSettings &settings)
 
 RecordingQualityPreset loadVideoQualityPreset(QSettings &settings)
 {
-    return videoQualityPresetFor(
-        settings.value(QStringLiteral("videoRecordingCrf"), DefaultVideoCrf).toInt(),
-        settings.value(QStringLiteral("videoRecordingFps"), DefaultVideoFps).toInt());
+    if (storedPresetIsCustom(settings, VideoPresetKey))
+        return RecordingQualityPreset::Custom;
+    const int crf = settings.value(QStringLiteral("videoRecordingCrf"), DefaultVideoCrf).toInt();
+    const int fps = settings.value(QStringLiteral("videoRecordingFps"), DefaultVideoFps).toInt();
+    if (!settings.contains(QLatin1String(VideoPresetKey))
+        && (settings.contains(QStringLiteral("videoRecordingCrf"))
+            || settings.contains(QStringLiteral("videoRecordingFps")))
+        && crf == DefaultVideoCrf && fps > 0 && fps <= DefaultVideoFps) {
+        applyVideoQualityPreset(settings, RecordingQualityPreset::Balanced);
+        return RecordingQualityPreset::Balanced;
+    }
+    return videoQualityPresetFor(crf, fps);
+}
+
+QList<int> gifMaxSideChoices()
+{
+    return {480, 640, 720, 960, 1280, 1600, 1920};
+}
+
+int videoQualitySliderValue(int crf)
+{
+    return MinVideoCrf + MaxVideoCrf - qBound(MinVideoCrf, crf, MaxVideoCrf);
+}
+
+int videoCrfFromQualitySlider(int sliderValue)
+{
+    return MinVideoCrf + MaxVideoCrf - qBound(MinVideoCrf, sliderValue, MaxVideoCrf);
 }
 
 void applyGifQualityPreset(QSettings &settings, RecordingQualityPreset preset)

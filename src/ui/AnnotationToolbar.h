@@ -42,8 +42,8 @@ signals:
     void ocrRequested();
     void uploadRequested();
     void googleLensRequested();
-    void gifRequested();
-    void videoRequested();
+    // The record button: opens the recording drawer (GIF or video).
+    void recordRequested();
 
 private slots:
     void onToolButtonClicked();
@@ -97,7 +97,6 @@ private:
     QPushButton *m_ocrButton;
     QPushButton *m_uploadButton;
     QPushButton *m_lensButton;
-    QPushButton *m_gifButton;
     QPushButton *m_videoButton;
 };
 

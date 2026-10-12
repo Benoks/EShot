@@ -722,8 +722,7 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
     connect(m_toolbar, &AnnotationToolbar::ocrRequested, this, &CaptureOverlay::onOcrRequested);
     connect(m_toolbar, &AnnotationToolbar::uploadRequested, this, &CaptureOverlay::onUploadRequested);
     connect(m_toolbar, &AnnotationToolbar::googleLensRequested, this, &CaptureOverlay::onGoogleLensRequested);
-    connect(m_toolbar, &AnnotationToolbar::gifRequested, this, &CaptureOverlay::onGifRequested);
-    connect(m_toolbar, &AnnotationToolbar::videoRequested, this, &CaptureOverlay::onVideoRequested);
+    connect(m_toolbar, &AnnotationToolbar::recordRequested, this, &CaptureOverlay::onRecordRequested);
     connect(m_annotationEngine, &AnnotationEngine::annotationAdded, this, &CaptureOverlay::updateUndoRedoState);
 
     setupToolSettingsDrawer();
@@ -1038,6 +1037,79 @@ void CaptureOverlay::setupRecordingDrawer()
                                             seconds);
     }
     form->addRow(TranslationManager::tr("recQualityLabel"), m_recordingQualityCombo);
+
+    // "Custom" quality: the raw values, edited right here.
+    m_recordingCustomQuality = new QWidget(m_recordingDrawer);
+    m_recordingCustomQuality->setObjectName(QStringLiteral("recordingCustomQuality"));
+    auto *customLayout = new QVBoxLayout(m_recordingCustomQuality);
+    customLayout->setContentsMargins(0, 0, 0, 0);
+    customLayout->setSpacing(panelMetrics.rowSpacing);
+    auto makeSliderRow = [](QSlider **slider, QLabel **value, QWidget *parent) {
+        auto *row = new QHBoxLayout();
+        row->setContentsMargins(0, 0, 0, 0);
+        row->setSpacing(8);
+        *slider = new QSlider(Qt::Horizontal, parent);
+        (*slider)->setCursor(Qt::PointingHandCursor);
+        *value = new QLabel(parent);
+        (*value)->setProperty("panelRole", QStringLiteral("value"));
+        (*value)->setMinimumWidth(54);
+        (*value)->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        row->addWidget(*slider, 1);
+        row->addWidget(*value);
+        return row;
+    };
+    auto makeCustomForm = [&panelMetrics](QWidget *parent) {
+        auto *customForm = new QFormLayout(parent);
+        customForm->setContentsMargins(0, 0, 0, 0);
+        customForm->setHorizontalSpacing(10);
+        customForm->setVerticalSpacing(panelMetrics.rowSpacing);
+        customForm->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+        customForm->setLabelAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+        customForm->setRowWrapPolicy(QFormLayout::WrapLongRows);
+        return customForm;
+    };
+
+    m_recordingCustomGif = new QWidget(m_recordingCustomQuality);
+    m_recordingCustomGif->setObjectName(QStringLiteral("recordingCustomGif"));
+    auto *gifForm = makeCustomForm(m_recordingCustomGif);
+    auto *gifFpsRow = makeSliderRow(&m_recordingGifFpsSlider, &m_recordingGifFpsValue,
+                                    m_recordingCustomGif);
+    m_recordingGifFpsSlider->setObjectName(QStringLiteral("recordingGifFpsSlider"));
+    m_recordingGifFpsSlider->setRange(1, gifRecordingFpsLimit());
+    m_recordingGifFpsSlider->setToolTip(TranslationManager::tr("tipGifFps"));
+    gifForm->addRow(QStringLiteral("FPS"), gifFpsRow);
+    m_recordingGifMaxSideCombo = new QComboBox(m_recordingCustomGif);
+    m_recordingGifMaxSideCombo->setObjectName(QStringLiteral("recordingGifMaxSideCombo"));
+    m_recordingGifMaxSideCombo->setToolTip(TranslationManager::tr("tipGifSizePreset"));
+    gifForm->addRow(withoutTrailingColon(TranslationManager::tr("recMaxSideLabel")),
+                    m_recordingGifMaxSideCombo);
+    customLayout->addWidget(m_recordingCustomGif);
+
+    m_recordingCustomVideo = new QWidget(m_recordingCustomQuality);
+    m_recordingCustomVideo->setObjectName(QStringLiteral("recordingCustomVideo"));
+    auto *videoForm = makeCustomForm(m_recordingCustomVideo);
+    auto *videoFpsRow = makeSliderRow(&m_recordingVideoFpsSlider, &m_recordingVideoFpsValue,
+                                      m_recordingCustomVideo);
+    m_recordingVideoFpsSlider->setObjectName(QStringLiteral("recordingVideoFpsSlider"));
+    m_recordingVideoFpsSlider->setRange(1, videoRecordingFpsLimit());
+    m_recordingVideoFpsSlider->setToolTip(TranslationManager::tr("tipVideoFps"));
+    videoForm->addRow(QStringLiteral("FPS"), videoFpsRow);
+    auto *videoQualityRow = makeSliderRow(&m_recordingVideoQualitySlider,
+                                          &m_recordingVideoQualityValue, m_recordingCustomVideo);
+    m_recordingVideoQualitySlider->setObjectName(QStringLiteral("recordingVideoQualitySlider"));
+    m_recordingVideoQualitySlider->setRange(MinVideoCrf, MaxVideoCrf);
+    m_recordingVideoQualitySlider->setToolTip(TranslationManager::videoCrfHint());
+    videoForm->addRow(TranslationManager::tr("recQualityLabel"), videoQualityRow);
+    auto *videoQualityHint = new QLabel(TranslationManager::tr("recCustomVideoQualityHint"),
+                                        m_recordingCustomVideo);
+    videoQualityHint->setObjectName(QStringLiteral("recordingVideoQualityHint"));
+    videoQualityHint->setProperty("panelRole", QStringLiteral("hint"));
+    videoQualityHint->setWordWrap(true);
+    videoForm->addRow(videoQualityHint);
+    customLayout->addWidget(m_recordingCustomVideo);
+    form->addRow(m_recordingCustomQuality);
+    m_recordingCustomQuality->hide();
+
     form->addRow(TranslationManager::tr("recDurationLabel"), m_recordingDurationCombo);
     form->addRow(withoutTrailingColon(TranslationManager::tr("recordingStartDelayLabel")),
                  m_recordingStartDelayCombo);
@@ -1110,16 +1182,27 @@ void CaptureOverlay::setupRecordingDrawer()
     connect(m_recordingQualityCombo, qOverload<int>(&QComboBox::activated), this, [this](int index) {
         const auto preset = static_cast<RecordingQualityPreset>(
             m_recordingQualityCombo->itemData(index).toInt());
-        if (preset == RecordingQualityPreset::Custom)
-            return;
+        // A named preset writes its values; "Custom" keeps the current ones
+        // and shows them for editing. Either way the choice is remembered.
         QSettings settings("EShot", "EShot");
         if (m_recordingDrawerMode == RecordingDrawerMode::Gif)
             applyGifQualityPreset(settings, preset);
         else
             applyVideoQualityPreset(settings, preset);
-        // A preset replaces the custom values; drop the "Custom" entry
-        // (after the combo has finished emitting).
-        QTimer::singleShot(0, this, [this]() { loadRecordingDrawerValues(); });
+        loadRecordingCustomQualityValues();
+        updateRecordingCustomQualityVisibility();
+    });
+    connect(m_recordingGifFpsSlider, &QSlider::valueChanged, this, [this]() {
+        saveRecordingCustomQualityValues();
+    });
+    connect(m_recordingGifMaxSideCombo, qOverload<int>(&QComboBox::activated), this, [this](int) {
+        saveRecordingCustomQualityValues();
+    });
+    connect(m_recordingVideoFpsSlider, &QSlider::valueChanged, this, [this]() {
+        saveRecordingCustomQualityValues();
+    });
+    connect(m_recordingVideoQualitySlider, &QSlider::valueChanged, this, [this]() {
+        saveRecordingCustomQualityValues();
     });
     connect(m_recordingDurationCombo, qOverload<int>(&QComboBox::activated), this, [this](int index) {
         QSettings("EShot", "EShot").setValue(
@@ -1175,6 +1258,8 @@ void CaptureOverlay::setRecordingDrawerMode(RecordingDrawerMode mode)
     if (!m_recordingDrawer || mode == RecordingDrawerMode::None)
         return;
     m_recordingDrawerMode = mode;
+    QSettings("EShot", "EShot").setValue(QStringLiteral("recordingDrawerMode"),
+                                         recordingDrawerModeKey(mode));
     const QStringList fields = recordingDrawerFields(mode);
     if (mode == RecordingDrawerMode::Video)
         ensureAudioDevicesLoaded();
@@ -1210,22 +1295,19 @@ void CaptureOverlay::loadRecordingDrawerValues()
                                              recordingQualityPresetDetails(preset, gif),
                                              Qt::ToolTipRole);
     }
+    // "Custom" is always offered; choosing it shows the values to edit.
+    m_recordingQualityCombo->addItem(recordingQualityPresetText(RecordingQualityPreset::Custom),
+                                     static_cast<int>(RecordingQualityPreset::Custom));
+    m_recordingQualityCombo->setItemData(m_recordingQualityCombo->count() - 1,
+                                         TranslationManager::tr("recCustomQualityTip"),
+                                         Qt::ToolTipRole);
     const RecordingQualityPreset current = gif ? loadGifQualityPreset(settings)
                                                : loadVideoQualityPreset(settings);
-    if (current == RecordingQualityPreset::Custom) {
-        const QString details = gif
-            ? QStringLiteral("%1 px · %2 FPS")
-                  .arg(settings.value("recordingMaxSide", DefaultGifMaxSide).toInt())
-                  .arg(settings.value("recordingFps", DefaultGifFps).toInt())
-            : QStringLiteral("CRF %1 · %2 FPS")
-                  .arg(settings.value("videoRecordingCrf", DefaultVideoCrf).toInt())
-                  .arg(settings.value("videoRecordingFps", DefaultVideoFps).toInt());
-        m_recordingQualityCombo->addItem(TranslationManager::tr("recCustomValue").arg(details),
-                                         static_cast<int>(RecordingQualityPreset::Custom));
-    }
     m_recordingQualityCombo->setCurrentIndex(
         qMax(0, m_recordingQualityCombo->findData(static_cast<int>(current))));
     m_recordingQualityCombo->setToolTip(TranslationManager::tr("tipRecQualityPreset"));
+    loadRecordingCustomQualityValues();
+    updateRecordingCustomQualityVisibility();
 
     const int maxSeconds = gif
         ? settings.value("recordingMaxSeconds", DefaultGifMaxSeconds).toInt()
@@ -1272,6 +1354,83 @@ void CaptureOverlay::loadRecordingDrawerValues()
     m_recordingHotkeyHint->setText(TranslationManager::tr("recDrawerHotkeys").arg(
         keyText(hotkeys.recordingStopShortcutText()),
         keyText(hotkeys.recordingPauseShortcutText())));
+}
+
+// Fills the custom fields from the raw keys (also after a preset changed
+// them, so "Custom" starts from the values that were just in use).
+void CaptureOverlay::loadRecordingCustomQualityValues()
+{
+    if (!m_recordingCustomQuality)
+        return;
+    QSettings settings("EShot", "EShot");
+    const QSignalBlocker gifFpsBlocker(m_recordingGifFpsSlider);
+    const QSignalBlocker maxSideBlocker(m_recordingGifMaxSideCombo);
+    const QSignalBlocker videoFpsBlocker(m_recordingVideoFpsSlider);
+    const QSignalBlocker qualityBlocker(m_recordingVideoQualitySlider);
+
+    const int gifFps = qBound(1, settings.value("recordingFps", DefaultGifFps).toInt(),
+                              gifRecordingFpsLimit());
+    m_recordingGifFpsSlider->setValue(gifFps);
+    m_recordingGifFpsValue->setText(QStringLiteral("%1 FPS").arg(gifFps));
+    const int maxSide = settings.value("recordingMaxSide", DefaultGifMaxSide).toInt();
+    m_recordingGifMaxSideCombo->clear();
+    QList<int> sides = gifMaxSideChoices();
+    if (maxSide > 0 && !sides.contains(maxSide)) {
+        // A value set elsewhere stays selectable as is.
+        sides.append(maxSide);
+        std::sort(sides.begin(), sides.end());
+    }
+    for (int side : std::as_const(sides))
+        m_recordingGifMaxSideCombo->addItem(QStringLiteral("%1 px").arg(side), side);
+    m_recordingGifMaxSideCombo->setCurrentIndex(qMax(0, m_recordingGifMaxSideCombo->findData(
+        maxSide > 0 ? maxSide : DefaultGifMaxSide)));
+
+    const int videoFps = qBound(1, settings.value("videoRecordingFps", DefaultVideoFps).toInt(),
+                                videoRecordingFpsLimit());
+    m_recordingVideoFpsSlider->setValue(videoFps);
+    m_recordingVideoFpsValue->setText(QStringLiteral("%1 FPS").arg(videoFps));
+    const int crf = qBound(MinVideoCrf, settings.value("videoRecordingCrf", DefaultVideoCrf).toInt(),
+                           MaxVideoCrf);
+    m_recordingVideoQualitySlider->setValue(videoQualitySliderValue(crf));
+    m_recordingVideoQualityValue->setText(QStringLiteral("CRF %1").arg(crf));
+}
+
+// Edited custom values go straight to the keys the recorders read, and the
+// quality stays "Custom" even when they happen to match a preset.
+void CaptureOverlay::saveRecordingCustomQualityValues()
+{
+    if (!m_recordingCustomQuality)
+        return;
+    QSettings settings("EShot", "EShot");
+    if (m_recordingDrawerMode == RecordingDrawerMode::Gif) {
+        const int fps = m_recordingGifFpsSlider->value();
+        m_recordingGifFpsValue->setText(QStringLiteral("%1 FPS").arg(fps));
+        settings.setValue("recordingFps", fps);
+        settings.setValue("recordingMaxSide", m_recordingGifMaxSideCombo->currentData().toInt());
+        applyGifQualityPreset(settings, RecordingQualityPreset::Custom);
+    } else if (m_recordingDrawerMode == RecordingDrawerMode::Video) {
+        const int fps = m_recordingVideoFpsSlider->value();
+        const int crf = videoCrfFromQualitySlider(m_recordingVideoQualitySlider->value());
+        m_recordingVideoFpsValue->setText(QStringLiteral("%1 FPS").arg(fps));
+        m_recordingVideoQualityValue->setText(QStringLiteral("CRF %1").arg(crf));
+        settings.setValue("videoRecordingFps", fps);
+        settings.setValue("videoRecordingCrf", crf);
+        applyVideoQualityPreset(settings, RecordingQualityPreset::Custom);
+    }
+}
+
+void CaptureOverlay::updateRecordingCustomQualityVisibility()
+{
+    if (!m_recordingCustomQuality || !m_recordingQualityCombo)
+        return;
+    const bool custom = static_cast<RecordingQualityPreset>(
+        m_recordingQualityCombo->currentData().toInt()) == RecordingQualityPreset::Custom;
+    const bool gif = m_recordingDrawerMode == RecordingDrawerMode::Gif;
+    m_recordingCustomGif->setVisible(gif);
+    m_recordingCustomVideo->setVisible(!gif);
+    m_recordingCustomQuality->setVisible(custom);
+    if (m_recordingDrawer && m_recordingDrawer->isVisible())
+        placeRecordingDrawer();
 }
 
 void CaptureOverlay::placeRecordingDrawer()
@@ -4369,6 +4528,14 @@ void CaptureOverlay::clearVisualSearchUpload()
         QFile::remove(m_visualSearchImagePath);
         m_visualSearchImagePath.clear();
     }
+}
+
+void CaptureOverlay::onRecordRequested()
+{
+    if (normalizedSelectionRect().isEmpty())
+        return;
+    showRecordingDrawer(recordingDrawerModeFromKey(
+        QSettings("EShot", "EShot").value(QStringLiteral("recordingDrawerMode")).toString()));
 }
 
 void CaptureOverlay::onGifRequested()

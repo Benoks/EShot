@@ -19,6 +19,7 @@
 #include "../recording/AudioDevices.h"
 #include "../recording/LinuxRecordingSupport.h"
 #include "../recording/RecordingSettingsPolicy.h"
+#include "../recording/RecordingDrawerPolicy.h"
 #ifdef Q_OS_LINUX
 #include "FirstRunWizard.h"
 #endif
@@ -123,7 +124,7 @@ QStringList defaultAnnotationTools()
 
 QStringList defaultToolbarControls()
 {
-    return {"Color","Eyedropper","Lock","Undo","Redo","Ocr","Upload","GoogleLens","Gif","Video"};
+    return {"Color","Eyedropper","Lock","Undo","Redo","Ocr","Upload","GoogleLens","Video"};
 }
 
 struct OverlayShortcutDef {
@@ -959,6 +960,11 @@ QWidget* SettingsDialog::createRecordingTab()
     auto fillPresetCombo = [](QComboBox *combo) {
         for (RecordingQualityPreset preset : selectableRecordingQualityPresets())
             combo->addItem(recordingQualityPresetName(preset), static_cast<int>(preset));
+        // Always offered, so the values can be edited again after a preset.
+        combo->addItem(recordingQualityPresetName(RecordingQualityPreset::Custom),
+                       static_cast<int>(RecordingQualityPreset::Custom));
+        combo->setItemData(combo->count() - 1, TranslationManager::tr("recCustomQualityTip"),
+                           Qt::ToolTipRole);
         combo->setToolTip(TranslationManager::tr("tipRecQualityPreset"));
     };
 
@@ -1023,6 +1029,7 @@ QWidget* SettingsDialog::createRecordingTab()
     videoForm->addRow(QString(), m_videoHardwareEncodingCheck);
 
     QToolButton *advancedToggle = new QToolButton(videoGroup);
+    m_videoAdvancedToggle = advancedToggle;
     advancedToggle->setText(TranslationManager::tr("recAdvancedOptions"));
     advancedToggle->setCheckable(true);
     advancedToggle->setChecked(false);
@@ -1180,8 +1187,13 @@ QWidget* SettingsDialog::createRecordingTab()
     // Presets write the override fields; edited overrides show "Custom".
     connect(m_gifQualityPresetCombo, qOverload<int>(&QComboBox::activated), this, [this](int index) {
         const auto preset = static_cast<RecordingQualityPreset>(m_gifQualityPresetCombo->itemData(index).toInt());
-        if (preset == RecordingQualityPreset::Custom)
+        m_gifQualityCustomChosen = preset == RecordingQualityPreset::Custom;
+        if (m_gifQualityCustomChosen) {
+            // The GIF fields are right below; keep their values.
+            m_recordingFpsSpin->setFocus(Qt::OtherFocusReason);
+            syncRecordingQualityPresets();
             return;
+        }
         const GifQualityValues values = gifQualityValues(preset);
         m_recordingFpsSpin->setValue(values.fps);
         const int sideIndex = m_gifSizePresetCombo->findData(values.maxSide);
@@ -1191,8 +1203,15 @@ QWidget* SettingsDialog::createRecordingTab()
     });
     connect(m_videoQualityPresetCombo, qOverload<int>(&QComboBox::activated), this, [this](int index) {
         const auto preset = static_cast<RecordingQualityPreset>(m_videoQualityPresetCombo->itemData(index).toInt());
-        if (preset == RecordingQualityPreset::Custom)
+        m_videoQualityCustomChosen = preset == RecordingQualityPreset::Custom;
+        if (m_videoQualityCustomChosen) {
+            // CRF and FPS live under the advanced options; open them.
+            if (m_videoAdvancedToggle)
+                m_videoAdvancedToggle->setChecked(true);
+            m_videoCrfSpin->setFocus(Qt::OtherFocusReason);
+            syncRecordingQualityPresets();
             return;
+        }
         const VideoQualityValues values = videoQualityValues(preset);
         m_videoCrfSpin->setValue(values.crf);
         m_videoFpsSpin->setValue(values.fps);
@@ -1210,28 +1229,25 @@ QWidget* SettingsDialog::createRecordingTab()
     return tab;
 }
 
-// Shows the preset matching the override fields, adding "Custom" only while
-// they match none.
+// Shows the preset matching the override fields, or "Custom" when they
+// match none or Custom was chosen.
 void SettingsDialog::syncRecordingQualityPresets()
 {
     auto show = [](QComboBox *combo, RecordingQualityPreset preset) {
         if (!combo)
             return;
         QSignalBlocker blocker(combo);
-        const int customIndex = combo->findData(static_cast<int>(RecordingQualityPreset::Custom));
-        if (preset == RecordingQualityPreset::Custom && customIndex < 0)
-            combo->addItem(recordingQualityPresetName(RecordingQualityPreset::Custom),
-                           static_cast<int>(RecordingQualityPreset::Custom));
-        else if (preset != RecordingQualityPreset::Custom && customIndex >= 0)
-            combo->removeItem(customIndex);
         combo->setCurrentIndex(qMax(0, combo->findData(static_cast<int>(preset))));
     };
     if (m_recordingFpsSpin && m_gifSizePresetCombo)
-        show(m_gifQualityPresetCombo, gifQualityPresetFor(m_gifSizePresetCombo->currentData().toInt(),
-                                                          m_recordingFpsSpin->value()));
+        show(m_gifQualityPresetCombo, m_gifQualityCustomChosen
+                 ? RecordingQualityPreset::Custom
+                 : gifQualityPresetFor(m_gifSizePresetCombo->currentData().toInt(),
+                                       m_recordingFpsSpin->value()));
     if (m_videoCrfSpin && m_videoFpsSpin)
-        show(m_videoQualityPresetCombo, videoQualityPresetFor(m_videoCrfSpin->value(),
-                                                              m_videoFpsSpin->value()));
+        show(m_videoQualityPresetCombo, m_videoQualityCustomChosen
+                 ? RecordingQualityPreset::Custom
+                 : videoQualityPresetFor(m_videoCrfSpin->value(), m_videoFpsSpin->value()));
 }
 
 void SettingsDialog::showRecordingTab()
@@ -1339,8 +1355,7 @@ QWidget* SettingsDialog::createInterfaceTab()
         {"Ocr",           TranslationManager::actionOcr(),                    ":/icons/ocr.svg"},
         {"Upload",        TranslationManager::uploadToService(),              ":/icons/upload.svg"},
         {"GoogleLens",    TranslationManager::visualSearchAction(),           ":/icons/search.svg"},
-        {"Gif",           TranslationManager::recordingStartTitle(),          ":/icons/gif.svg"},
-        {"Video",         TranslationManager::videoRecordingTitle(),          ":/icons/video.svg"},
+        {"Video",         TranslationManager::tr("toolRecord"),               ":/icons/video.svg"},
     };
 
     QWidget *columns = new QWidget(toolsGroup);
@@ -2184,8 +2199,10 @@ void SettingsDialog::loadSettings()
     if (m_autoLockSelectionCheck)
         m_autoLockSelectionCheck->setChecked(m_settings->value("autoLockSelection", false).toBool());
 
-    // Moves untouched pre-preset GIF defaults to Balanced (see the policy).
-    loadGifQualityPreset(*m_settings);
+    // Moves untouched pre-preset defaults to Balanced (see the policy) and
+    // keeps a chosen "Custom".
+    m_gifQualityCustomChosen = loadGifQualityPreset(*m_settings) == RecordingQualityPreset::Custom;
+    m_videoQualityCustomChosen = loadVideoQualityPreset(*m_settings) == RecordingQualityPreset::Custom;
     if (m_recordingFpsSpin)
         m_recordingFpsSpin->setValue(m_settings->value("recordingFps", DefaultGifFps).toInt());
     if (m_recordingMaxSecSpin)
@@ -2289,6 +2306,7 @@ void SettingsDialog::loadSettings()
         if (!visibleToolbarControls.contains(QStringLiteral("GoogleLens")))
             visibleToolbarControls.append(QStringLiteral("GoogleLens"));
     }
+    visibleToolbarControls = toolbarControlsWithSingleRecordButton(visibleToolbarControls);
     auto applyVisibility = [](QListWidget *list, const QStringList &visible) {
         if (!list) return;
         for (int i = 0; i < list->count(); ++i) {
@@ -2851,12 +2869,12 @@ void SettingsDialog::onSave()
         m_settings->setValue("videoRecordingMaxSeconds", m_videoMaxSecSpin->value());
     if (m_videoCrfSpin)
         m_settings->setValue("videoRecordingCrf", m_videoCrfSpin->value());
-    if (m_recordingFpsSpin && m_gifSizePresetCombo)
-        m_settings->setValue("gifQualityPreset", recordingQualityPresetKey(gifQualityPresetFor(
-            m_gifSizePresetCombo->currentData().toInt(), m_recordingFpsSpin->value())));
-    if (m_videoCrfSpin && m_videoFpsSpin)
-        m_settings->setValue("videoQualityPreset", recordingQualityPresetKey(videoQualityPresetFor(
-            m_videoCrfSpin->value(), m_videoFpsSpin->value())));
+    if (m_gifQualityPresetCombo)
+        m_settings->setValue("gifQualityPreset", recordingQualityPresetKey(
+            static_cast<RecordingQualityPreset>(m_gifQualityPresetCombo->currentData().toInt())));
+    if (m_videoQualityPresetCombo)
+        m_settings->setValue("videoQualityPreset", recordingQualityPresetKey(
+            static_cast<RecordingQualityPreset>(m_videoQualityPresetCombo->currentData().toInt())));
     if (m_recordingCopyToClipboardCheck)
         m_settings->setValue("recordingCopyToClipboard", m_recordingCopyToClipboardCheck->isChecked());
     if (m_videoHardwareEncodingCheck)
@@ -3033,12 +3051,12 @@ void SettingsDialog::onExportSettings()
         obj["videoRecordingMaxSeconds"] = m_videoMaxSecSpin->value();
     if (m_videoCrfSpin)
         obj["videoRecordingCrf"] = m_videoCrfSpin->value();
-    if (m_recordingFpsSpin && m_gifSizePresetCombo)
-        obj["gifQualityPreset"] = recordingQualityPresetKey(gifQualityPresetFor(
-            m_gifSizePresetCombo->currentData().toInt(), m_recordingFpsSpin->value()));
-    if (m_videoCrfSpin && m_videoFpsSpin)
-        obj["videoQualityPreset"] = recordingQualityPresetKey(videoQualityPresetFor(
-            m_videoCrfSpin->value(), m_videoFpsSpin->value()));
+    if (m_gifQualityPresetCombo)
+        obj["gifQualityPreset"] = recordingQualityPresetKey(
+            static_cast<RecordingQualityPreset>(m_gifQualityPresetCombo->currentData().toInt()));
+    if (m_videoQualityPresetCombo)
+        obj["videoQualityPreset"] = recordingQualityPresetKey(
+            static_cast<RecordingQualityPreset>(m_videoQualityPresetCombo->currentData().toInt()));
     if (m_recordingCopyToClipboardCheck)
         obj["recordingCopyToClipboard"] = m_recordingCopyToClipboardCheck->isChecked();
     if (m_videoHardwareEncodingCheck)
@@ -3154,6 +3172,7 @@ void SettingsDialog::onImportSettings()
         QJsonArray controls = obj["visibleToolbarControls"].toArray();
         QStringList visibleControls;
         for (const auto &c : controls) visibleControls.append(c.toString());
+        visibleControls = toolbarControlsWithSingleRecordButton(visibleControls);
         if (m_toolbarControlVisibilityList) {
             for (int i = 0; i < m_toolbarControlVisibilityList->count(); ++i) {
                 QListWidgetItem *item = m_toolbarControlVisibilityList->item(i);
@@ -3235,6 +3254,10 @@ void SettingsDialog::onImportSettings()
             m_videoFpsSpin->setValue(values.fps);
         }
     }
+    m_gifQualityCustomChosen = obj.contains("gifQualityPreset")
+        && recordingQualityPresetFromKey(obj["gifQualityPreset"].toString()) == RecordingQualityPreset::Custom;
+    m_videoQualityCustomChosen = obj.contains("videoQualityPreset")
+        && recordingQualityPresetFromKey(obj["videoQualityPreset"].toString()) == RecordingQualityPreset::Custom;
     syncRecordingQualityPresets();
     if (m_recordingCopyToClipboardCheck && obj.contains("recordingCopyToClipboard"))
         m_recordingCopyToClipboardCheck->setChecked(obj["recordingCopyToClipboard"].toBool());

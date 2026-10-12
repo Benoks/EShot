@@ -1,5 +1,6 @@
 #include "AnnotationToolbar.h"
 #include "OnboardingTips.h"
+#include "recording/RecordingDrawerPolicy.h"
 #include "annotation/AnnotationEngine.h"
 #include "../core/TranslationManager.h"
 #include "../core/VisualSearch.h"
@@ -24,7 +25,8 @@ QStringList defaultAnnotationTools()
 
 QStringList defaultToolbarControls()
 {
-    return {"Color","Eyedropper","Lock","Undo","Redo","Ocr","Upload","GoogleLens","Gif","Video"};
+    // "Video" is the single record button; it opens the recording drawer.
+    return {"Color","Eyedropper","Lock","Undo","Redo","Ocr","Upload","GoogleLens","Video"};
 }
 
 QStringList normalizedAnnotationTools(QSettings &settings)
@@ -60,6 +62,12 @@ QStringList normalizedToolbarControls(QSettings &settings)
         if (!controls.contains(QStringLiteral("GoogleLens")))
             controls.append(QStringLiteral("GoogleLens"));
         settings.setValue("toolbarControlsMigratedGoogleLens", true);
+        settings.setValue("visibleToolbarControls", controls);
+    }
+    // The separate GIF button was merged into the record button.
+    const QStringList singleRecordButton = toolbarControlsWithSingleRecordButton(controls);
+    if (singleRecordButton != controls) {
+        controls = singleRecordButton;
         settings.setValue("visibleToolbarControls", controls);
     }
     return controls;
@@ -441,36 +449,14 @@ void AnnotationToolbar::setupUI()
     m_optionalControls["GoogleLens"] = m_lensButton;
     m_layout->addWidget(m_lensButton);
 
-    m_gifButton = new QPushButton(this);
-    m_gifButton->setIcon(QIcon(":/icons/gif.svg"));
-    m_gifButton->setIconSize(QSize(22, 22));
-    m_gifButton->setFixedSize(34, 34);
-    m_gifButton->setToolTip(TranslationManager::recordingStartTitle());
-    m_gifButton->setCursor(Qt::PointingHandCursor);
-    m_gifButton->setProperty("action", "gif");
-    m_gifButton->setStyleSheet(R"(
-        QPushButton {
-            background-color: #3a3a3a;
-            border: 1px solid #505050;
-            border-radius: 8px;
-        }
-        QPushButton:hover {
-            background-color: #4a4a4a;
-            border-color: #606060;
-        }
-    )");
-    connect(m_gifButton, &QPushButton::clicked, this, &AnnotationToolbar::onActionButtonClicked);
-    m_actionButtons["gif"] = m_gifButton;
-    m_optionalControls["Gif"] = m_gifButton;
-    m_layout->addWidget(m_gifButton);
-
     m_videoButton = new QPushButton(this);
     m_videoButton->setIcon(QIcon(":/icons/video.svg"));
     m_videoButton->setIconSize(QSize(24, 24));
     m_videoButton->setFixedSize(34, 34);
-    m_videoButton->setToolTip(TranslationManager::videoRecordingTitle());
+    m_videoButton->setToolTip(TranslationManager::tr("toolRecord"));
     m_videoButton->setCursor(Qt::PointingHandCursor);
-    m_videoButton->setProperty("action", "video");
+    m_videoButton->setObjectName(QStringLiteral("recordButton"));
+    m_videoButton->setProperty("action", "record");
     m_videoButton->setStyleSheet(R"(
         QPushButton {
             background-color: #3a3a3a;
@@ -483,7 +469,7 @@ void AnnotationToolbar::setupUI()
         }
     )");
     connect(m_videoButton, &QPushButton::clicked, this, &AnnotationToolbar::onActionButtonClicked);
-    m_actionButtons["video"] = m_videoButton;
+    m_actionButtons["record"] = m_videoButton;
     m_optionalControls["Video"] = m_videoButton;
     m_layout->addWidget(m_videoButton);
 
@@ -637,8 +623,7 @@ void AnnotationToolbar::onActionButtonClicked()
     else if (action == "ocr") emit ocrRequested();
     else if (action == "upload") emit uploadRequested();
     else if (action == "lens") emit googleLensRequested();
-    else if (action == "gif") emit gifRequested();
-    else if (action == "video") emit videoRequested();
+    else if (action == "record") emit recordRequested();
 }
 
 void AnnotationToolbar::onColorButtonClicked()
@@ -754,6 +739,24 @@ void AnnotationToolbar::refreshToolTips()
                                                  : TM::visualSearchGoogleTooltip(),
                                              "actionGoogleLens", "Ctrl+L", "descLens"));
     }
-    if (m_gifButton) m_gifButton->setToolTip(richToolTip(TM::recordingStartTitle(), "actionGif", "Ctrl+G", "descGif"));
-    if (m_videoButton) m_videoButton->setToolTip(richToolTip(TM::videoRecordingTitle(), "actionVideo", "Ctrl+Shift+V", "descVideo"));
+    if (m_videoButton) {
+        // One button for both formats: name the GIF and video keys.
+        const QString gifKey = OnboardingTips::overlayShortcutText(QStringLiteral("actionGif"),
+                                                                   QStringLiteral("Ctrl+G"));
+        const QString videoKey = OnboardingTips::overlayShortcutText(QStringLiteral("actionVideo"),
+                                                                     QStringLiteral("Ctrl+Shift+V"));
+        QStringList keys;
+        if (!gifKey.isEmpty())
+            keys << QStringLiteral("GIF %1").arg(gifKey);
+        if (!videoKey.isEmpty())
+            keys << QStringLiteral("%1 %2").arg(TM::tr("recSegmentVideo"), videoKey);
+        QString html = QStringLiteral("<b>%1</b>").arg(TM::tr("toolRecord").toHtmlEscaped());
+        if (!keys.isEmpty()) {
+            html += QStringLiteral("&nbsp;&nbsp;<span style='color:#a8a8a8'>%1</span>")
+                        .arg(keys.join(QStringLiteral(" · ")).toHtmlEscaped());
+        }
+        html += QStringLiteral("<br><span style='color:#b8bec8'>%1</span>")
+                    .arg(TM::tr("descRecord").toHtmlEscaped());
+        m_videoButton->setToolTip(html);
+    }
 }

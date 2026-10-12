@@ -1,4 +1,6 @@
 #include <QtTest>
+
+#include <algorithm>
 #include <QSettings>
 #include <QTemporaryDir>
 
@@ -160,6 +162,73 @@ private slots:
         QCOMPARE(loadGifQualityPreset(settings), RecordingQualityPreset::Custom);
         QCOMPARE(settings.value("recordingFps").toInt(), 20);
         QVERIFY(!settings.contains("gifQualityPreset"));
+    }
+
+    void untouchedLegacyVideoDefaultsMoveToBalancedOnce()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        QSettings settings(directory.filePath(QStringLiteral("settings.ini")), QSettings::IniFormat);
+        // An install from before the presets: CRF 24 with a stored frame rate.
+        settings.setValue("videoRecordingCrf", DefaultVideoCrf);
+        settings.setValue("videoRecordingFps", 25);
+        QCOMPARE(loadVideoQualityPreset(settings), RecordingQualityPreset::Balanced);
+        QCOMPARE(settings.value("videoRecordingFps").toInt(), DefaultVideoFps);
+        QCOMPARE(settings.value("videoQualityPreset").toString(), QStringLiteral("balanced"));
+
+        // Once a preset was stored, other values are a deliberate choice.
+        settings.setValue("videoRecordingFps", 25);
+        QCOMPARE(loadVideoQualityPreset(settings), RecordingQualityPreset::Custom);
+        QCOMPARE(settings.value("videoRecordingFps").toInt(), 25);
+    }
+
+    void customLegacyVideoValuesAreKept()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        QSettings settings(directory.filePath(QStringLiteral("settings.ini")), QSettings::IniFormat);
+        settings.setValue("videoRecordingCrf", DefaultVideoCrf);
+        settings.setValue("videoRecordingFps", 60);
+        QCOMPARE(loadVideoQualityPreset(settings), RecordingQualityPreset::Custom);
+        QVERIFY(!settings.contains("videoQualityPreset"));
+
+        settings.setValue("videoRecordingCrf", 20);
+        settings.setValue("videoRecordingFps", 24);
+        QCOMPARE(loadVideoQualityPreset(settings), RecordingQualityPreset::Custom);
+        QVERIFY(!settings.contains("videoQualityPreset"));
+    }
+
+    void chosenCustomStaysCustomEvenWithPresetValues()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        QSettings settings(directory.filePath(QStringLiteral("settings.ini")), QSettings::IniFormat);
+        applyVideoQualityPreset(settings, RecordingQualityPreset::Balanced);
+        applyVideoQualityPreset(settings, RecordingQualityPreset::Custom);
+        QCOMPARE(settings.value("videoRecordingCrf").toInt(), DefaultVideoCrf);
+        QCOMPARE(loadVideoQualityPreset(settings), RecordingQualityPreset::Custom);
+        applyVideoQualityPreset(settings, RecordingQualityPreset::High);
+        QCOMPARE(loadVideoQualityPreset(settings), RecordingQualityPreset::High);
+
+        applyGifQualityPreset(settings, RecordingQualityPreset::Small);
+        applyGifQualityPreset(settings, RecordingQualityPreset::Custom);
+        QCOMPARE(loadGifQualityPreset(settings), RecordingQualityPreset::Custom);
+        QCOMPARE(settings.value("recordingMaxSide").toInt(), 720);
+    }
+
+    void customFieldChoicesAndQualitySlider()
+    {
+        const QList<int> sides = gifMaxSideChoices();
+        for (RecordingQualityPreset preset : selectableRecordingQualityPresets())
+            QVERIFY(sides.contains(gifQualityValues(preset).maxSide));
+        QVERIFY(std::is_sorted(sides.cbegin(), sides.cend()));
+
+        // Higher slider = better quality = lower CRF; round trip in range.
+        QVERIFY(videoQualitySliderValue(20) > videoQualitySliderValue(30));
+        for (int crf = MinVideoCrf; crf <= MaxVideoCrf; ++crf)
+            QCOMPARE(videoCrfFromQualitySlider(videoQualitySliderValue(crf)), crf);
+        QCOMPARE(videoCrfFromQualitySlider(videoQualitySliderValue(99)), MaxVideoCrf);
+        QCOMPARE(videoCrfFromQualitySlider(videoQualitySliderValue(0)), MinVideoCrf);
     }
 
     void discoversDevicesOnlyForAnUnresolvedEnabledMicrophone()

@@ -196,6 +196,11 @@ private:
     QCheckBox *m_recordingCopyToClipboardCheck = nullptr;
     QComboBox *m_gifQualityPresetCombo = nullptr;
     QComboBox *m_videoQualityPresetCombo = nullptr;
+    // "Custom" was picked (or stored): edits keep it instead of snapping
+    // back to a preset whose values they happen to match.
+    bool m_gifQualityCustomChosen = false;
+    bool m_videoQualityCustomChosen = false;
+    QToolButton *m_videoAdvancedToggle = nullptr;
     QCheckBox *m_videoHardwareEncodingCheck = nullptr;
     QComboBox *m_videoDesktopAudioDeviceCombo = nullptr;
     QSpinBox *m_recordingFpsSpin = nullptr;

@@ -239,6 +239,17 @@ private:
     QPushButton *m_recordingGifModeButton = nullptr;
     QPushButton *m_recordingVideoModeButton = nullptr;
     QComboBox *m_recordingQualityCombo = nullptr;
+    // Inline fields shown while the quality is "Custom".
+    QWidget *m_recordingCustomQuality = nullptr;
+    QWidget *m_recordingCustomGif = nullptr;
+    QWidget *m_recordingCustomVideo = nullptr;
+    QSlider *m_recordingGifFpsSlider = nullptr;
+    QLabel *m_recordingGifFpsValue = nullptr;
+    QComboBox *m_recordingGifMaxSideCombo = nullptr;
+    QSlider *m_recordingVideoFpsSlider = nullptr;
+    QLabel *m_recordingVideoFpsValue = nullptr;
+    QSlider *m_recordingVideoQualitySlider = nullptr;
+    QLabel *m_recordingVideoQualityValue = nullptr;
     QComboBox *m_recordingDurationCombo = nullptr;
     QComboBox *m_recordingStartDelayCombo = nullptr;
     QWidget *m_recordingVideoOptions = nullptr;
@@ -258,6 +269,9 @@ private:
     void showRecordingDrawer(RecordingDrawerMode mode);
     void setRecordingDrawerMode(RecordingDrawerMode mode);
     void loadRecordingDrawerValues();
+    void loadRecordingCustomQualityValues();
+    void saveRecordingCustomQualityValues();
+    void updateRecordingCustomQualityVisibility();
     void placeRecordingDrawer();
     void openRecordingSettings();
     void hideRecordingDrawer(bool restoreToolbar = true);
@@ -347,6 +361,9 @@ private slots:
     void onOcrRequested();
     void onUploadRequested();
     void onGoogleLensRequested();
+    // Toolbar record button: the drawer in the last used mode.
+    void onRecordRequested();
+    // Overlay shortcuts (Ctrl+G, Ctrl+Shift+V): the drawer in that mode.
     void onGifRequested();
     void onVideoRequested();
 
