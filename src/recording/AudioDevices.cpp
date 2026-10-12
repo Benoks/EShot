@@ -134,7 +134,7 @@ QString defaultDesktopAudioDevice()
 #ifdef Q_OS_WIN
     return QStringLiteral("__wasapi__");
 #else
-    return QStringLiteral("@DEFAULT_SINK@.monitor");
+    return QStringLiteral("@DEFAULT_MONITOR@");
 #endif
 }
 

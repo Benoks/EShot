@@ -51,11 +51,29 @@ check_cmd "Desktop file validator" desktop-file-validate
 check_cmd "AppStream validator" appstreamcli
 check_qt_wayland
 
-check_gst pipewiresrc
-check_gst pulsesrc
-check_gst x264enc
-check_gst h264parse
-check_gst mp4mux
+# Keep in sync with missingPortalRecordingElements() and
+# optionalPortalRecordingElements() in src/recording/LinuxRecordingSupport.cpp
+# (and eshot_runtime_ready() in runtime-common.sh).
+for plugin in pipewiresrc videorate videocrop videoconvert h264parse mp4mux \
+              splitmuxsrc pulsesrc audioconvert audioresample volume audiomixer; do
+  check_gst "${plugin}"
+done
+if gst-inspect-1.0 x264enc >/dev/null 2>&1; then
+    printf '[ok] GStreamer H.264 encoder: x264enc\n'
+elif gst-inspect-1.0 openh264enc >/dev/null 2>&1; then
+    printf '[ok] GStreamer H.264 encoder: openh264enc (x264enc gives better quality)\n'
+else
+    printf '[missing] GStreamer H.264 encoder: x264enc or openh264enc\n'
+    missing=1
+fi
+# Optional hardware encoders; EShot verifies them with a test encode.
+for plugin in vah264enc vah264lpenc vapostproc nvh264enc cudaupload cudaconvertscale; do
+  if gst-inspect-1.0 "${plugin}" >/dev/null 2>&1; then
+    printf '[ok] optional GStreamer hardware element: %s\n' "${plugin}"
+  else
+    printf '[info] optional GStreamer hardware element not installed: %s\n' "${plugin}"
+  fi
+done
 if gst-inspect-1.0 fdkaacenc >/dev/null 2>&1 \
    || gst-inspect-1.0 avenc_aac >/dev/null 2>&1 \
    || gst-inspect-1.0 faac >/dev/null 2>&1 \
