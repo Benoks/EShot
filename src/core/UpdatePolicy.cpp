@@ -1,6 +1,7 @@
 #include "UpdatePolicy.h"
 
 #include <QDir>
+#include <QFileInfo>
 #include <QJsonObject>
 #include <QSet>
 #include <QVersionNumber>
@@ -38,6 +39,20 @@ int countNewerStableReleases(const QJsonArray &releases, const QString &currentV
 bool shouldSilentlyInstallUpdate(int newerStableReleaseCount, bool selfManagedInstall)
 {
     return selfManagedInstall && newerStableReleaseCount >= 2;
+}
+
+bool shouldCheckForUpdates(bool manual, const QString &appDirectory,
+                           const QString &appImagePath)
+{
+    if (manual)
+        return true;
+    if (!appDirectory.isEmpty()
+        && QFileInfo(QDir(appDirectory).filePath(QStringLiteral(".portable"))).isFile()) {
+        return false;
+    }
+    return appImagePath.isEmpty()
+        || !QFileInfo(QDir(QFileInfo(appImagePath).absolutePath())
+                          .filePath(QStringLiteral(".portable"))).isFile();
 }
 
 LinuxUpdateChannel linuxUpdateChannel(const QString &appImagePath,

@@ -277,6 +277,7 @@ void ScreenRecorder::cancel()
     if (!m_portalVideoPath.isEmpty()) QFile::remove(m_portalVideoPath);
     removePortalIntermediates();
     closePortalSession();
+    emit recordingCanceled();
 }
 
 void ScreenRecorder::pause()

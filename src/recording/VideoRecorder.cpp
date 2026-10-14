@@ -669,7 +669,7 @@ void VideoRecorder::handleFfmpegLine(const QString &line)
 
 void VideoRecorder::markCaptureStarted()
 {
-    if (!m_starting)
+    if (!m_starting || m_canceling)
         return;
     m_starting = false;
     if (m_startupTimer) {
@@ -967,6 +967,8 @@ void VideoRecorder::cancel()
         cleanupMuxProcess();
         cleanupConcatProcess();
         removeRecordingFiles();
+        cleanupProcess();
+        emit recordingCanceled();
         return;
     }
     m_canceling = true;
@@ -976,6 +978,7 @@ void VideoRecorder::cancel()
         stopSystemAudioCapture();
         removeRecordingFiles();
         cleanupProcess();
+        emit recordingCanceled();
     }
 }
 
@@ -1067,6 +1070,7 @@ void VideoRecorder::onProcessFinished(int exitCode, QProcess::ExitStatus status)
         stopSystemAudioCapture();
         removeRecordingFiles();
         cleanupProcess();
+        emit recordingCanceled();
         return;
     }
 
@@ -1719,7 +1723,7 @@ bool VideoRecorder::startGstSegment(const QSharedPointer<int> &pipewireFd, const
 
 void VideoRecorder::onGstSegmentPlaying()
 {
-    if (m_segmentPlaying)
+    if (m_segmentPlaying || m_canceling)
         return;
     m_segmentPlaying = true;
     // The child inherited the PipeWire remote; our copy is no longer needed.
@@ -1767,6 +1771,7 @@ void VideoRecorder::handleGstSegmentEnded(int exitCode, QProcess::ExitStatus sta
         QFile::remove(segment);
         removeRecordingFiles();
         cleanupProcess();
+        emit recordingCanceled();
         return;
     }
 

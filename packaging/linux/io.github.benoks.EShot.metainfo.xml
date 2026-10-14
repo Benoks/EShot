@@ -34,6 +34,11 @@
   <url type="homepage">https://github.com/Benoks/EShot</url>
   <url type="bugtracker">https://github.com/Benoks/EShot/issues</url>
   <releases>
+    <release version="4.7.0" date="2026-10-15">
+      <description>
+        <p>Overhauls Windows and Wayland recording, adds tray recording controls and frame visibility, simplifies quality settings, improves first-run layout, and supports a portable marker for disabling automatic updates.</p>
+      </description>
+    </release>
     <release version="4.2.7" date="2026-08-10">
       <description>
         <p>Makes folder opening an explicit, optional notification action and restores capture shortcuts after selecting an entire screen on KDE Wayland.</p>

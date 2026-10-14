@@ -825,6 +825,7 @@ public slots:
         m_recordingStartPending = true;
         m_recordingStartTimer.start();
         connect(m_videoRecorder, &VideoRecorder::recordingStarted, this, &EShotApp::onVideoRecordingStarted);
+        connect(m_videoRecorder, &VideoRecorder::recordingCanceled, this, &EShotApp::onRecordingCanceled);
         connect(m_videoRecorder, &VideoRecorder::recordingStopped, this, &EShotApp::onVideoRecordingStopped);
         connect(m_videoRecorder, &VideoRecorder::recordingFailed, this, &EShotApp::onVideoRecordingFailed);
         connect(m_videoRecorder, &VideoRecorder::remainingTimeChanged,
@@ -885,6 +886,7 @@ public slots:
         m_recordingStartPending = true;
         m_recordingStartTimer.start();
         connect(m_screenRecorder, &ScreenRecorder::recordingStarted, this, &EShotApp::onRecordingStarted);
+        connect(m_screenRecorder, &ScreenRecorder::recordingCanceled, this, &EShotApp::onRecordingCanceled);
         connect(m_screenRecorder, &ScreenRecorder::recordingStopped, this, &EShotApp::onRecordingStopped);
         connect(m_screenRecorder, &ScreenRecorder::recordingFailed, this, &EShotApp::onRecordingFailed);
         connect(m_screenRecorder, &ScreenRecorder::frameCaptured, this, [this](int n) {
@@ -1119,10 +1121,10 @@ private:
                                     QSystemTrayIcon::Information, 8000);
     }
 
-    void setRecordingBorderLocked(bool locked)
+    void setRecordingBorderVisible(bool visible)
     {
         if (m_recordingIndicator)
-            m_recordingIndicator->setBorderLocked(locked);
+            m_recordingIndicator->setBorderVisible(visible);
     }
 
     // "● Recording · 00:12 / 00:30", "Recording paused · …" or "Saving…".
@@ -1218,6 +1220,15 @@ private:
         setActiveRecordingPaused(!activeRecordingPaused());
     }
 
+    void onRecordingCanceled()
+    {
+        m_recordingStartPending = false;
+        finishRecordingUi();
+        // Rebuild only after the asynchronous encoder cleanup has finished.
+        // Also defer for GIF, whose cancel may run inside a tray action.
+        QTimer::singleShot(0, this, &EShotApp::rebuildTrayMenu);
+    }
+
     void cancelActiveRecording()
     {
         if (cancelPendingRecordingStart())
@@ -1231,9 +1242,7 @@ private:
             m_screenRecorder->cancel();
         else
             return;
-        finishRecordingUi();
-        // Deferred: this may run inside a tray action of the menu being rebuilt.
-        QTimer::singleShot(0, this, &EShotApp::rebuildTrayMenu);
+        // recordingCanceled() restores the UI once the encoder has exited.
     }
 
     void beginRecordingUi(bool gif, int timeLimitSeconds)
@@ -1472,6 +1481,7 @@ private:
     void rebuildTrayMenu()
     {
         if (!m_trayMenu) return;
+        m_trayRecordingStatusAction = nullptr;
         m_trayMenu->clear();
 
         auto withShortcut = [](const QString &label, const QString &shortcut) {
@@ -1526,14 +1536,14 @@ private:
                 QTimer::singleShot(0, this, &EShotApp::cancelActiveRecording);
             });
             if (m_recordingIndicator && !finalizing) {
-                const bool locked = m_recordingIndicator->isBorderLocked();
-                QAction *lockAction = m_trayMenu->addAction(
-                    trayIcon(locked ? ":/icons/lock_open.svg" : ":/icons/lock.svg"),
-                    TranslationManager::tr(locked ? "trayUnlockFrame" : "trayLockFrame"));
-                lockAction->setToolTip(TranslationManager::tr("trayFrameLockTip"));
-                connect(lockAction, &QAction::triggered, this, [this, locked]() {
-                    QTimer::singleShot(0, this, [this, locked]() {
-                        setRecordingBorderLocked(!locked);
+                const bool visible = m_recordingIndicator->isBorderVisible();
+                QAction *visibilityAction = m_trayMenu->addAction(
+                    trayIcon(visible ? ":/icons/hide.svg" : ":/icons/show.svg"),
+                    TranslationManager::tr(visible ? "trayHideFrame" : "trayShowFrame"));
+                visibilityAction->setToolTip(TranslationManager::tr("trayFrameVisibilityTip"));
+                connect(visibilityAction, &QAction::triggered, this, [this, visible]() {
+                    QTimer::singleShot(0, this, [this, visible]() {
+                        setRecordingBorderVisible(!visible);
                         rebuildTrayMenu();
                     });
                 });
@@ -2362,18 +2372,12 @@ int main(int argc, char *argv[])
     // until the wizard closes so GNOME's permission dialog cannot race it.
     if (firstRunRequired) {
         QTimer::singleShot(100, &app, [&eshotApp, controlRequested]() {
-#ifdef Q_OS_LINUX
-            // The Linux setup is a fresh onboarding flow even when an older
-            // Windows configuration was carried over. Start it in English;
-            // the user can choose another application language in the wizard.
-            // Do not persist it: closing the wizard must keep the saved language.
+            // Start onboarding in English on every platform. Completing it
+            // saves the selected language; closing it keeps saved preferences.
             TranslationManager::setLanguage(TranslationManager::English, false);
-#endif
             auto *wizard = new FirstRunWizard();
             wizard->setAttribute(Qt::WA_DeleteOnClose);
-#ifdef Q_OS_LINUX
             QObject::connect(wizard, &QObject::destroyed, []() { TranslationManager::init(); });
-#endif
             wizard->show();
             QApplication::processEvents();
             QScreen *screen = QGuiApplication::screenAt(QCursor::pos());
@@ -2382,11 +2386,8 @@ int main(int argc, char *argv[])
             if (screen) {
                 QRect avail = screen->availableGeometry();
 
-                const int targetWidth = qMin(680, qMax(wizard->minimumWidth(), avail.width() - 40));
-                const int targetHeight = qMin(760, qMax(wizard->minimumHeight(), avail.height() - 80));
-                wizard->resize(targetWidth, targetHeight);
-                QApplication::processEvents();
-                
+                // FirstRunWizard sizes itself to its form and screen limits.
+                // Center that size instead of expanding it back to screen height.
                 int nx = avail.center().x() - wizard->width() / 2;
                 int ny = avail.center().y() - wizard->height() / 2;
                 ny = qMax(avail.top() + 40, ny);

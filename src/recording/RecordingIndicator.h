@@ -49,9 +49,9 @@ public:
     // With RecordingControlsPresentation::TrayMenu there is no control
     // window, only the border; the tray menu drives the recording.
     bool hasControlBar() const { return m_controlBar != nullptr; }
-    // A locked border stays above other windows; unlocked, they may cover it.
-    void setBorderLocked(bool locked);
-    bool isBorderLocked() const { return m_borderLocked; }
+    // Hide/show only the frame; recording and controls remain active.
+    void setBorderVisible(bool visible);
+    bool isBorderVisible() const { return m_borderVisible; }
 
     bool requiresCaptureSafePresentation() const;
     bool canExcludeFromCapture() const { return m_platformCanExcludeOverlay; }
@@ -73,6 +73,7 @@ private:
     void updateStatusLabel();
     void updatePauseButton();
     void setOverlayVisible(bool visible);
+    void updateBorderVisibility();
     void moveControlBar(const QPoint &requestedTopLeft);
     void updateCaptureSafetyPolicy();
     void applyControlWindowFlags(bool staysOnTop);
@@ -90,7 +91,7 @@ private:
     QWidget *m_borderOverlay = nullptr;
     QLabel *m_statusLabel = nullptr;
     QToolButton *m_pauseButton = nullptr;
-    QToolButton *m_borderLockButton = nullptr;
+    QToolButton *m_borderVisibilityButton = nullptr;
     QPushButton *m_stopButton = nullptr;
     QToolButton *m_cancelButton = nullptr;
     QToolButton *m_detailsButton = nullptr;
@@ -100,7 +101,7 @@ private:
     int m_timeLimitSeconds = 0;
     int m_remainingSeconds = -1;
     bool m_finalizing = false;
-    bool m_borderLocked = true;
+    bool m_borderVisible = true;
     bool m_controlStaysOnTop = false;
     bool m_controlExcludedFromCapture = false;
     bool m_running = true;

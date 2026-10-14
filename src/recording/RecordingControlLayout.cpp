@@ -113,11 +113,6 @@ bool recordingCaptureBackendCanExcludeOverlay(RecordingCaptureBackend backend,
     return false;
 }
 
-bool recordingBorderStaysOnTop(bool locked)
-{
-    return locked;
-}
-
 bool recordingControlBarStaysOnTop(const QRect &controlRect,
                                    const QRect &captureRect,
                                    bool platformCanExcludeOverlay)

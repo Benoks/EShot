@@ -29,6 +29,8 @@
         <file alias="icons/eyedropper.svg">../icons/eyedropper.svg</file>
         <file alias="icons/lock.svg">../icons/lock.svg</file>
         <file alias="icons/lock_open.svg">../icons/lock_open.svg</file>
+        <file alias="icons/show.svg">../icons/show.svg</file>
+        <file alias="icons/hide.svg">../icons/hide.svg</file>
         <file alias="icons/semirect.svg">../icons/semirect.svg</file>
         <file alias="icons/ocr.svg">../icons/ocr.svg</file>
         <file alias="icons/external_link.svg">../icons/external_link.svg</file>

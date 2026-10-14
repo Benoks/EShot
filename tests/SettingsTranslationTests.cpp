@@ -167,6 +167,7 @@ void SettingsTranslationTests::recordingUxTextExistsInEveryLanguage()
         {"recordingAccessibleControls", 0}, {"recordingAccessibleStatus", 0},
         {"recControlsHidden", 2}, {"trayStopAndSave", 0}, {"trayPauseRecording", 0},
         {"trayResumeRecording", 0}, {"trayRecordGif", 0}, {"trayRecordVideo", 0},
+        {"trayShowFrame", 0}, {"trayHideFrame", 0}, {"trayFrameVisibilityTip", 0},
         {"trayRecordingTooltip", 1}, {"trayRecordingPausedTooltip", 1},
         {"trayLastRecording", 0}, {"recOpenFile", 0}, {"recShowInFolder", 0},
         {"recCopyFile", 0}, {"recGifSavedSize", 1}, {"recVideoSavedSize", 1},

@@ -31,6 +31,7 @@
 #include <QScreen>
 #include <QCursor>
 #include <QScrollArea>
+#include <QStyle>
 #ifdef Q_OS_LINUX
 #include <QCheckBox>
 #include <QProcess>
@@ -50,11 +51,32 @@ FirstRunWizard::FirstRunWizard(QWidget *parent)
 #endif
     setWindowTitle(TranslationManager::wizardTitle());
     setWindowIcon(QIcon(":/icons/pen.svg"));
-    setMinimumSize(560, 400);
-    resize(640, 720);
-
     setupUi();
     loadDefaults();
+
+    // Measure after defaults have revealed/hidden platform-specific rows. Keep
+    // the footer visible on small screens and let only the form scroll.
+    ensurePolished();
+    QScreen *targetScreen = parent ? parent->screen()
+                                   : QGuiApplication::screenAt(QCursor::pos());
+    if (!targetScreen)
+        targetScreen = screen();
+    const QSize available = targetScreen->availableGeometry().size();
+    const QSize maximumClient(qMax(1, available.width() - 32),
+                              qMax(1, available.height() - 48));
+    setMinimumSize(QSize(480, 320).boundedTo(maximumClient));
+    const int initialWidth = qMin(640, maximumClient.width());
+    auto *scrollArea = findChild<QScrollArea *>(QStringLiteral("firstRunScrollArea"));
+    const QMargins margins = layout()->contentsMargins();
+    const int contentWidth = initialWidth - margins.left() - margins.right()
+        - style()->pixelMetric(QStyle::PM_ScrollBarExtent);
+    QLayout *formLayout = scrollArea->widget()->layout();
+    const int formHeight = formLayout->hasHeightForWidth()
+        ? formLayout->heightForWidth(qMax(1, contentWidth))
+        : formLayout->sizeHint().height();
+    const int footerHeight = layout()->sizeHint().height() - scrollArea->sizeHint().height();
+    resize(initialWidth, qBound(minimumHeight(), formHeight + footerHeight,
+                               maximumClient.height()));
 }
 
 FirstRunWizard::~FirstRunWizard() {}
@@ -244,6 +266,10 @@ void FirstRunWizard::setupUi()
     mainLayout->addWidget(depsGroup);
 #endif
 
+    // The scroll widget fills its viewport. Spare height belongs below the
+    // form, otherwise QVBoxLayout spreads it into labels and group boxes.
+    mainLayout->addStretch();
+
     QHBoxLayout *btnLayout = new QHBoxLayout();
     btnLayout->addStretch();
     QPushButton *finishBtn = new QPushButton(TranslationManager::wizardFinish());
@@ -265,15 +291,9 @@ void FirstRunWizard::loadDefaults()
 {
     QSettings s("EShot", "EShot");
 
-    int langInt = s.value("language", static_cast<int>(TranslationManager::currentLanguage())).toInt();
-#ifdef Q_OS_LINUX
-    // A configuration carried over from another platform must not silently
-    // choose the language for Linux's first-run setup. main.cpp deliberately
-    // starts that fresh onboarding flow in English; preserve that choice until
-    // the user explicitly selects a language in this wizard.
-    if (!s.value(QStringLiteral("linuxSetupCompleted"), false).toBool())
-        langInt = static_cast<int>(TranslationManager::currentLanguage());
-#endif
+    // Match the onboarding language chosen by startup, even when a previous
+    // installation has saved another language. Finish saves the user's choice.
+    const int langInt = static_cast<int>(TranslationManager::currentLanguage());
     static const char* langCodes[] = {"tr","en","de","fr","es","ja","zh","ru"};
     QString lang = (langInt >= 0 && langInt < TranslationManager::LangCount) ? langCodes[langInt] : "en";
     int li = m_langCombo->findData(lang);

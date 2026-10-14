@@ -190,12 +190,6 @@ private slots:
                  QRect(-1912, 1030, 310, 42));
     }
 
-    void keepsOnlyLockedRecordingBorderOnTop()
-    {
-        QVERIFY(recordingBorderStaysOnTop(true));
-        QVERIFY(!recordingBorderStaysOnTop(false));
-    }
-
     void controlsMoveToTheTrayOnlyWhenATrayIconIsShown()
     {
         QCOMPARE(recordingControlsPresentation(true, true),

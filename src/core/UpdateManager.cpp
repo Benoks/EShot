@@ -97,7 +97,7 @@ void UpdateManager::setStatus(const QString &status)
 
 void UpdateManager::checkForUpdates(bool manual)
 {
-    if (isBusy())
+    if (isBusy() || (!manual && !automaticUpdatesEnabled()))
         return;
 
     m_checking = true;
@@ -204,7 +204,7 @@ void UpdateManager::parseRelease(const QByteArray &data, bool manual)
 
 void UpdateManager::checkSilentUpdateEligibility()
 {
-    if (m_releaseListReply || !isSelfManagedInstall())
+    if (m_releaseListReply || !automaticUpdatesEnabled() || !isSelfManagedInstall())
         return;
 
     QUrl url(QStringLiteral("https://api.github.com/repos/Benoks/EShot/releases"));
@@ -234,6 +234,17 @@ void UpdateManager::checkSilentUpdateEligibility()
             installUpdate(true);
         }
     });
+}
+
+bool UpdateManager::automaticUpdatesEnabled() const
+{
+    return shouldCheckForUpdates(false, QCoreApplication::applicationDirPath(),
+#ifdef Q_OS_LINUX
+                                 qEnvironmentVariable("APPIMAGE")
+#else
+                                 QString()
+#endif
+    );
 }
 
 bool UpdateManager::isSelfManagedInstall() const
@@ -284,7 +295,7 @@ QString UpdateManager::updateCacheDir() const
 
 void UpdateManager::installUpdate(bool silent)
 {
-    if (isBusy())
+    if (isBusy() || (silent && !automaticUpdatesEnabled()))
         return;
     // Package-managed builds only report releases; a fresh check shows either
     // "up to date" or how to update through the package manager.

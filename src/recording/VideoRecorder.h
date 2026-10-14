@@ -58,6 +58,8 @@ public:
 
 signals:
     void recordingStarted();
+    // Emitted after cancellation has released the capture/finalization state.
+    void recordingCanceled();
     void recordingStopped(const QString &outputPath);
     void recordingFailed(const QString &reason);
     void remainingTimeChanged(int seconds);

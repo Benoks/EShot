@@ -109,6 +109,15 @@ Each release also includes `EShot-v<version>-linux-x64.tar.gz` for users who pre
 
 Integrated AppImages are stored for the current user under `~/.local/opt/EShot`. EShot checks for updates and always keeps manual updating available. If a per-user Windows installation or integrated AppImage is at least two stable releases behind, EShot downloads the matching release asset, verifies its GitHub SHA-256 digest, updates silently, and restarts. All-users Windows installations require an administrator for updates. The AUR package (`eshot-bin`) and the `.tar.gz` archive are updated through the package manager or a new download; EShot only reports new releases there and does not replace them itself.
 
+### Disable automatic update checks for managed portable installs
+
+Starting with 4.7.0, place an empty file named `.portable` beside the EShot
+executable to disable automatic update checks and silent updates. For an
+AppImage, place the file beside the original `.AppImage` file. This lets a
+package manager handle updates without EShot checking in the background.
+Manual update checks remain available. Removing the marker restores the normal
+update behavior. The marker does not change where EShot stores settings.
+
 ### Arch Linux and CachyOS
 
 Install the EShot-maintained AUR binary package with an AUR helper:

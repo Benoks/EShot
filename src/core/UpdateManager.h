@@ -42,6 +42,7 @@ private:
     void finishDownload();
     void launchInstaller(const QString &installerPath);
     void checkSilentUpdateEligibility();
+    bool automaticUpdatesEnabled() const;
     bool isSelfManagedInstall() const;
     QString externalUpdateStatus(const QString &version) const;
     QString updateCacheDir() const;

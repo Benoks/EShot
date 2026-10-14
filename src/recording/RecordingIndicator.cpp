@@ -168,7 +168,7 @@ QString controlBarStyle()
             border-color: #404040;
             color: #8a8a8a;
         }
-        QToolButton#recordingBorderLockButton:checked {
+        QToolButton#recordingBorderVisibilityButton:checked {
             background-color: #244c70;
             border-color: #3f98d5;
         }
@@ -199,8 +199,10 @@ public:
         setAttribute(Qt::WA_TranslucentBackground);
         setAttribute(Qt::WA_NoSystemBackground);
         setAttribute(Qt::WA_TransparentForMouseEvents);
+        setWindowFlags(Qt::Tool | Qt::FramelessWindowHint
+                       | Qt::WindowDoesNotAcceptFocus | Qt::WindowStaysOnTopHint);
         setCaptureRect(captureRect);
-        setLocked(true);
+        m_excludedFromCapture = excludeRecordingWindowFromCapture(this);
     }
 
     void setCaptureRect(const QRect &captureRect)
@@ -220,24 +222,6 @@ public:
         borderRegion += QRect(m_borderRect.right() + 1, m_borderRect.top(),
                               m_borderWidth, m_borderRect.height());
         setMask(borderRegion);
-    }
-
-    void setLocked(bool locked)
-    {
-        const bool wasVisible = isVisible();
-        Qt::WindowFlags flags = Qt::Tool | Qt::FramelessWindowHint
-            | Qt::WindowDoesNotAcceptFocus;
-        if (recordingBorderStaysOnTop(locked))
-            flags |= Qt::WindowStaysOnTopHint;
-        setWindowFlags(flags);
-        // setWindowFlags() recreates the native window, which drops its
-        // display affinity; exclude the new window before it is shown.
-        m_excludedFromCapture = excludeRecordingWindowFromCapture(this);
-        if (wasVisible) {
-            show();
-            if (locked)
-                raise();
-        }
     }
 
     bool excludedFromCapture() const { return m_excludedFromCapture; }
@@ -353,16 +337,15 @@ RecordingIndicator::RecordingIndicator(const QRect &captureRect, QWidget *parent
     m_controlRect = m_layout.controlRect.translated(-globalWindowRect.topLeft());
 
     m_borderOverlay = new RecordingBorderOverlay(m_captureRect, m_borderWidth);
-    setBorderLocked(true);
-    if (controlBar)
-        createControlBar();
     // A full-screen capture has no outside edge where the border can live.
     // Unless the border window is excluded from the capture, the video would
-    // show the blue border itself, even when it is locked.
+    // show the blue border itself.
     m_hideFullscreenBorderForCapture =
         !(m_platformCanExcludeOverlay
           && static_cast<RecordingBorderOverlay *>(m_borderOverlay)->excludedFromCapture())
         && isFullScreenRecordingRect(m_captureRect);
+    if (controlBar)
+        createControlBar();
     // Without a confirmed capture exclusion, hide overlapping controls
     // before the first mapped frame.
     if (requiresCaptureSafePresentation())
@@ -374,8 +357,7 @@ RecordingIndicator::RecordingIndicator(const QRect &captureRect, QWidget *parent
     // The tray-menu presentation keeps this (empty) control window hidden.
     if (controlBar)
         show();
-    if (m_borderOverlay && !m_hideFullscreenBorderForCapture)
-        m_borderOverlay->show();
+    updateBorderVisibility();
     QTimer::singleShot(100, this, [this, globalWindowRect]() {
         qInfo() << "[RecordingIndicator] capture=" << m_captureRect
                 << "controls=" << (m_controlBar ? "bar" : "tray")
@@ -450,18 +432,16 @@ void RecordingIndicator::createControlBar()
     m_controlBar->installEventFilter(this);
     layout->addWidget(m_statusLabel, 1);
 
-    m_borderLockButton = new QToolButton(m_controlBar);
-    m_borderLockButton->setObjectName(QStringLiteral("recordingBorderLockButton"));
-    m_borderLockButton->setFixedSize(30, 30);
-    m_borderLockButton->setIconSize(QSize(17, 17));
-    m_borderLockButton->setCheckable(true);
-    m_borderLockButton->setCursor(Qt::PointingHandCursor);
-    m_borderLockButton->setToolTip(TranslationManager::actionLock());
-    m_borderLockButton->setAccessibleName(TranslationManager::actionLock());
-    connect(m_borderLockButton, &QToolButton::toggled, this,
-            &RecordingIndicator::setBorderLocked);
-    layout->addWidget(m_borderLockButton);
-    setBorderLocked(m_borderLocked);
+    m_borderVisibilityButton = new QToolButton(m_controlBar);
+    m_borderVisibilityButton->setObjectName(QStringLiteral("recordingBorderVisibilityButton"));
+    m_borderVisibilityButton->setFixedSize(30, 30);
+    m_borderVisibilityButton->setIconSize(QSize(17, 17));
+    m_borderVisibilityButton->setCheckable(true);
+    m_borderVisibilityButton->setCursor(Qt::PointingHandCursor);
+    connect(m_borderVisibilityButton, &QToolButton::toggled, this,
+            &RecordingIndicator::setBorderVisible);
+    layout->addWidget(m_borderVisibilityButton);
+    setBorderVisible(m_borderVisible);
 
     m_pauseButton = new QToolButton(m_controlBar);
     m_pauseButton->setObjectName(QStringLiteral("recordingPauseButton"));
@@ -720,24 +700,32 @@ void RecordingIndicator::setOverlayVisible(bool visible)
                  !visible && requiresCaptureSafePresentation());
     if (m_controlBar)
         m_controlBar->setVisible(visible);
-    if (m_borderOverlay)
-        m_borderOverlay->setVisible(visible && !m_hideFullscreenBorderForCapture);
+    updateBorderVisibility();
     updateControlMask();
     update();
 }
 
-void RecordingIndicator::setBorderLocked(bool locked)
+void RecordingIndicator::setBorderVisible(bool visible)
 {
-    m_borderLocked = locked;
-    if (m_borderOverlay)
-        static_cast<RecordingBorderOverlay *>(m_borderOverlay)->setLocked(locked);
-    if (m_borderLockButton) {
-        const QSignalBlocker blocker(m_borderLockButton);
-        m_borderLockButton->setChecked(locked);
-        m_borderLockButton->setIcon(QIcon(locked
-            ? QStringLiteral(":/icons/lock.svg")
-            : QStringLiteral(":/icons/lock_open.svg")));
+    m_borderVisible = visible;
+    updateBorderVisibility();
+    if (m_borderVisibilityButton) {
+        const QSignalBlocker blocker(m_borderVisibilityButton);
+        m_borderVisibilityButton->setChecked(visible);
+        m_borderVisibilityButton->setIcon(QIcon(visible
+            ? QStringLiteral(":/icons/hide.svg")
+            : QStringLiteral(":/icons/show.svg")));
+        const QString action = TranslationManager::tr(visible ? "trayHideFrame" : "trayShowFrame");
+        m_borderVisibilityButton->setToolTip(action);
+        m_borderVisibilityButton->setAccessibleName(action);
     }
+}
+
+void RecordingIndicator::updateBorderVisibility()
+{
+    if (m_borderOverlay)
+        m_borderOverlay->setVisible(m_running && m_borderVisible && m_overlayVisible
+                                    && !m_hideFullscreenBorderForCapture);
 }
 
 void RecordingIndicator::updateCaptureSafetyPolicy()

@@ -233,11 +233,11 @@ private slots:
 #endif
     }
 
-    void togglesBorderLockWithoutHidingTheBorder()
+    void togglesBorderVisibilityWithoutChangingRecordingControls()
     {
         RecordingIndicator indicator(QRect(120, 120, 640, 360), nullptr, 2, true);
-        auto *lock = indicator.findChild<QToolButton *>(QStringLiteral("recordingBorderLockButton"));
-        QVERIFY(lock);
+        auto *visibility = indicator.findChild<QToolButton *>(QStringLiteral("recordingBorderVisibilityButton"));
+        QVERIFY(visibility);
         QWidget *border = nullptr;
         for (QWidget *widget : QApplication::topLevelWidgets()) {
             if (widget && widget->objectName() == QStringLiteral("recordingBorderOverlay")) {
@@ -248,9 +248,13 @@ private slots:
         QVERIFY(border);
         QVERIFY(border->isVisible());
 
-        QTest::mouseClick(lock, Qt::LeftButton);
-        QTRY_VERIFY(border->isVisible());
-        QTest::mouseClick(lock, Qt::LeftButton);
+        QTest::mouseClick(visibility, Qt::LeftButton);
+        QVERIFY(!border->isVisible());
+        QVERIFY(indicator.hasControlBar());
+        indicator.setPaused(true);
+        indicator.setPaused(false);
+        QVERIFY(!border->isVisible());
+        QTest::mouseClick(visibility, Qt::LeftButton);
         QTRY_VERIFY(border->isVisible());
     }
 
@@ -269,6 +273,9 @@ private slots:
             }
         }
         QVERIFY(border);
+        QVERIFY(!border->isVisible());
+        indicator.setBorderVisible(false);
+        indicator.setBorderVisible(true);
         QVERIFY(!border->isVisible());
     }
 
@@ -356,13 +363,13 @@ private slots:
         auto *stop = indicator.findChild<QPushButton *>(QStringLiteral("recordingStopButton"));
         auto *cancel = indicator.findChild<QToolButton *>(QStringLiteral("recordingCancelButton"));
         auto *details = indicator.findChild<QToolButton *>(QStringLiteral("recordingDetailsButton"));
-        auto *lock = indicator.findChild<QToolButton *>(QStringLiteral("recordingBorderLockButton"));
-        QVERIFY(pause && stop && cancel && details && lock);
+        auto *visibility = indicator.findChild<QToolButton *>(QStringLiteral("recordingBorderVisibilityButton"));
+        QVERIFY(pause && stop && cancel && details && visibility);
         QCOMPARE(pause->accessibleName(), QStringLiteral("Pause"));
         QCOMPARE(stop->accessibleName(), QStringLiteral("Stop Recording"));
         QCOMPARE(cancel->accessibleName(), QStringLiteral("Cancel Recording"));
         QVERIFY(!details->accessibleName().isEmpty());
-        QVERIFY(!lock->accessibleName().isEmpty());
+        QVERIFY(!visibility->accessibleName().isEmpty());
         indicator.setPaused(true);
         QCOMPARE(pause->accessibleName(), QStringLiteral("Resume"));
     }
@@ -397,15 +404,18 @@ private slots:
         }
         QVERIFY(border);
         QVERIFY(border->isVisible());
-        QVERIFY(indicator.isBorderLocked());
+        QVERIFY(indicator.isBorderVisible());
         QVERIFY(border->windowFlags() & Qt::WindowStaysOnTopHint);
 
-        // The tray menu's lock toggle.
-        indicator.setBorderLocked(false);
-        QVERIFY(!indicator.isBorderLocked());
-        QTRY_VERIFY(border->isVisible());
-        QVERIFY(!(border->windowFlags() & Qt::WindowStaysOnTopHint));
-        indicator.setBorderLocked(true);
+        // The tray menu's visibility toggle.
+        indicator.setBorderVisible(false);
+        QVERIFY(!indicator.isBorderVisible());
+        QVERIFY(!border->isVisible());
+        indicator.setPaused(true);
+        indicator.setPaused(false);
+        QVERIFY(!border->isVisible());
+        indicator.setBorderVisible(true);
+        QVERIFY(border->isVisible());
         QVERIFY(border->windowFlags() & Qt::WindowStaysOnTopHint);
 
         // Pause and finalizing keep the border and never create controls.
@@ -413,19 +423,22 @@ private slots:
         indicator.setFinalizing(true);
         QVERIFY(border->isVisible());
         QVERIFY(!indicator.hasControlBar());
+        indicator.stop();
+        indicator.setBorderVisible(true);
+        QVERIFY(!border->isVisible());
     }
 
-    void controlBarFallbackKeepsItsLockButtonInSync()
+    void controlBarFallbackKeepsItsVisibilityButtonInSync()
     {
         RecordingIndicator indicator(QRect(120, 120, 640, 360), nullptr, 2, true);
         QVERIFY(indicator.hasControlBar());
-        auto *lock = indicator.findChild<QToolButton *>(QStringLiteral("recordingBorderLockButton"));
-        QVERIFY(lock);
-        QVERIFY(lock->isChecked());
-        indicator.setBorderLocked(false);
-        QVERIFY(!lock->isChecked());
-        QTest::mouseClick(lock, Qt::LeftButton);
-        QVERIFY(indicator.isBorderLocked());
+        auto *visibility = indicator.findChild<QToolButton *>(QStringLiteral("recordingBorderVisibilityButton"));
+        QVERIFY(visibility);
+        QVERIFY(visibility->isChecked());
+        indicator.setBorderVisible(false);
+        QVERIFY(!visibility->isChecked());
+        QTest::mouseClick(visibility, Qt::LeftButton);
+        QVERIFY(indicator.isBorderVisible());
     }
 
 };

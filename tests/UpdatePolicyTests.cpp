@@ -63,6 +63,45 @@ private slots:
         QVERIFY(!shouldSilentlyInstallUpdate(2, false));
         QVERIFY(shouldSilentlyInstallUpdate(2, true));
     }
+
+    void portableMarkerDisablesOnlyAutomaticChecks()
+    {
+        QTemporaryDir app;
+        QVERIFY(app.isValid());
+        QVERIFY(shouldCheckForUpdates(false, app.path()));
+        QFile marker(app.filePath(QStringLiteral(".portable")));
+        QVERIFY(marker.open(QIODevice::WriteOnly));
+        marker.close();
+        QVERIFY(!shouldCheckForUpdates(false, app.path()));
+        QVERIFY(shouldCheckForUpdates(true, app.path()));
+        QVERIFY(marker.remove());
+        QVERIFY(shouldCheckForUpdates(false, app.path()));
+    }
+
+    void directoryNamedPortableIsNotAMarkerFile()
+    {
+        QTemporaryDir app;
+        QVERIFY(app.isValid());
+        QVERIFY(QDir(app.path()).mkdir(QStringLiteral(".portable")));
+        QVERIFY(shouldCheckForUpdates(false, app.path()));
+    }
+
+    void appImageMarkerLivesBesideTheOriginalAppImage()
+    {
+        QTemporaryDir mountedApp;
+        QTemporaryDir downloads;
+        QVERIFY(mountedApp.isValid());
+        QVERIFY(downloads.isValid());
+        const QString image = downloads.filePath(QStringLiteral("EShot.AppImage"));
+        QVERIFY(shouldCheckForUpdates(false, mountedApp.path(), image));
+        QFile marker(downloads.filePath(QStringLiteral(".portable")));
+        QVERIFY(marker.open(QIODevice::WriteOnly));
+        marker.close();
+        QVERIFY(!shouldCheckForUpdates(false, mountedApp.path(), image));
+        QVERIFY(shouldCheckForUpdates(true, mountedApp.path(), image));
+        // A marker belonging to another installation must not affect this one.
+        QVERIFY(shouldCheckForUpdates(false, mountedApp.path()));
+    }
 };
 
 QTEST_APPLESS_MAIN(UpdatePolicyTests)

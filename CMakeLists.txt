@@ -557,6 +557,37 @@ if(BUILD_TESTING)
         LIBS Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network
     )
 
+    eshot_add_test(eshot_first_run_wizard_layout_tests first_run_wizard_layout
+        SOURCES
+            tests/FirstRunWizardLayoutTests.cpp
+            resources/icons.qrc
+            src/ui/FirstRunWizard.cpp
+            src/ui/FirstRunWizard.h
+            src/core/HotkeyManager.cpp
+            src/core/HotkeyManager.h
+            src/core/HotkeySequence.cpp
+            src/ui/SettingsHotkeyPolicy.cpp
+            src/core/LinuxPortalGlobalShortcuts.cpp
+            src/core/LinuxPortalGlobalShortcuts.h
+            src/core/LinuxPortalRequest.cpp
+            src/core/LinuxPortalRequest.h
+            src/core/LinuxPortalHostRegistry.cpp
+            src/core/LinuxPortalHostRegistry.h
+            src/core/LinuxGnomeShortcutInstaller.cpp
+            src/core/LinuxDependencySelection.cpp
+            src/core/LinuxDesktopIntegration.cpp
+        LIBS Qt6::Core Qt6::Gui Qt6::Widgets
+    )
+    if(WIN32)
+        target_link_libraries(eshot_first_run_wizard_layout_tests PRIVATE user32)
+    elseif(UNIX AND NOT APPLE)
+        target_link_libraries(eshot_first_run_wizard_layout_tests PRIVATE Qt6::DBus)
+        target_sources(eshot_first_run_wizard_layout_tests PRIVATE
+            src/core/LinuxKGlobalAccelShortcuts.cpp
+            src/core/LinuxKGlobalAccelShortcuts.h)
+    endif()
+    set_tests_properties(first_run_wizard_layout PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
     eshot_add_test(eshot_control_center_dialog_tests control_center_dialog
         SOURCES
             tests/ControlCenterDialogTests.cpp
@@ -842,6 +873,38 @@ if(BUILD_TESTING)
             tests/ScreenRecorderPauseApiTests.cpp
         LIBS Qt6::Core Qt6::Gui
     )
+
+    eshot_add_test(eshot_recording_cancellation_tests recording_cancellation
+        SOURCES
+            tests/RecordingCancellationTests.cpp
+            src/recording/ScreenRecorder.cpp
+            src/recording/VideoRecorder.cpp
+            src/recording/GifEncoder.cpp
+            src/recording/GifEncodeWorker.cpp
+            src/recording/LinuxRecordingSupport.cpp
+            src/recording/GstH264EncoderProbe.cpp
+            src/recording/RecordingTimeline.cpp
+            src/recording/RecordingSegments.cpp
+            src/recording/RecordingSettingsPolicy.cpp
+            src/recording/RecordingFinalizationPolicy.cpp
+            src/recording/VideoRecordingCompletionPolicy.cpp
+            src/recording/WindowsRecordingSupport.cpp
+            src/recording/WindowsCaptureBackend.cpp
+            src/recording/AudioDevices.cpp
+            src/recording/PortalRecordingSource.cpp
+            src/core/ComponentPaths.cpp
+            src/core/LinuxPortalScreenCast.cpp
+            src/core/LinuxPortalRequest.cpp
+            src/core/LinuxDesktopIntegration.cpp
+            src/core/LinuxPortalHostRegistry.cpp
+        LIBS Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network Threads::Threads
+    )
+    if(UNIX AND NOT APPLE)
+        target_link_libraries(eshot_recording_cancellation_tests PRIVATE Qt6::DBus)
+    elseif(WIN32)
+        target_link_libraries(eshot_recording_cancellation_tests PRIVATE
+            user32 gdi32 shell32 dwmapi advapi32 ole32 oleaut32 dxgi)
+    endif()
 
     eshot_add_test(eshot_notification_folder_opener_tests notification_folder_opener
         SOURCES

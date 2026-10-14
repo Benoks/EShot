@@ -84,7 +84,6 @@ constexpr int RecordingWindowsCaptureExclusionMinimumBuild = 19041;
 bool recordingCaptureBackendCanExcludeOverlay(RecordingCaptureBackend backend,
                                               int windowsBuild = 0,
                                               bool displayAffinityConfirmed = false);
-bool recordingBorderStaysOnTop(bool locked);
 // Controls outside the recorded area, or excluded from the capture, can stay
 // above other windows without ending up in the video.
 bool recordingControlBarStaysOnTop(const QRect &controlRect,
