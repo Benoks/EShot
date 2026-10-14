@@ -74,6 +74,8 @@ private slots:
     void onPortalSessionClosed();
 
 private:
+    friend class RecordingCancellationTests;
+
     enum class ConversionStage { Concat, Palette, Encode };
 
     void finishRecording();

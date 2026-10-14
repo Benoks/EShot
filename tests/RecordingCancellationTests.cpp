@@ -6,10 +6,8 @@
 
 // Seed the encoder boundary without asking for screen/portal access. The
 // cancellation implementation and process-finished handlers remain real.
-#define private public
 #include "recording/ScreenRecorder.h"
 #include "recording/VideoRecorder.h"
-#undef private
 
 class RecordingCancellationTests : public QObject
 {

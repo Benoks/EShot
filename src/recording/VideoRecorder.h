@@ -73,6 +73,8 @@ private slots:
     void onPortalSessionClosed();
 
 private:
+    friend class RecordingCancellationTests;
+
     QString ffmpegPath() const;
     QString makeDefaultOutputPath() const;
     qint64 activeElapsedMs() const;
