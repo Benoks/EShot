@@ -21,7 +21,7 @@ EShot keeps the complete screenshot workflow in one compact tray application: se
 
 | Windows | Linux (CachyOS / KDE Plasma 6) |
 | --- | --- |
-| <img src="image.png" alt="EShot on Windows" width="760"> | <img src="docs/images/cachyos-desktop.png" alt="EShot on CachyOS with KDE Plasma 6" width="760"> |
+| <img src="docs/images/eshot-windows.png" alt="EShot on Windows" width="760"> | <img src="docs/images/eshot-linux.png" alt="EShot on CachyOS with KDE Plasma 6" width="760"> |
 
 ## Platform support
 
