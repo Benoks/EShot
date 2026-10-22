@@ -1,8 +1,10 @@
 ; ============================================================
 ;  EShot Setup Script — Inno Setup 6.x
-;  To compile:  iscc EShot_Setup.iss
+;  To compile:  iscc packaging\windows\EShot_Setup.iss
 ;  https://jrsoftware.org/isinfo.php
 ; ============================================================
+
+#define RepoRoot       AddBackslash(SourcePath) + "..\.."
 
 #define MyAppName      "EShot"
 #define MyAppVersion   "4.7.0"
@@ -14,6 +16,7 @@
 #endif
 
 [Setup]
+SourceDir={#RepoRoot}
 AppId={{E5H0T-SCAP-2024-GUID-000000000001}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}

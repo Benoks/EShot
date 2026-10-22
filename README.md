@@ -281,7 +281,7 @@ cmake --build build --config Release --parallel
 Build the installer with Inno Setup 6:
 
 ```powershell
-iscc EShot_Setup.iss
+iscc packaging/windows/EShot_Setup.iss
 ```
 
 ## Third-party components

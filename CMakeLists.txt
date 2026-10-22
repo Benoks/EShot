@@ -213,7 +213,7 @@ endif()
 # listed as sources; for MinGW we use a .rc file)
 if(MINGW)
     configure_file(
-        ${CMAKE_CURRENT_SOURCE_DIR}/EShot.manifest
+        ${CMAKE_CURRENT_SOURCE_DIR}/packaging/windows/EShot.manifest
         ${CMAKE_CURRENT_BINARY_DIR}/EShot.manifest
         COPYONLY
     )
@@ -221,7 +221,10 @@ if(MINGW)
     file(WRITE ${RC_FILE} "1 24 \"${CMAKE_CURRENT_BINARY_DIR}/EShot.manifest\"\n")
     list(APPEND SOURCES ${RC_FILE})
 elseif(MSVC)
-    list(APPEND SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/app.rc)
+    list(APPEND SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/packaging/windows/app.rc)
+    set_source_files_properties(packaging/windows/app.rc PROPERTIES
+        INCLUDE_DIRECTORIES "${CMAKE_CURRENT_SOURCE_DIR}"
+    )
 endif()
 
 if(WIN32)
@@ -285,7 +288,7 @@ if(MSVC)
     add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
         # mt.exe is supplied by the Visual Studio developer environment. Some
         # CMake generators leave CMAKE_MT unset even though mt.exe is on PATH.
-        COMMAND mt.exe -manifest ${CMAKE_CURRENT_SOURCE_DIR}/EShot.manifest -outputresource:$<TARGET_FILE:${PROJECT_NAME}>\;1
+        COMMAND mt.exe -manifest ${CMAKE_CURRENT_SOURCE_DIR}/packaging/windows/EShot.manifest -outputresource:$<TARGET_FILE:${PROJECT_NAME}>\;1
         COMMENT "Embedding manifest into executable"
     )
 endif()
@@ -616,6 +619,19 @@ if(BUILD_TESTING)
             src/core/Sha256Digest.cpp
             src/core/Sha256Digest.h
         LIBS Qt6::Core
+    )
+
+    eshot_add_test(eshot_update_manager_tests update_manager
+        SOURCES
+            tests/UpdateManagerTests.cpp
+            src/core/UpdateManager.cpp
+            src/core/UpdateManager.h
+            src/core/UpdateAssetSelector.cpp
+            src/core/UpdatePolicy.cpp
+            src/core/WindowsInstallPolicy.cpp
+            src/core/LinuxUpdateScript.cpp
+            src/core/Sha256Digest.cpp
+        LIBS Qt6::Core Qt6::Gui Qt6::Network
     )
 
     eshot_add_test(eshot_update_policy_tests update_policy

@@ -3,7 +3,7 @@ from pathlib import Path
 from PIL import Image, ImageFilter
 
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "icons" / "app_base.ico"
 OUTPUT = ROOT / "app.ico"
 SIZES = (16, 24, 32, 48, 64, 128, 256)

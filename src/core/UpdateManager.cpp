@@ -6,6 +6,7 @@
 #include "WindowsInstallPolicy.h"
 #include <QCoreApplication>
 #include <QDateTime>
+#include <QDebug>
 #include <QDesktopServices>
 #include <QDir>
 #include <QFile>
@@ -122,6 +123,10 @@ void UpdateManager::checkForUpdates(bool manual)
 
         if (reply->error() != QNetworkReply::NoError) {
             const QString msg = reply->errorString();
+            qWarning() << "[Updater] Release check failed; manual=" << manual
+                       << "networkError=" << reply->error()
+                       << "httpStatus=" << reply->attribute(QNetworkRequest::HttpStatusCodeAttribute)
+                       << msg;
             reply->deleteLater();
             m_installAfterCheck = false;
             setStatus(TranslationManager::updateStatusFailed(msg));
@@ -141,18 +146,19 @@ void UpdateManager::checkForUpdates(bool manual)
 void UpdateManager::parseRelease(const QByteArray &data, bool manual)
 {
     const QJsonDocument doc = QJsonDocument::fromJson(data);
-    if (!doc.isObject()) {
-        const QString msg = TranslationManager::updateInvalidResponse();
-        m_installAfterCheck = false;
-        setStatus(TranslationManager::updateStatusFailed(msg));
-        emit failed(msg);
-        return;
-    }
-
     const QJsonObject obj = doc.object();
-    QString latestTag = obj.value(QStringLiteral("tag_name")).toString();
+    QString latestTag = obj.value(QStringLiteral("tag_name")).toString().trimmed();
     if (latestTag.startsWith('v', Qt::CaseInsensitive))
         latestTag = latestTag.mid(1);
+    if (!doc.isObject() || latestTag.isEmpty()) {
+        const QString msg = TranslationManager::updateInvalidResponse();
+        qWarning() << "[Updater] Invalid release response; manual=" << manual;
+        m_installAfterCheck = false;
+        setStatus(TranslationManager::updateStatusFailed(msg));
+        if (manual)
+            emit failed(msg);
+        return;
+    }
 
     m_latestVersion = latestTag;
     m_releaseUrl = obj.value(QStringLiteral("html_url")).toString();

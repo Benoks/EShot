@@ -77,7 +77,7 @@ build akisi ile guncellenmelidir.
 En temiz cozum ilk seferde terminalden su komutu calistirmaktir:
 
 ```bash
-cd "/run/media/emirhan/Samsung 990 PRO/Users/emirh/OneDrive/Masaüstü/Code/VSCODE/EShot"
+cd /path/to/EShot
 bash scripts/linux/install-cachyos-deps.sh
 ```
 

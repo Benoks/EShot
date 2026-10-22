@@ -195,9 +195,9 @@ jobs:
           (Get-Content CMakeLists.txt -Raw) `
             -replace 'project\(EShot VERSION \d+\.\d+\.\d+', "project(EShot VERSION $version" |
             Set-Content CMakeLists.txt -NoNewline
-          (Get-Content EShot_Setup.iss -Raw) `
+          (Get-Content packaging/windows/EShot_Setup.iss -Raw) `
             -replace '#define MyAppVersion\s+"\d+\.\d+\.\d+"', "#define MyAppVersion   `"$version`"" |
-            Set-Content EShot_Setup.iss -NoNewline
+            Set-Content packaging/windows/EShot_Setup.iss -NoNewline
 
           "APP_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           Write-Host "Building release version $version"
@@ -210,9 +210,9 @@ jobs:
           $match = Select-String -Path CMakeLists.txt -Pattern 'project\(EShot VERSION (\d+\.\d+\.\d+)'
           if (-not $match) { throw "Could not read the version from CMakeLists.txt" }
           $version = $match.Matches[0].Groups[1].Value
-          (Get-Content EShot_Setup.iss -Raw) `
+          (Get-Content packaging/windows/EShot_Setup.iss -Raw) `
             -replace '#define MyAppVersion\s+"\d+\.\d+\.\d+"', "#define MyAppVersion   `"$version`"" |
-            Set-Content EShot_Setup.iss -NoNewline
+            Set-Content packaging/windows/EShot_Setup.iss -NoNewline
           "APP_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
       # Qt 6 (qtbase covers Core/Gui/Widgets/Network — no extra modules needed).
@@ -438,7 +438,7 @@ jobs:
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" `
             "/DReleaseDir=${{ env.DIST_DIR }}\bin" `
             "/FEShot_Setup_v${{ env.APP_VERSION }}_${{ matrix.arch }}" `
-            EShot_Setup.iss
+            packaging/windows/EShot_Setup.iss
 
       - name: Smoke test per-user installer
         shell: pwsh

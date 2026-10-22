@@ -36,6 +36,8 @@ signals:
     void failed(const QString &message);
 
 private:
+    friend class UpdateManagerTests;
+
     void setStatus(const QString &status);
     void parseRelease(const QByteArray &data, bool manual);
     void downloadInstaller();

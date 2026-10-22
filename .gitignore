@@ -42,7 +42,9 @@ build-*/
 build-linux/
 build-appimage/
 build-appimage-tools/
+dist/
 dist-linux/
+dist-windows/
 linux-root/
 EShot.AppDir/
 appimage-test-home/
@@ -54,6 +56,13 @@ lib/
 .ninja_log
 build.ninja
 rules.ninja
+
+# Python utilities
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
 
 # Visual Studio / VS Code
 .vscode/
@@ -110,8 +119,6 @@ EShot_test.exe
 debug_output.txt
 ocr_test_output.txt
 
+# Local planning notes
 ROADMAP.md
-
-# Local Codex planning artifacts
 docs/superpowers/
-dist-windows/
