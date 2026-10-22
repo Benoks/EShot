@@ -73,8 +73,10 @@ QStringList windowsFfmpegCaptureArguments(const WindowsCaptureOptions &options,
          << QStringLiteral("-hide_banner")
          << QStringLiteral("-loglevel") << QStringLiteral("info")
          << QStringLiteral("-nostats")
-         << QStringLiteral("-progress") << QStringLiteral("pipe:1")
-         << QStringLiteral("-thread_queue_size") << QStringLiteral("1024");
+         << QStringLiteral("-progress") << QStringLiteral("pipe:1");
+    // No -thread_queue_size on the inputs: FFmpeg 7+ reads every input on its
+    // own thread anyway, and some builds reject it as an input option
+    // ("cannot be applied to input url"), which fails the whole recording.
     if (ddaGrab) {
         // Desktop Duplication source filter: frames stay in D3D11 textures.
         // 8bit keeps BGRA on HDR desktops, where "auto" would switch formats.
@@ -104,8 +106,7 @@ QStringList windowsFfmpegCaptureArguments(const WindowsCaptureOptions &options,
     auto addDshowInput = [&](const QString &name, int volume) {
         if (options.losslessIntermediate || name.isEmpty() || volume <= 0)
             return;
-        args << QStringLiteral("-thread_queue_size") << QStringLiteral("1024")
-             << QStringLiteral("-f") << QStringLiteral("dshow")
+        args << QStringLiteral("-f") << QStringLiteral("dshow")
              << QStringLiteral("-audio_buffer_size") << QStringLiteral("50")
              << QStringLiteral("-i") << QStringLiteral("audio=%1").arg(name);
         audioInputs.append(qMakePair(nextInputIndex++, volume));

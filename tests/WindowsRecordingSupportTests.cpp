@@ -59,7 +59,8 @@ private slots:
         const QStringList args = windowsFfmpegCaptureArguments(options, QStringLiteral("C:/v/out.mp4"));
         QCOMPARE(valueAfter(args, QStringLiteral("-progress")), QStringLiteral("pipe:1"));
         QVERIFY(args.contains(QStringLiteral("-nostats")));
-        QCOMPARE(valueAfter(args, QStringLiteral("-thread_queue_size")), QStringLiteral("1024"));
+        // Rejected as an input option by some FFmpeg builds.
+        QVERIFY(!args.contains(QStringLiteral("-thread_queue_size")));
         QCOMPARE(valueAfter(args, QStringLiteral("-f")), QStringLiteral("gdigrab"));
         QCOMPARE(valueAfter(args, QStringLiteral("-offset_x")), QStringLiteral("10"));
         QCOMPARE(valueAfter(args, QStringLiteral("-video_size")), QStringLiteral("640x480"));
@@ -81,7 +82,7 @@ private slots:
         const QStringList args = windowsFfmpegCaptureArguments(options, QStringLiteral("out.mp4"));
         QCOMPARE(valueAfter(args, QStringLiteral("-f"), 1), QStringLiteral("dshow"));
         QCOMPARE(valueAfter(args, QStringLiteral("-audio_buffer_size")), QStringLiteral("50"));
-        QCOMPARE(valueAfter(args, QStringLiteral("-thread_queue_size"), 2), QStringLiteral("1024"));
+        QVERIFY(!args.contains(QStringLiteral("-thread_queue_size")));
         QCOMPARE(valueAfter(args, QStringLiteral("-i"), 1), QStringLiteral("audio=@device_cm_mix"));
         QCOMPARE(valueAfter(args, QStringLiteral("-i"), 2), QStringLiteral("audio=@device_cm_mic"));
         const QString filter = valueAfter(args, QStringLiteral("-filter_complex"));
