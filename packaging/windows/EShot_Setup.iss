@@ -160,6 +160,9 @@ Source: "{#ReleaseDir}\networkinformation\*"; DestDir: "{app}\networkinformation
 Source: "{#ReleaseDir}\tls\*";                DestDir: "{app}\tls";                Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "{#ReleaseDir}\translations\*";       DestDir: "{app}\translations";       Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
 Source: "{#ReleaseDir}\ffmpeg\*";             DestDir: "{app}\ffmpeg";             Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist; Tasks: ffmpeg; Check: ShouldInstallFfmpeg
+; Recording depends on the bundled FFmpeg build (ddagrab, progress output,
+; argument set), so an FFmpeg left by an older version is always replaced.
+Source: "{#ReleaseDir}\ffmpeg\*";             DestDir: "{app}\ffmpeg";             Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist; Check: ShouldUpdateFfmpeg
 
 ; Tesseract OCR engine (only when ocrengine task is selected)
 Source: "{#ReleaseDir}\tesseract\tesseract.exe";       DestDir: "{app}\tesseract";       Flags: ignoreversion; Tasks: ocrengine; Check: ShouldInstallOcrEngine
@@ -205,6 +208,7 @@ Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile
 [Code]
 var
   GOcrPreinstalled: Boolean;
+  GFfmpegPreinstalled: Boolean;
   GInstallStateFrozen: Boolean;
 
 procedure DeleteMatchingStartup(RootKey: Integer; RunKey, ExpectedCommand: String);
@@ -290,7 +294,15 @@ end;
 
 function ShouldInstallFfmpeg: Boolean;
 begin
-  Result := not IsInstalledFile('ffmpeg\ffmpeg.exe');
+  if GInstallStateFrozen then
+    Result := not GFfmpegPreinstalled
+  else
+    Result := not IsInstalledFile('ffmpeg\ffmpeg.exe');
+end;
+
+function ShouldUpdateFfmpeg: Boolean;
+begin
+  Result := GInstallStateFrozen and GFfmpegPreinstalled;
 end;
 
 function ShouldInstallOcrLangEng: Boolean;
@@ -411,6 +423,7 @@ begin
   // Freeze the "already installed" state before any files are copied
   // (see ShouldInstallOcrEngine).
   GOcrPreinstalled := IsInstalledFile('tesseract\tesseract.exe');
+  GFfmpegPreinstalled := IsInstalledFile('ffmpeg\ffmpeg.exe');
   GInstallStateFrozen := True;
   // Close EShot if it is running
   Exec(ExpandConstant('{cmd}'), '/C taskkill /F /IM {#MyAppExeName}', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
