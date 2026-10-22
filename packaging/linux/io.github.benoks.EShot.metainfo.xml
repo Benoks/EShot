@@ -34,6 +34,11 @@
   <url type="homepage">https://github.com/Benoks/EShot</url>
   <url type="bugtracker">https://github.com/Benoks/EShot/issues</url>
   <releases>
+    <release version="4.7.1" date="2026-10-22">
+      <description>
+        <p>Fixes Windows video and GIF recordings failing at start when an FFmpeg from an older installation was still in use, and replaces that FFmpeg when upgrading.</p>
+      </description>
+    </release>
     <release version="4.7.0" date="2026-10-15">
       <description>
         <p>Overhauls Windows and Wayland recording, adds tray recording controls and frame visibility, simplifies quality settings, improves first-run layout, and supports a portable marker for disabling automatic updates.</p>
