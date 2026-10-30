@@ -105,6 +105,18 @@ private slots:
         QVERIFY(!shouldRestoreCaptureKeyboardFocus(true, true, true));
     }
 
+    void cornerResizeKeepsOppositeCornerFixed()
+    {
+        const QRect start(100, 200, 50, 40);
+        const QSize grown(70, 60);
+        QCOMPARE(cornerResizeTopLeft(start, grown, false, false), QPoint(100, 200));
+        QCOMPARE(cornerResizeTopLeft(start, grown, true, true), QPoint(80, 180));
+        QCOMPARE(cornerResizeTopLeft(start, grown, false, true), QPoint(100, 180));
+        QCOMPARE(cornerResizeTopLeft(start, grown, true, false), QPoint(80, 200));
+        const QSize shrunk(30, 20);
+        QCOMPARE(cornerResizeTopLeft(start, shrunk, true, true), QPoint(120, 220));
+    }
+
     void managedProxyGrabsKeyboardOnlyForCompletedCapture()
     {
         QVERIFY(shouldGrabCaptureKeyboardFromManagedProxy(true, true, true, false));

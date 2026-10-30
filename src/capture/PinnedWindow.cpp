@@ -16,6 +16,7 @@
 #include <QFileDialog>
 #include <QDebug>
 #include "../core/TranslationManager.h"
+#include "CaptureInteractionPolicy.h"
 
 static constexpr int BAR_HEIGHT = 32;
 static constexpr int CLOSE_BTN_SIZE = 20;
@@ -23,7 +24,8 @@ static constexpr int HANDLE_SIZE = 8;
 static constexpr double MIN_SCALE = 0.1;
 static constexpr double MAX_SCALE = 5.0;
 
-PinnedWindow::PinnedWindow(const QPixmap &pixmap, const QPoint &screenPos, QWidget *parent)
+PinnedWindow::PinnedWindow(const QPixmap &pixmap, const QPoint &screenPos, qreal pixelRatio,
+                           QWidget *parent)
     : QWidget(parent, Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint | Qt::Tool)
     , m_pixmap(pixmap)
     , m_scale(1.0)
@@ -40,11 +42,16 @@ PinnedWindow::PinnedWindow(const QPixmap &pixmap, const QPoint &screenPos, QWidg
     // The pixmap holds the selection at full physical resolution. Tag it with the
     // devicePixelRatio of the screen it appears on so it is displayed at the same
     // size it was captured (otherwise it renders DPR-times too large on HiDPI).
-    qreal dpr = 1.0;
-    if (QScreen *screen = QGuiApplication::screenAt(screenPos))
-        dpr = screen->devicePixelRatio();
-    else if (QScreen *screen = QGuiApplication::primaryScreen())
-        dpr = screen->devicePixelRatio();
+    // Under XWayland every QScreen reports the same ratio while the image
+    // holds each output's native pixels, so the capture's own ratio wins.
+    qreal dpr = pixelRatio;
+    if (dpr <= 0.0) {
+        dpr = 1.0;
+        if (QScreen *screen = QGuiApplication::screenAt(screenPos))
+            dpr = screen->devicePixelRatio();
+        else if (QScreen *screen = QGuiApplication::primaryScreen())
+            dpr = screen->devicePixelRatio();
+    }
     if (dpr > 0.0)
         m_pixmap.setDevicePixelRatio(dpr);
 
@@ -191,6 +198,7 @@ void PinnedWindow::mousePressEvent(QMouseEvent *event)
             m_resizeHandle = handle;
             m_resizeStartGlobal = event->globalPosition().toPoint();
             m_resizeStartSize = QSize(width(), height());
+            m_resizeStartGeometry = geometry();
             m_resizeStartScale = m_scale;
             return;
         }
@@ -242,6 +250,11 @@ void PinnedWindow::mouseMoveEvent(QMouseEvent *event)
         m_scale = qBound(MIN_SCALE, m_resizeStartScale * ratio, MAX_SCALE);
 
         updateWindowSize();
+        // The dragged corner follows the mouse; the opposite one stays put.
+        const bool dragLeft = m_resizeHandle == TopLeft || m_resizeHandle == BottomLeft;
+        const bool dragTop = m_resizeHandle == TopLeft || m_resizeHandle == TopRight;
+        if (dragLeft || dragTop)
+            move(cornerResizeTopLeft(m_resizeStartGeometry, size(), dragLeft, dragTop));
         update();
         return;
     }

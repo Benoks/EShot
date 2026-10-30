@@ -66,6 +66,10 @@ bool shouldGrabCaptureKeyboardFromManagedProxy(bool managedProxyAvailable,
                                                bool overlayVisible, bool selectionComplete,
                                                bool textEditorVisible);
 bool shouldDetachModalFromOverlay(bool xwaylandOverlay);
+// Top-left of a window resized from a corner so the opposite corner stays
+// where it was. dragLeft/dragTop say which edges the dragged corner moves.
+QPoint cornerResizeTopLeft(const QRect &startGeometry, const QSize &newSize,
+                           bool dragLeft, bool dragTop);
 bool shouldComposeCaptureResult(bool recordingMode);
 bool shouldUsePartialOverlayUpdates(qreal devicePixelRatio);
 bool shouldRepaintCrosshairOnMove(const QString &crosshairStyle);

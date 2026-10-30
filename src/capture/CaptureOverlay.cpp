@@ -3726,7 +3726,7 @@ bool CaptureOverlay::eventFilter(QObject *obj, QEvent *event)
     return QWidget::eventFilter(obj, event);
 }
 
-QPixmap CaptureOverlay::getSelectedPixmap()
+QPixmap CaptureOverlay::getSelectedPixmap(qreal *outputScaleOut)
 {
     // Copy, save, pin, OCR and upload all compose through here; include text
     // the user typed but has not confirmed yet.
@@ -3741,6 +3741,8 @@ QPixmap CaptureOverlay::getSelectedPixmap()
     QPixmap result = m_screenImages.isEmpty()
         ? m_screenSnapshot.copy(logicalToSnapshot(selRect))
         : QPixmap::fromImage(composeCaptureImages(m_screenImages, globalSelection));
+    if (outputScaleOut)
+        *outputScaleOut = outputScale;
     if (result.isNull())
         return result;
     if (m_annotationEngine && m_annotationEngine->hasAnnotations()) {
@@ -5091,14 +5093,17 @@ void CaptureOverlay::onSave()
 
 void CaptureOverlay::onPinToDesktop()
 {
-    QPixmap result = getSelectedPixmap();
+    qreal outputScale = 0.0;
+    QPixmap result = getSelectedPixmap(&outputScale);
     if (result.isNull()) return;
 
     QRect selRect = normalizedSelectionRect();
     QPoint screenPos = mapToGlobal(selRect.topLeft());
 
     // PinnedWindow shows itself and is deleted when closed (WA_DeleteOnClose).
-    new PinnedWindow(result, screenPos);
+    // Per-output captures carry their own scale (mixed-DPI XWayland); the
+    // single-bitmap paths keep using the target screen's ratio.
+    new PinnedWindow(result, screenPos, m_screenImages.isEmpty() ? 0.0 : outputScale);
 
     hide();
     m_selectionComplete = false;

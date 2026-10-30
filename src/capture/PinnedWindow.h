@@ -10,7 +10,10 @@ class PinnedWindow : public QWidget {
     Q_OBJECT
 
 public:
-    explicit PinnedWindow(const QPixmap &pixmap, const QPoint &screenPos, QWidget *parent = nullptr);
+    // pixelRatio: image pixels per logical pixel of the capture. 0 uses the
+    // ratio of the screen the window opens on.
+    explicit PinnedWindow(const QPixmap &pixmap, const QPoint &screenPos,
+                          qreal pixelRatio = 0.0, QWidget *parent = nullptr);
     ~PinnedWindow();
 
     QPixmap pixmap() const { return m_pixmap; }
@@ -57,6 +60,7 @@ private:
     ResizeHandle getResizeHandle(const QPoint &pos) const;
     QPoint m_resizeStartGlobal;
     QSize m_resizeStartSize;
+    QRect m_resizeStartGeometry;
     double m_resizeStartScale;
 
     // Close button area

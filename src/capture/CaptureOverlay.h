@@ -130,7 +130,8 @@ private:
     HintBubble *hintBubble();
     void toggleShortcutSheet();
     bool isShortcutSheetOpen() const;
-    QPixmap getSelectedPixmap();
+    // outputScale receives the image pixels per logical overlay pixel.
+    QPixmap getSelectedPixmap(qreal *outputScale = nullptr);
 
     // Filename template parse
     QString resolveFilenamePattern(const QString &pattern) const;

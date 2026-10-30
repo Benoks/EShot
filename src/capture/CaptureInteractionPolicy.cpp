@@ -120,6 +120,16 @@ bool shouldDetachModalFromOverlay(bool xwaylandOverlay)
     return xwaylandOverlay;
 }
 
+QPoint cornerResizeTopLeft(const QRect &startGeometry, const QSize &newSize,
+                           bool dragLeft, bool dragTop)
+{
+    const int x = dragLeft ? startGeometry.x() + startGeometry.width() - newSize.width()
+                           : startGeometry.x();
+    const int y = dragTop ? startGeometry.y() + startGeometry.height() - newSize.height()
+                          : startGeometry.y();
+    return QPoint(x, y);
+}
+
 bool shouldComposeCaptureResult(bool recordingMode)
 {
     return !recordingMode;
