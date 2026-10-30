@@ -1893,6 +1893,113 @@ void CaptureOverlay::cancelActiveCapture()
         cancelCapture();
 }
 
+void CaptureOverlay::captureScreenNow()
+{
+    if (isCaptureActive()) {
+        qInfo() << "[CaptureOverlay] capture-screen-now ignored: a capture is already running";
+        return;
+    }
+#ifdef Q_OS_WIN
+    m_foregroundHwnd = GetForegroundWindow();
+#endif
+    m_captureInFlight = true;
+    QPixmap screen = grabScreenUnderCursor();
+    m_captureInFlight = false;
+    if (screen.isNull()) {
+        qCritical() << "[CaptureOverlay] capture-screen-now failed: no screenshot";
+        emit captureFailed(TranslationManager::tr("captureSnapshotFailed"));
+        return;
+    }
+    screen.setDevicePixelRatio(1.0);
+    qInfo() << "[CaptureOverlay] capture-screen-now size=" << screen.size();
+
+    QSettings s(QStringLiteral("EShot"), QStringLiteral("EShot"));
+    const bool copyPathAfterSave = s.value(QStringLiteral("copyPathAfterSave"), false).toBool();
+    if (s.value(QStringLiteral("playSound"), false).toBool()) {
+#ifdef Q_OS_WIN
+        MessageBeep(MB_OK);
+#else
+        QApplication::beep();
+#endif
+    }
+    QString error;
+    if (!saveScreenshotFile(screen, false, &error)) {
+        // Keep the image: it is on the clipboard even if the folder is not writable.
+        QGuiApplication::clipboard()->setPixmap(screen);
+        const QString hint = ProtectedFolderHint::hintForPath(m_lastFailedSavePath);
+        emit captureFailed(hint.isEmpty() ? error : error + QStringLiteral("\n") + hint);
+        return;
+    }
+    // Save already put the path on the clipboard when that option is on.
+    if (!copyPathAfterSave)
+        QGuiApplication::clipboard()->setPixmap(screen);
+}
+
+QPixmap CaptureOverlay::grabScreenUnderCursor()
+{
+    const QPoint cursor = QCursor::pos();
+#if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
+    // KWin captures one output at its native resolution; no need to grab all.
+    if (LinuxScreenshotPolicy::isKdeWaylandSession(qEnvironmentVariable("XDG_CURRENT_DESKTOP"),
+                                                   qEnvironmentVariable("XDG_SESSION_DESKTOP"),
+                                                   qEnvironmentVariable("XDG_SESSION_TYPE"))) {
+        QScreen *screen = QGuiApplication::screenAt(cursor);
+        if (!screen)
+            screen = QGuiApplication::primaryScreen();
+        if (screen) {
+            QPixmap grab = LinuxPortalScreenshot::grabScreen(screen, this);
+            if (!grab.isNull()) {
+                grab.setDevicePixelRatio(1.0);
+                return grab;
+            }
+        }
+    }
+#endif
+    captureAllScreens();
+    QPixmap result;
+#ifdef Q_OS_WIN
+    POINT nativeCursor = {};
+    if (!m_screenSnapshot.isNull() && GetCursorPos(&nativeCursor)) {
+        MONITORINFO info = {};
+        info.cbSize = sizeof(info);
+        HMONITOR monitor = MonitorFromPoint(nativeCursor, MONITOR_DEFAULTTOPRIMARY);
+        if (monitor && GetMonitorInfoW(monitor, &info)) {
+            const QRect physical(info.rcMonitor.left, info.rcMonitor.top,
+                                 info.rcMonitor.right - info.rcMonitor.left,
+                                 info.rcMonitor.bottom - info.rcMonitor.top);
+            const QRect crop = physical.translated(-m_physicalVirtualDesktopTopLeft)
+                                   .intersected(m_screenSnapshot.rect());
+            if (!crop.isEmpty())
+                result = m_screenSnapshot.copy(crop);
+        }
+    }
+#else
+    if (!m_screenImages.isEmpty()) {
+        for (const CaptureScreenImage &image : std::as_const(m_screenImages)) {
+            if (image.logical.contains(cursor)) {
+                result = QPixmap::fromImage(image.image);
+                break;
+            }
+        }
+        if (result.isNull())
+            result = QPixmap::fromImage(m_screenImages.constFirst().image);
+    } else if (!m_screenSnapshot.isNull()) {
+        QScreen *screen = QGuiApplication::screenAt(cursor);
+        if (!screen)
+            screen = QGuiApplication::primaryScreen();
+        const QRect logical = screen ? screen->geometry().translated(-m_virtualDesktopRect.topLeft())
+                                     : QRect(QPoint(0, 0), m_virtualDesktopRect.size());
+        const QRect crop = snapshotRectFromLogical(logical, m_virtualDesktopRect.size(),
+                                                   m_screenSnapshot.size(), m_dpr)
+                               .intersected(m_screenSnapshot.rect());
+        if (!crop.isEmpty())
+            result = m_screenSnapshot.copy(crop);
+    }
+#endif
+    releaseCaptureBuffers();
+    return result;
+}
+
 void CaptureOverlay::startCaptureInternal(CaptureSelectionMode selectionMode, bool recordingMode)
 {
     if (m_captureInFlight) {
@@ -2019,6 +2126,7 @@ void CaptureOverlay::performCapture()
     if (!LinuxScreenshotPolicy::canPresentCapture(!m_screenSnapshot.isNull())) {
         qCritical() << "[CaptureOverlay] capture aborted: no usable cursor-free snapshot";
         cancelCapture();
+        emit captureFailed(TranslationManager::tr("captureSnapshotFailed"));
         return;
     }
 
@@ -4217,6 +4325,10 @@ QString CaptureOverlay::inputBlockedBannerText() const
     QString cancelKey = HotkeyManager::instance().activeShortcutText(HotkeyManager::HOTKEY_CAPTURE);
     if (cancelKey.isEmpty())
         cancelKey = QStringLiteral("Esc");
+    const QString screenKey = HotkeyManager::instance().activeShortcutText(
+        HotkeyManager::HOTKEY_SCREEN_CAPTURE);
+    if (!screenKey.isEmpty())
+        return TranslationManager::tr("inputBlockedBannerScreen").arg(cancelKey, screenKey);
     return TranslationManager::tr("inputBlockedBanner").arg(cancelKey);
 }
 
@@ -5136,15 +5248,30 @@ void CaptureOverlay::onSave()
     QPixmap result = getSelectedPixmap();
     if (result.isNull()) return;
 
+    QString error;
+    if (!saveScreenshotFile(result, true, &error)) {
+        // Explains Controlled folder access when that is the likely cause and
+        // keeps the image on the clipboard.
+        ProtectedFolderHint::warnScreenshotSaveFailed(this, TranslationManager::errTitle(),
+                                                      m_lastFailedSavePath, result, error);
+        return;
+    }
+    finishCapture();
+}
+
+bool CaptureOverlay::saveScreenshotFile(const QPixmap &result, bool useCliPath, QString *error)
+{
     QSettings s("EShot", "EShot");
-    QString cliFullPath = s.value("cliSaveFullPath").toString();
+    QString cliFullPath = useCliPath ? s.value("cliSaveFullPath").toString() : QString();
     // A --save path belongs to that one capture. If it was cancelled or
     // copied instead, a much later Save must not overwrite that file.
     const qint64 requestedAt = s.value("cliSaveRequestedAt", 0).toLongLong();
     if (QDateTime::currentSecsSinceEpoch() - requestedAt > 300)
         cliFullPath.clear();
-    s.remove("cliSaveFullPath");
-    s.remove("cliSaveRequestedAt");
+    if (useCliPath) {
+        s.remove("cliSaveFullPath");
+        s.remove("cliSaveRequestedAt");
+    }
     QString path = s.contains("screenshotSavePath")
         ? s.value("screenshotSavePath").toString().trimmed()
         : QDir(ComponentPaths::defaultSaveDirectory()).filePath(QStringLiteral("Screenshots"));
@@ -5164,16 +5291,18 @@ void CaptureOverlay::onSave()
         filename = cliFullPath;
         QFileInfo fi(filename);
         if (!fi.absoluteDir().exists() && !QDir().mkpath(fi.absolutePath())) {
-            ProtectedFolderHint::warnScreenshotSaveFailed(this, TranslationManager::errTitle(), filename, result,
-                                                          TranslationManager::errSaveDir() + fi.absolutePath());
-            return;
+            m_lastFailedSavePath = filename;
+            if (error)
+                *error = TranslationManager::errSaveDir() + fi.absolutePath();
+            return false;
         }
     } else {
         QDir dir(path);
         if (!dir.exists() && !dir.mkpath(".")) {
-            ProtectedFolderHint::warnScreenshotSaveFailed(this, TranslationManager::errTitle(), path, result,
-                                                          TranslationManager::errSaveDir() + path);
-            return;
+            m_lastFailedSavePath = path;
+            if (error)
+                *error = TranslationManager::errSaveDir() + path;
+            return false;
         }
 
         QString ext = format.toLower();
@@ -5204,12 +5333,12 @@ void CaptureOverlay::onSave()
         }
     } else {
         qWarning() << "[CaptureOverlay] Save failed:" << filename;
-        ProtectedFolderHint::warnScreenshotSaveFailed(this, TranslationManager::errTitle(), filename, result,
-                                                      QStringLiteral("Save failed:\n") + QDir::toNativeSeparators(filename));
-        return;
+        m_lastFailedSavePath = filename;
+        if (error)
+            *error = QStringLiteral("Save failed:\n") + QDir::toNativeSeparators(filename);
+        return false;
     }
-
-    finishCapture();
+    return true;
 }
 
 void CaptureOverlay::onPinToDesktop()

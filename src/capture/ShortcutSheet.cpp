@@ -1,5 +1,6 @@
 #include "ShortcutSheet.h"
 
+#include "core/HotkeyManager.h"
 #include "core/TranslationManager.h"
 #include "ui/OnboardingTips.h"
 
@@ -214,6 +215,15 @@ void drawShortcutSheet(QPainter &painter, const QRect &monitorRect)
     addShortcut(more.rows, "actionGoogleLens", "Ctrl+L", TM::visualSearchAction());
     addShortcut(more.rows, "actionGif", "Ctrl+G", TM::recordingStartTitle());
     addShortcut(more.rows, "actionVideo", "Ctrl+Shift+V", TM::videoRecordingTitle());
+    // Global hotkeys still work when a fullscreen app holds the keyboard.
+    const QString captureKey = HotkeyManager::instance().activeShortcutText(
+        HotkeyManager::HOTKEY_CAPTURE);
+    if (!captureKey.isEmpty())
+        more.rows.append({{captureKey}, TM::tr("sheetCloseCapture")});
+    const QString screenNowKey = HotkeyManager::instance().activeShortcutText(
+        HotkeyManager::HOTKEY_SCREEN_CAPTURE);
+    if (!screenNowKey.isEmpty())
+        more.rows.append({{screenNowKey}, TM::tr("sheetCaptureScreenNow")});
 
     Section tools{TM::tr("sheetSectionTools"), {}};
     addShortcut(tools.rows, "toolPen", "P", plainName(TM::toolPen()));

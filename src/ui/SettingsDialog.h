@@ -182,6 +182,7 @@ private:
     QKeySequenceEdit *m_gifCaptureHotkeyEdit = nullptr;
     QKeySequenceEdit *m_videoCaptureHotkeyEdit = nullptr;
     QKeySequenceEdit *m_windowCaptureHotkeyEdit = nullptr;
+    QKeySequenceEdit *m_screenCaptureHotkeyEdit = nullptr;
     QMap<QString, QKeySequenceEdit*> m_overlayHotkeyEdits;
     // Global hotkeys cross-checked for duplicates (HotkeyManager ids).
     struct GlobalHotkeyField {

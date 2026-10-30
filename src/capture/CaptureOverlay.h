@@ -70,11 +70,16 @@ public:
     // A capture hotkey pressed again while the overlay is open: close it.
     // Ignored while the screenshot is still being taken.
     void cancelActiveCapture();
+    // Captures the monitor under the mouse without showing the overlay,
+    // then saves it like Save and copies it to the clipboard.
+    void captureScreenNow();
 
 signals:
     void captureCompleted(const QPixmap &pixmap);
     void captureSaved(const QString &path);
     void captureCancelled();
+    // The screen could not be captured or saved; message is translated.
+    void captureFailed(const QString &message);
     void regionSelected(QRect captureRect, QRect displayRect);
     void gifCaptureRequested(QRect captureRect, QRect displayRect);
     void videoCaptureRequested(QRect captureRect, QRect displayRect);
@@ -94,6 +99,7 @@ protected:
 
 private:
     void captureAllScreens();
+    QPixmap grabScreenUnderCursor();
     bool captureNativeScreenImages(const QRect &logicalRect, const QRect &physicalRect);
     void presentCapture();
     QPoint capturePositionFromGlobal(const QPoint &point) const;
@@ -136,6 +142,11 @@ private:
     // Filename template parse
     QString resolveFilenamePattern(const QString &pattern) const;
     QString resolveWindowTitle() const;
+    // Saves to the screenshot folder with the file name pattern and emits
+    // captureSaved. useCliPath consumes a pending --save path.
+    bool saveScreenshotFile(const QPixmap &image, bool useCliPath, QString *error);
+    // Target of the last failed saveScreenshotFile(), for the CFA hint.
+    QString m_lastFailedSavePath;
 
     QPixmap m_screenSnapshot;
     QVector<CaptureScreenImage> m_screenImages;

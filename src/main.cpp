@@ -347,6 +347,30 @@ public slots:
         m_overlay->startCapture();
     }
 
+    // "Capture screen now": no overlay, so a fullscreen game keeps running.
+    // Pressed while the overlay is open (for example because a game holds
+    // the input), it closes the overlay and captures the screen instead.
+    void onScreenCaptureRequested()
+    {
+        if (closeBlockingDialogs()) {
+            QTimer::singleShot(80, this, &EShotApp::onScreenCaptureRequested);
+            return;
+        }
+        ensureOverlay();
+        if (m_overlay->isCaptureActive()) {
+            if (!m_overlay->isVisible())
+                return;
+            m_overlay->cancelActiveCapture();
+            // Give the compositor a moment to unmap the overlay.
+            QTimer::singleShot(150, this, [this]() {
+                if (m_overlay)
+                    m_overlay->captureScreenNow();
+            });
+            return;
+        }
+        m_overlay->captureScreenNow();
+    }
+
     void onWindowCaptureRequested()
     {
 #ifdef Q_OS_WIN
@@ -1616,6 +1640,17 @@ private:
         connect(windowCaptureAction, &QAction::triggered,
                 this, &EShotApp::onWindowCaptureRequested);
 #endif
+        QAction *screenNowAction = m_trayMenu->addAction(
+            trayIcon(":/icons/save.svg"), TranslationManager::tr("trayCaptureScreenNow"));
+        screenNowAction->setToolTip(withShortcut(
+            TranslationManager::tr("trayCaptureScreenNow"),
+            m_hotkeysInitialized
+                ? HotkeyManager::instance().activeShortcutText(HotkeyManager::HOTKEY_SCREEN_CAPTURE)
+                : QString()));
+        connect(screenNowAction, &QAction::triggered, this, [this]() {
+            // Let the tray menu close before the screen is captured.
+            QTimer::singleShot(250, this, &EShotApp::onScreenCaptureRequested);
+        });
 
         if (videoRecording || gifRecording) {
             m_trayMenu->addSeparator();
@@ -1765,6 +1800,9 @@ private:
         connect(m_overlay, &CaptureOverlay::captureCompleted, this, &EShotApp::onCaptureCompleted);
         connect(m_overlay, &CaptureOverlay::captureSaved, this, &EShotApp::onCaptureSaved);
         connect(m_overlay, &CaptureOverlay::captureCancelled, this, &EShotApp::onCaptureCancelled);
+        connect(m_overlay, &CaptureOverlay::captureFailed, this, [this](const QString &message) {
+            showFailureNotification(message, 8000);
+        });
         connect(m_overlay, &CaptureOverlay::regionSelected, this, &EShotApp::onRegionSelected);
         connect(m_overlay, &CaptureOverlay::gifCaptureRequested, this, &EShotApp::onRecordGifSelected);
         connect(m_overlay, &CaptureOverlay::videoCaptureRequested, this, &EShotApp::onRecordVideoSelected);
@@ -1787,6 +1825,8 @@ private:
                 this, &EShotApp::onRecordVideoRequested);
         connect(&HotkeyManager::instance(), &HotkeyManager::windowCaptureRequested,
                 this, &EShotApp::onWindowCaptureRequested);
+        connect(&HotkeyManager::instance(), &HotkeyManager::screenCaptureRequested,
+                this, &EShotApp::onScreenCaptureRequested);
         connect(&HotkeyManager::instance(), &HotkeyManager::recordingPauseRequested,
                 this, &EShotApp::toggleActiveRecordingPause);
         connect(&HotkeyManager::instance(), &HotkeyManager::recordingStopRequested, this, [this]() {

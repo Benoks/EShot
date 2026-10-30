@@ -279,6 +279,10 @@ HotkeyManager::HotkeyManager(QObject *parent) : QObject(parent)
         qWarning() << "[HotkeyManager] Window capture hotkey could not be registered";
         recordFailure(HOTKEY_WINDOW_CAPTURE, m_windowCaptureModifiers, m_windowCaptureVirtualKey);
     }
+    m_screenCaptureModifiers = static_cast<UINT>(s.value("screenCaptureHotkeyModifiers", 0).toUInt());
+    m_screenCaptureVirtualKey = static_cast<UINT>(s.value("screenCaptureHotkeyVKey", 0).toUInt());
+    if (!registerHotkey(HOTKEY_SCREEN_CAPTURE, m_screenCaptureModifiers, m_screenCaptureVirtualKey))
+        recordFailure(HOTKEY_SCREEN_CAPTURE, m_screenCaptureModifiers, m_screenCaptureVirtualKey);
 }
 
 QList<HotkeyBinding> HotkeyManager::recordingHotkeyBindings() const
@@ -708,6 +712,25 @@ bool HotkeyManager::reRegisterCaptureHotkey(UINT modifiers, UINT virtualKey)
     return false;
 }
 
+bool HotkeyManager::reRegisterScreenCaptureHotkey(UINT modifiers, UINT virtualKey)
+{
+    if (modifiers == m_screenCaptureModifiers && virtualKey == m_screenCaptureVirtualKey
+        && !m_failedHotkeys.contains(HOTKEY_SCREEN_CAPTURE)) {
+        return true;
+    }
+    const UINT oldModifiers = m_screenCaptureModifiers;
+    const UINT oldVirtualKey = m_screenCaptureVirtualKey;
+    unregisterHotkey(HOTKEY_SCREEN_CAPTURE);
+    if (registerHotkey(HOTKEY_SCREEN_CAPTURE, modifiers, virtualKey)) {
+        m_screenCaptureModifiers = modifiers;
+        m_screenCaptureVirtualKey = virtualKey;
+        return true;
+    }
+    if (!registerHotkey(HOTKEY_SCREEN_CAPTURE, oldModifiers, oldVirtualKey))
+        recordFailure(HOTKEY_SCREEN_CAPTURE, oldModifiers, oldVirtualKey);
+    return false;
+}
+
 bool HotkeyManager::reRegisterRecordingHotkeys(UINT pauseModifiers, UINT pauseVirtualKey,
                                                UINT stopModifiers, UINT stopVirtualKey,
                                                UINT cancelModifiers, UINT cancelVirtualKey)
@@ -839,6 +862,7 @@ void HotkeyManager::emitHotkey(int id)
     else if (id == HOTKEY_GIF_CAPTURE) emit gifCaptureRequested();
     else if (id == HOTKEY_VIDEO_CAPTURE) emit videoCaptureRequested();
     else if (id == HOTKEY_WINDOW_CAPTURE) emit windowCaptureRequested();
+    else if (id == HOTKEY_SCREEN_CAPTURE) emit screenCaptureRequested();
 }
 
 void HotkeyManager::refreshPortalShortcuts()

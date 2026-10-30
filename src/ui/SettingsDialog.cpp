@@ -1636,6 +1636,8 @@ QWidget* SettingsDialog::createHotkeyTab()
     m_instantCaptureHotkeyEdit = makeRecordingHotkeyEdit();
     m_gifCaptureHotkeyEdit = makeRecordingHotkeyEdit();
     m_videoCaptureHotkeyEdit = makeRecordingHotkeyEdit();
+    m_screenCaptureHotkeyEdit = makeRecordingHotkeyEdit();
+    m_screenCaptureHotkeyEdit->setToolTip(TranslationManager::tr("tipScreenNowHotkey"));
 #ifdef Q_OS_WIN
     m_windowCaptureHotkeyEdit = makeRecordingHotkeyEdit();
 #endif
@@ -1653,6 +1655,8 @@ QWidget* SettingsDialog::createHotkeyTab()
     addActionHotkeyRow(HotkeyManager::HOTKEY_WINDOW_CAPTURE, TranslationManager::tr("hotkeyWindowLabel"),
                        TranslationManager::trayWindowCapture(), m_windowCaptureHotkeyEdit);
 #endif
+    addActionHotkeyRow(HotkeyManager::HOTKEY_SCREEN_CAPTURE, TranslationManager::tr("hotkeyScreenNowLabel"),
+                       labelName(TranslationManager::tr("hotkeyScreenNowLabel")), m_screenCaptureHotkeyEdit);
     addActionHotkeyRow(HotkeyManager::HOTKEY_INSTANT_CAPTURE, TranslationManager::tr("hotkeyInstantRegionLabel"),
                        labelName(TranslationManager::tr("hotkeyInstantRegionLabel")), m_instantCaptureHotkeyEdit);
     addActionHotkeyRow(HotkeyManager::HOTKEY_GIF_CAPTURE, QStringLiteral("GIF:"),
@@ -2465,6 +2469,10 @@ void SettingsDialog::loadSettings()
         m_videoCaptureHotkeyEdit->setKeySequence(win32ToKeySequence(
             static_cast<UINT>(m_settings->value("videoCaptureHotkeyModifiers", 0).toUInt()),
             static_cast<UINT>(m_settings->value("videoCaptureHotkeyVKey", 0).toUInt())));
+    if (m_screenCaptureHotkeyEdit)
+        m_screenCaptureHotkeyEdit->setKeySequence(win32ToKeySequence(
+            static_cast<UINT>(m_settings->value("screenCaptureHotkeyModifiers", 0).toUInt()),
+            static_cast<UINT>(m_settings->value("screenCaptureHotkeyVKey", 0).toUInt())));
     if (m_windowCaptureHotkeyEdit)
         m_windowCaptureHotkeyEdit->setKeySequence(win32ToKeySequence(
             static_cast<UINT>(m_settings->value("windowCaptureHotkeyModifiers", defaultWindowCaptureModifiers()).toUInt()),
@@ -2735,7 +2743,9 @@ void SettingsDialog::onSave()
     UINT gifMod = 0, gifVKey = 0;
     UINT videoMod = 0, videoVKey = 0;
     UINT windowMod = 0, windowVKey = 0;
-    if (!optionalHotkey(m_instantCaptureHotkeyEdit, instantMod, instantVKey) ||
+    UINT screenMod = 0, screenVKey = 0;
+    if (!optionalHotkey(m_screenCaptureHotkeyEdit, screenMod, screenVKey) ||
+        !optionalHotkey(m_instantCaptureHotkeyEdit, instantMod, instantVKey) ||
         !optionalHotkey(m_gifCaptureHotkeyEdit, gifMod, gifVKey) ||
         !optionalHotkey(m_videoCaptureHotkeyEdit, videoMod, videoVKey) ||
         !optionalHotkey(m_windowCaptureHotkeyEdit, windowMod, windowVKey)) {
@@ -2762,6 +2772,10 @@ void SettingsDialog::onSave()
         settingsHotkeyChanged({windowMod, windowVKey},
                               {static_cast<quint32>(m_settings->value("windowCaptureHotkeyModifiers", defaultWindowCaptureModifiers()).toUInt()),
                                static_cast<quint32>(m_settings->value("windowCaptureHotkeyVKey", defaultWindowCaptureVirtualKey()).toUInt())});
+    const bool screenHotkeyChanged = settingsHotkeyChanged(
+        {screenMod, screenVKey},
+        {static_cast<quint32>(m_settings->value("screenCaptureHotkeyModifiers", 0).toUInt()),
+         static_cast<quint32>(m_settings->value("screenCaptureHotkeyVKey", 0).toUInt())});
     // Apply startup changes before persisting anything: if they fail, no
     // partial settings are written (onSave partial success guard).
     const bool wantAutoStart = m_autoStartCheck->isChecked();
@@ -2877,6 +2891,36 @@ void SettingsDialog::onSave()
         return;
     }
 
+    if (screenHotkeyChanged
+        && !HotkeyManager::instance().reRegisterScreenCaptureHotkey(screenMod, screenVKey)) {
+        QMessageBox::warning(
+            this,
+            TranslationManager::errInvalidHotkeyTitle(),
+            HotkeyManager::shortcutText(screenMod, screenVKey) + QStringLiteral("\n\n")
+                + TranslationManager::directCaptureHotkeyMayBeInUse());
+        rollBackCapture();
+        if (recordingHotkeysChanged) {
+            const SettingsHotkeyDefinition pause = storedRecordingHotkey(*m_settings, RecordingHotkeyAction::Pause);
+            const SettingsHotkeyDefinition stop = storedRecordingHotkey(*m_settings, RecordingHotkeyAction::Stop);
+            const SettingsHotkeyDefinition cancel = storedRecordingHotkey(*m_settings, RecordingHotkeyAction::Cancel);
+            HotkeyManager::instance().reRegisterRecordingHotkeys(
+                pause.modifiers, pause.virtualKey, stop.modifiers, stop.virtualKey,
+                cancel.modifiers, cancel.virtualKey);
+        }
+        if (actionHotkeysChanged) {
+            auto stored = [this](const char *key, UINT fallback = 0) {
+                return static_cast<UINT>(m_settings->value(key, fallback).toUInt());
+            };
+            HotkeyManager::instance().reRegisterActionHotkeys(
+                stored("instantCaptureHotkeyModifiers"), stored("instantCaptureHotkeyVKey"),
+                stored("gifCaptureHotkeyModifiers"), stored("gifCaptureHotkeyVKey"),
+                stored("videoCaptureHotkeyModifiers"), stored("videoCaptureHotkeyVKey"),
+                stored("windowCaptureHotkeyModifiers", defaultWindowCaptureModifiers()),
+                stored("windowCaptureHotkeyVKey", defaultWindowCaptureVirtualKey()));
+        }
+        return;
+    }
+
 
     // Save language
     QString newLang = m_langCombo->currentData().toString();
@@ -2975,6 +3019,8 @@ void SettingsDialog::onSave()
     m_settings->setValue("videoCaptureHotkeyVKey",        videoVKey);
     m_settings->setValue("windowCaptureHotkeyModifiers", windowMod);
     m_settings->setValue("windowCaptureHotkeyVKey",      windowVKey);
+    m_settings->setValue("screenCaptureHotkeyModifiers", screenMod);
+    m_settings->setValue("screenCaptureHotkeyVKey",      screenVKey);
     for (auto it = m_overlayHotkeyEdits.constBegin(); it != m_overlayHotkeyEdits.constEnd(); ++it) {
         if (it.value())
             m_settings->setValue(QStringLiteral("overlayShortcut/%1").arg(it.key()),
@@ -3149,6 +3195,7 @@ void SettingsDialog::onExportSettings()
     appendHotkey("gifCaptureHotkeyModifiers", "gifCaptureHotkeyVKey", m_gifCaptureHotkeyEdit);
     appendHotkey("videoCaptureHotkeyModifiers", "videoCaptureHotkeyVKey", m_videoCaptureHotkeyEdit);
     appendHotkey("windowCaptureHotkeyModifiers", "windowCaptureHotkeyVKey", m_windowCaptureHotkeyEdit);
+    appendHotkey("screenCaptureHotkeyModifiers", "screenCaptureHotkeyVKey", m_screenCaptureHotkeyEdit);
     obj["uploadProvider"] = m_importedUploadProvider.isValid()
         ? m_importedUploadProvider.toInt()
         : m_settings->value("uploadProvider", 0).toInt();
@@ -3327,6 +3374,7 @@ void SettingsDialog::onImportSettings()
     importHotkey("gifCaptureHotkeyModifiers", "gifCaptureHotkeyVKey", m_gifCaptureHotkeyEdit);
     importHotkey("videoCaptureHotkeyModifiers", "videoCaptureHotkeyVKey", m_videoCaptureHotkeyEdit);
     importHotkey("windowCaptureHotkeyModifiers", "windowCaptureHotkeyVKey", m_windowCaptureHotkeyEdit);
+    importHotkey("screenCaptureHotkeyModifiers", "screenCaptureHotkeyVKey", m_screenCaptureHotkeyEdit);
     if (obj.contains("uploadProvider"))
         m_importedUploadProvider = obj["uploadProvider"].toInt();
     if (obj.contains("visualSearchProvider") && m_visualSearchProviderCombo) {
