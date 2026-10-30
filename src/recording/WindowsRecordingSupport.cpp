@@ -120,10 +120,18 @@ QStringList windowsFfmpegCaptureArguments(const WindowsCaptureOptions &options,
     // Fragmented MP4 (a fragment at least every second): a killed encoder
     // loses the last fragment instead of the whole file. The join/mux step
     // rewrites it as a regular MP4 with +faststart.
-    args << QStringLiteral("-movflags") << QStringLiteral("+frag_keyframe+empty_moov+default_base_moof")
-         << QStringLiteral("-frag_duration") << QStringLiteral("1000000")
-         << outputPath;
+    args << ffmpegFragmentedMp4Arguments() << outputPath;
     return args;
+}
+
+QStringList ffmpegFragmentedMp4Arguments()
+{
+    // flush_packets: write each fragment through at once; otherwise a small
+    // or static capture stays in FFmpeg's 32 KiB output buffer and a killed
+    // encoder leaves only the file header behind.
+    return {QStringLiteral("-movflags"), QStringLiteral("+frag_keyframe+empty_moov+default_base_moof"),
+            QStringLiteral("-frag_duration"), QStringLiteral("1000000"),
+            QStringLiteral("-flush_packets"), QStringLiteral("1")};
 }
 
 namespace {

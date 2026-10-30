@@ -787,6 +787,10 @@ QStringList VideoRecorder::ffmpegCaptureArguments(const QString &outputPath) con
          << QStringLiteral("-crf") << QString::number(m_crf)
          << QStringLiteral("-pix_fmt") << QStringLiteral("yuv420p");
     args << ffmpegAudioMixArguments(audioInputs);
+    // Fragmented like the Windows segments: an encoder that has to be
+    // killed (or EShot crashing) keeps everything up to the last fragment.
+    // The join step rewrites it as a regular MP4 with +faststart.
+    args << ffmpegFragmentedMp4Arguments();
     args << outputPath;
     return args;
 #endif
@@ -1039,11 +1043,11 @@ void VideoRecorder::onProcessFinished(int exitCode, QProcess::ExitStatus status)
         m_ffmpegOutputBuffer.clear();
     }
     const QString stderrText = ffmpegFailureReason(m_ffmpegLogTail);
-    const bool fragmentedOutput = true;
 #else
     const QString stderrText = gstFailureReason(QString::fromLocal8Bit(process->readAll()));
-    const bool fragmentedOutput = false;
 #endif
+    // Windows and X11 FFmpeg segments are fragmented MP4s.
+    const bool fragmentedOutput = true;
     const QString segment = m_segmentPath;
     m_process->deleteLater();
     m_process = nullptr;
@@ -1065,9 +1069,12 @@ void VideoRecorder::onProcessFinished(int exitCode, QProcess::ExitStatus status)
 
     const bool expectedStop = m_stopping || m_paused
         || (m_maxSeconds > 0 && activeElapsedMs() / 1000 >= m_maxSeconds);
+    const bool finishedNormally = status == QProcess::NormalExit && (exitCode == 0 || expectedStop);
+    // A killed encoder's segment is kept only when it has a written fragment.
     const bool ok = videoRecordingProcessSucceeded(m_usesGStreamer, expectedStop,
                                                    status, exitCode, QFileInfo(segment).size(),
-                                                   fragmentedOutput && !m_usesGStreamer);
+                                                   fragmentedOutput && !m_usesGStreamer)
+        && (finishedNormally || mp4FileLooksPlayable(segment));
     m_segmentRecords.append(SegmentRecord{ok, ok && m_segmentOutTimeUs >= 0 ? m_segmentOutTimeUs / 1000 : -1});
     if (ok) {
         m_segmentPaths.append(segment);
@@ -1116,13 +1123,10 @@ void VideoRecorder::finishRecording()
         emit recordingFailed(QStringLiteral("no video was recorded"));
         return;
     }
-#ifdef Q_OS_WIN
-    // Segments are fragmented MP4s: rewrite even a single one as a regular
-    // MP4 with +faststart. With system audio the mux step does that instead.
-    const bool remuxSingleSegment = !m_systemAudioLoopback;
-#else
-    const bool remuxSingleSegment = false;
-#endif
+    // FFmpeg segments (Windows, X11) are fragmented MP4s: rewrite even a
+    // single one as a regular MP4 with +faststart. With system audio the mux
+    // step does that instead.
+    const bool remuxSingleSegment = !m_usesGStreamer && !m_systemAudioLoopback;
     if (m_segmentPaths.size() > 1 || remuxSingleSegment) {
         if (!startSegmentConcat())
             keepSegmentsAfterFailedConcat(QStringLiteral("cannot start the join step"));

@@ -66,6 +66,10 @@ private slots:
         QCOMPARE(valueAfter(args, QStringLiteral("-video_size")), QStringLiteral("640x480"));
         QCOMPARE(valueAfter(args, QStringLiteral("-movflags")),
                  QStringLiteral("+frag_keyframe+empty_moov+default_base_moof"));
+        // Each fragment reaches the file at once, so a killed FFmpeg keeps it.
+        QCOMPARE(valueAfter(args, QStringLiteral("-flush_packets")), QStringLiteral("1"));
+        QVERIFY(args.mid(args.size() - 1 - ffmpegFragmentedMp4Arguments().size(),
+                         ffmpegFragmentedMp4Arguments().size()) == ffmpegFragmentedMp4Arguments());
         QVERIFY(!args.contains(QStringLiteral("dshow")));
         QVERIFY(!args.contains(QStringLiteral("-filter_complex")));
         QCOMPARE(args.last(), QStringLiteral("C:/v/out.mp4"));

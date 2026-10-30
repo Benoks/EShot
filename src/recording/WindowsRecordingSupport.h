@@ -62,6 +62,11 @@ struct WindowsCaptureOptions {
 QStringList windowsFfmpegCaptureArguments(const WindowsCaptureOptions &options,
                                           const QString &outputPath);
 
+// -movflags/-frag_duration of a fragmented MP4 segment (a fragment at least
+// every second), used by the Windows and X11 FFmpeg recordings: a killed
+// encoder loses the last fragment instead of the whole file.
+QStringList ffmpegFragmentedMp4Arguments();
+
 // -filter_complex/-map/-c:a arguments for the audio inputs, given as
 // (input index, volume percent) pairs. Mixing keeps each input's level.
 QStringList ffmpegAudioMixArguments(const QList<QPair<int, int>> &inputs);
