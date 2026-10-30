@@ -138,4 +138,17 @@ ESHOT_UNINSTALL_LOG="${uninstall_log}" bash "${repo_root}/packaging/linux/AppRun
 [[ "$(cat "${uninstall_log}")" == "--uninstall" ]] || { echo "AppRun did not forward --uninstall" >&2; exit 1; }
 [[ -f "${installed}" && -f "${desktop}" ]] || { echo "AppRun removed files itself" >&2; exit 1; }
 
+# The session manager must not learn the per-launch mount path.
+session_log="${temp_root}/session.log"
+printf '#!/usr/bin/env bash\nprintf "%%s" "${SESSION_MANAGER-unset}" >"${ESHOT_SESSION_LOG}"\n' >"${appdir}/usr/bin/EShot"
+chmod +x "${appdir}/usr/bin/EShot"
+HOME="${home_dir}" XDG_DATA_HOME="${data_home}" APPDIR="${appdir}" \
+APPIMAGE="${installed}" ESHOT_SYSTEMD_CHILD=1 SESSION_MANAGER=local/host:@/tmp/.ICE-unix/1 \
+ESHOT_SESSION_LOG="${session_log}" bash "${repo_root}/packaging/linux/AppRun" --silent
+[[ "$(cat "${session_log}")" == "unset" ]] || { echo "AppRun passed SESSION_MANAGER to EShot" >&2; exit 1; }
+grep -B1 -A3 'unset SESSION_MANAGER' "${repo_root}/scripts/linux/eshot-launcher" | grep -q 'systemd-run\|exec' || {
+  echo "eshot-launcher does not unset SESSION_MANAGER before exec" >&2
+  exit 1
+}
+
 printf 'AppRun integration tests passed\n'

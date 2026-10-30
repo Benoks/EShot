@@ -38,6 +38,7 @@
 #include <QElapsedTimer>
 #include <QThread>
 #include <QMimeData>
+#include <QSessionManager>
 
 #include <functional>
 
@@ -2235,9 +2236,18 @@ int main(int argc, char *argv[])
     app.setOrganizationName("EShot");
 #if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
     app.setDesktopFileName(QStringLiteral("io.github.benoks.EShot"));
-    // AppImages are unsandboxed host applications. Register this D-Bus peer
-    // before any portal method call so GlobalShortcuts receives a stable app id.
-    LinuxPortalHostRegistry::registerApplication();
+#ifndef QT_NO_SESSIONMANAGER
+    // Autostart already starts EShot at login. Without this, ksmserver saves
+    // the restart command (an AppImage's /tmp/.mount_* path that is gone at
+    // the next login) and fails to restore it, or starts a second copy.
+    const auto neverRestart = [](QSessionManager &manager) {
+        manager.setRestartHint(QSessionManager::RestartNever);
+    };
+    QObject::connect(&app, &QGuiApplication::saveStateRequest, &app, neverRestart,
+                     Qt::DirectConnection);
+    QObject::connect(&app, &QGuiApplication::commitDataRequest, &app, neverRestart,
+                     Qt::DirectConnection);
+#endif
 #endif
     app.setQuitOnLastWindowClosed(false);
     app.setStyle("Fusion");
@@ -2436,6 +2446,14 @@ int main(int argc, char *argv[])
     // otherwise start EShot (Setup runs "EShot.exe --quit" before updating).
     if (parser.isSet(quitOption))
         return 0;
+
+#if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
+    // AppImages are unsandboxed host applications. Register this D-Bus peer
+    // before any portal method call so GlobalShortcuts receives a stable app
+    // id. Only the instance that stays running needs it; forwarding launches
+    // (desktop actions, the GNOME Print fallback) skip this blocking call.
+    LinuxPortalHostRegistry::registerApplication();
+#endif
 
 #ifdef Q_OS_WIN
     // "Start as administrator": a normal start hands over to the elevated

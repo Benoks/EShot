@@ -75,4 +75,7 @@ fi
 eshot_configure_overlay_backend
 
 export ESHOT_APPDIR="${appdir}"
+# EShot starts through autostart. Without this the session manager saves the
+# per-launch /tmp/.mount_* path and fails to restore it at the next login.
+unset SESSION_MANAGER
 exec "${appdir}/usr/bin/EShot" "$@"

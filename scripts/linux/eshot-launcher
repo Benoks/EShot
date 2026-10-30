@@ -8,6 +8,10 @@ source "${bindir}/../lib/eshot/runtime-common.sh"
 # per-output surfaces). X11 and unsupported desktops keep their own backend.
 eshot_configure_overlay_backend
 
+# EShot starts through autostart; keep the session manager from restoring a
+# second copy at login.
+unset SESSION_MANAGER
+
 if [[ "${ESHOT_SYSTEMD_CHILD:-0}" != "1" ]] && command -v systemd-run >/dev/null 2>&1; then
   if systemctl --user is-active --quiet eshot.service 2>/dev/null; then
     exec "${bindir}/EShot" "$@"
