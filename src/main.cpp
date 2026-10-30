@@ -1043,8 +1043,9 @@ public slots:
         if (m_videoRecorder) {
             beginRecordingUi(false, m_videoRecorder->maxSeconds());
             QSettings settings(QStringLiteral("EShot"), QStringLiteral("EShot"));
-            const bool desktopAudio = settings.value("videoDesktopAudioEnabled", false).toBool();
-            const bool microphone = settings.value("videoMicrophoneEnabled", false).toBool();
+            // What the recorder really records (a missing device was dropped).
+            const bool desktopAudio = m_videoRecorder->recordsDesktopAudio();
+            const bool microphone = m_videoRecorder->recordsMicrophone();
             const QString audio = desktopAudio && microphone
                 ? TranslationManager::audioDesktopMic()
                 : desktopAudio ? TranslationManager::audioDesktop()

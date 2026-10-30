@@ -240,6 +240,21 @@ private slots:
         QVERIFY(shouldDiscoverAudioDevices(true, QStringLiteral("Easy Effects Source")));
         QVERIFY(!shouldDiscoverAudioDevices(false, QStringLiteral("Easy Effects Source")));
     }
+
+    void reportsOnlyTheAudioSourcesReallyRecorded()
+    {
+        EffectiveRecordingAudio audio = effectiveRecordingAudio(true, 80, true, true, 70, true, true);
+        QVERIFY(audio.desktop && audio.microphone);
+        // A dropped (missing) microphone.
+        audio = effectiveRecordingAudio(true, 80, true, true, 70, false, true);
+        QVERIFY(audio.desktop && !audio.microphone);
+        // A muted source is not recorded.
+        audio = effectiveRecordingAudio(true, 0, true, false, 70, true, true);
+        QVERIFY(!audio.desktop && !audio.microphone);
+        // No audio encoder: video only.
+        audio = effectiveRecordingAudio(true, 80, true, true, 70, true, false);
+        QVERIFY(!audio.desktop && !audio.microphone);
+    }
 };
 
 QTEST_APPLESS_MAIN(RecordingSettingsPolicyTests)

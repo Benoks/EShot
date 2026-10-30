@@ -4,6 +4,7 @@
 #include "core/LinuxPortalScreenCast.h"
 #include "LinuxRecordingSupport.h"
 #include "RecordingControlLayout.h"
+#include "RecordingSettingsPolicy.h"
 #include "WindowsRecordingSupport.h"
 
 #include <QObject>
@@ -38,6 +39,10 @@ public:
     // How the running recording captures the screen (for the indicator's
     // capture exclusion); valid once recordingStarted() is emitted.
     RecordingCaptureBackend captureBackend() const;
+    // Audio sources this recording really records (a missing or failed
+    // input was dropped); valid once recordingStarted() is emitted.
+    bool recordsDesktopAudio() const;
+    bool recordsMicrophone() const;
 
     void start(const QRect &captureRect, int fps, int maxSeconds, int crf,
                bool desktopAudioEnabled, int desktopVolume,
@@ -74,6 +79,8 @@ private slots:
 
 private:
     friend class RecordingCancellationTests;
+
+    EffectiveRecordingAudio effectiveAudio() const;
 
     QString ffmpegPath() const;
     QString makeDefaultOutputPath() const;

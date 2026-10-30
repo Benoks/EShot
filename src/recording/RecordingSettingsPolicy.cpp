@@ -216,3 +216,16 @@ void applyVideoQualityPreset(QSettings &settings, RecordingQualityPreset preset)
     settings.setValue(QStringLiteral("videoRecordingCrf"), values.crf);
     settings.setValue(QStringLiteral("videoRecordingFps"), values.fps);
 }
+
+EffectiveRecordingAudio effectiveRecordingAudio(bool desktopEnabled, int desktopVolume,
+                                                bool desktopInputResolved,
+                                                bool microphoneEnabled, int microphoneVolume,
+                                                bool microphoneInputResolved,
+                                                bool audioEncoderAvailable)
+{
+    EffectiveRecordingAudio audio;
+    audio.desktop = audioEncoderAvailable && desktopEnabled && desktopVolume > 0 && desktopInputResolved;
+    audio.microphone = audioEncoderAvailable && microphoneEnabled && microphoneVolume > 0
+        && microphoneInputResolved;
+    return audio;
+}

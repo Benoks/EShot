@@ -1950,6 +1950,31 @@ RecordingCaptureBackend VideoRecorder::captureBackend() const
 #endif
 }
 
+EffectiveRecordingAudio VideoRecorder::effectiveAudio() const
+{
+#ifdef Q_OS_WIN
+    return effectiveRecordingAudio(m_desktopAudioEnabled, m_desktopVolume,
+                                   m_systemAudioLoopback || !m_desktopDshowInput.isEmpty(),
+                                   m_microphoneEnabled, m_microphoneVolume,
+                                   !m_microphoneDshowInput.isEmpty(), true);
+#else
+    // Wayland records audio only with an AAC encoder (see portalPreflightError()).
+    return effectiveRecordingAudio(m_desktopAudioEnabled, m_desktopVolume, !m_desktopAudioDevice.isEmpty(),
+                                   m_microphoneEnabled, m_microphoneVolume, !m_microphoneDevice.isEmpty(),
+                                   !m_usesGStreamer || !m_gstAacEncoder.isEmpty());
+#endif
+}
+
+bool VideoRecorder::recordsDesktopAudio() const
+{
+    return effectiveAudio().desktop;
+}
+
+bool VideoRecorder::recordsMicrophone() const
+{
+    return effectiveAudio().microphone;
+}
+
 QString VideoRecorder::ffmpegPath() const
 {
     return ComponentPaths::ffmpegPath();

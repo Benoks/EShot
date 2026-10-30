@@ -24,6 +24,20 @@ bool loadRecordingAudioEnabled(QSettings &settings, RecordingAudioSource source)
 bool shouldDiscoverAudioDevices(bool microphoneEnabled,
                                 const QString &microphoneDevice);
 
+// Audio sources a running recording really records (shown by the recording
+// indicator): a source is in only when it is enabled, audible, its input
+// was resolved (device present, dshow input opened...) and there is an
+// audio encoder for it.
+struct EffectiveRecordingAudio {
+    bool desktop = false;
+    bool microphone = false;
+};
+EffectiveRecordingAudio effectiveRecordingAudio(bool desktopEnabled, int desktopVolume,
+                                                bool desktopInputResolved,
+                                                bool microphoneEnabled, int microphoneVolume,
+                                                bool microphoneInputResolved,
+                                                bool audioEncoderAvailable);
+
 // Defaults of the raw recording keys the recorders read.
 constexpr int DefaultGifFps = 12;            // "recordingFps"
 constexpr int LegacyDefaultGifFps = 10;      // default before quality presets
