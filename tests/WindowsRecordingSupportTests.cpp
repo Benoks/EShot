@@ -406,6 +406,78 @@ private slots:
         QVERIFY(key != windowsCaptureProbeCacheKey(QStringLiteral("D:/ffmpeg.exe"), 1000, 500));
     }
 
+    void probeCacheKeyChangesWithTheGpuAndDriver()
+    {
+        WindowsGpuAdapter nvidia;
+        nvidia.description = QStringLiteral("NVIDIA GeForce RTX 3060");
+        nvidia.vendorId = 0x10de;
+        nvidia.deviceId = 0x2504;
+        nvidia.driverVersion = 0x001F000F0D3A1234LL;
+        const QString signature = windowsGpuSignature({nvidia});
+        QVERIFY(signature.startsWith(QStringLiteral("10de:2504:")));
+        const QString path = QStringLiteral("C:/EShot/ffmpeg.exe");
+        const QString key = windowsCaptureProbeCacheKey(path, 1000, 500, signature);
+        QCOMPARE(key, windowsCaptureProbeCacheKey(path, 1000, 500, windowsGpuSignature({nvidia})));
+        // Older keys (no GPU signature) are not reused once one is known.
+        QVERIFY(key != windowsCaptureProbeCacheKey(path, 1000, 500));
+
+        WindowsGpuAdapter updated = nvidia;
+        updated.driverVersion += 1;
+        QVERIFY(key != windowsCaptureProbeCacheKey(path, 1000, 500, windowsGpuSignature({updated})));
+        WindowsGpuAdapter amd;
+        amd.vendorId = 0x1002;
+        amd.deviceId = 0x15bf;
+        QVERIFY(key != windowsCaptureProbeCacheKey(path, 1000, 500, windowsGpuSignature({amd})));
+        QVERIFY(key != windowsCaptureProbeCacheKey(path, 1000, 500, windowsGpuSignature({nvidia, amd})));
+    }
+
+    void negativeProbeResultsExpire()
+    {
+        WindowsCaptureCapabilities none;
+        none.ready = true;
+        const qint64 now = 1'800'000'000'000LL;
+        const QString stored = serializeWindowsCaptureCapabilities(
+            none, now + WindowsNegativeCaptureProbeLifetimeMs);
+        QVERIFY(stored.startsWith(QStringLiteral("v1:;expires=")));
+        const WindowsCaptureCapabilities fresh = parseWindowsCaptureCapabilities(stored, now + 1000);
+        QVERIFY(fresh.ready);
+        QVERIFY(!fresh.ddaGrab());
+        QVERIFY(!parseWindowsCaptureCapabilities(stored, now + WindowsNegativeCaptureProbeLifetimeMs).ready);
+        QVERIFY(!parseWindowsCaptureCapabilities(QStringLiteral("v1:;expires=bogus"), now).ready);
+        // Positive results stay without an expiry.
+        WindowsCaptureCapabilities nvenc;
+        nvenc.ready = true;
+        nvenc.ddaEncoders = {WindowsVideoEncoder::Nvenc, WindowsVideoEncoder::Libx264};
+        QCOMPARE(parseWindowsCaptureCapabilities(serializeWindowsCaptureCapabilities(nvenc), now).ddaEncoders,
+                 nvenc.ddaEncoders);
+    }
+
+    void hardwareEncoderStartFailuresKeepDesktopDuplication()
+    {
+        WindowsCaptureCapabilities capabilities;
+        capabilities.ready = true;
+        capabilities.ddaEncoders = {WindowsVideoEncoder::Nvenc, WindowsVideoEncoder::Libx264};
+        WindowsVideoPlan plan;
+        plan.source = WindowsCaptureSource::DdaGrab;
+        plan.encoder = WindowsVideoEncoder::Nvenc;
+
+        const WindowsCaptureCapabilities left = withoutWindowsDdaEncoder(capabilities, plan.encoder);
+        QCOMPARE(left.ddaEncoders, QList<WindowsVideoEncoder>{WindowsVideoEncoder::Libx264});
+        QVERIFY(left.ready);
+        QCOMPARE(windowsStartupRetry(plan, left, false), WindowsStartupRetry::DdaSoftware);
+        // ddagrab + libx264 failed too: GDI.
+        plan.encoder = WindowsVideoEncoder::Libx264;
+        QCOMPARE(windowsStartupRetry(plan, left, false), WindowsStartupRetry::GdiGrab);
+        // The probe never got libx264 working with ddagrab.
+        plan.encoder = WindowsVideoEncoder::Amf;
+        WindowsCaptureCapabilities amfOnly;
+        amfOnly.ready = true;
+        QCOMPARE(windowsStartupRetry(plan, amfOnly, false), WindowsStartupRetry::GdiGrab);
+        // A failing DirectShow input or a GDI capture is handled elsewhere.
+        QCOMPARE(windowsStartupRetry(plan, left, true), WindowsStartupRetry::None);
+        QCOMPARE(windowsStartupRetry(WindowsVideoPlan(), left, false), WindowsStartupRetry::None);
+    }
+
     void mapsCaptureRectToItsDxgiOutput()
     {
         const QList<DxgiOutputInfo> outputs = {

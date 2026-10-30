@@ -465,11 +465,9 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
     setFocusPolicy(Qt::StrongFocus);
     setMouseTracking(true);
     setCursor(Qt::CrossCursor);
-#ifdef Q_OS_WIN
-    // Warm the DirectShow device cache in the background (FFmpeg enumeration
-    // takes seconds) so the recording drawer and recording start find it ready.
-    refreshDshowAudioDevices(ComponentPaths::ffmpegPath(), true);
-#endif
+    // The DirectShow device list is only fetched when the recording drawer
+    // shows the microphone list (ensureAudioDevicesLoaded()) or a recording
+    // needs a dshow input, not for every pre-built overlay.
 
 #ifdef Q_OS_LINUX
     if (qEnvironmentVariableIntValue("ESHOT_WAYLAND_XWAYLAND_OVERLAY") == 1) {

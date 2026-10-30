@@ -28,6 +28,9 @@ void requestWindowsCaptureProbe(const QString &ffmpegPath);
 // The probe result; not ready (gdigrab + libx264) while it is still running.
 // Never waits.
 WindowsCaptureCapabilities cachedWindowsCaptureCapabilities(const QString &ffmpegPath);
+// A hardware encoder failed to start a real recording (session limit,
+// driver gone): drop it from the cached and the stored probe result.
+void markWindowsDdaEncoderFailed(const QString &ffmpegPath, WindowsVideoEncoder encoder);
 // ddagrab failed to start a recording: use gdigrab for the rest of this run.
 void disableWindowsDdaGrabForSession(const QString &ffmpegPath);
 // Attached DXGI outputs of all adapters.

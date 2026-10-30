@@ -130,12 +130,51 @@ struct WindowsCaptureCapabilities {
     QList<WindowsVideoEncoder> ddaEncoders;
     bool ddaGrab() const { return !ddaEncoders.isEmpty(); }
 };
-QString serializeWindowsCaptureCapabilities(const WindowsCaptureCapabilities &capabilities);
-// Not ready for an empty, unknown or outdated value.
-WindowsCaptureCapabilities parseWindowsCaptureCapabilities(const QString &value);
-// QSettings key of the probe result for one ffmpeg.exe build; a replaced or
-// updated FFmpeg gets a new key and is probed again.
-QString windowsCaptureProbeCacheKey(const QString &ffmpegPath, qint64 modifiedMsecs, qint64 size);
+// `expiresAtMsecs` > 0 stores a result that is only valid until then (epoch
+// ms), e.g. "no Desktop Duplication encoder works" on a VM, which is
+// rechecked after a while instead of on every start.
+QString serializeWindowsCaptureCapabilities(const WindowsCaptureCapabilities &capabilities,
+                                            qint64 expiresAtMsecs = 0);
+// Not ready for an empty, unknown, outdated or expired value. `nowMsecs`
+// (epoch ms) defaults to the current time.
+WindowsCaptureCapabilities parseWindowsCaptureCapabilities(const QString &value,
+                                                           qint64 nowMsecs = -1);
+// How long a probe that found no working Desktop Duplication encoder is
+// trusted before the next start probes again.
+constexpr qint64 WindowsNegativeCaptureProbeLifetimeMs = 7LL * 24 * 60 * 60 * 1000;
+// QSettings key of the probe result for one ffmpeg.exe build and GPU setup;
+// a replaced or updated FFmpeg, another GPU or a new driver
+// (`gpuSignature`, see windowsGpuSignature()) gets a new key and is probed
+// again.
+QString windowsCaptureProbeCacheKey(const QString &ffmpegPath, qint64 modifiedMsecs, qint64 size,
+                                    const QString &gpuSignature = QString());
+// "vendor:device:driver" per DXGI adapter, joined; the runtime collects the
+// adapters (WindowsCaptureBackend), this only formats them.
+struct WindowsGpuAdapter {
+    QString description;
+    uint vendorId = 0;
+    uint deviceId = 0;
+    // UMD driver version (IDXGIAdapter::CheckInterfaceSupport), 0 if unknown.
+    qint64 driverVersion = 0;
+};
+QString windowsGpuSignature(const QList<WindowsGpuAdapter> &adapters);
+// The capabilities without `encoder` (it failed in a real recording).
+WindowsCaptureCapabilities withoutWindowsDdaEncoder(const WindowsCaptureCapabilities &capabilities,
+                                                    WindowsVideoEncoder encoder);
+
+// What to do when FFmpeg exits before capture started.
+enum class WindowsStartupRetry {
+    None,              // not a Desktop Duplication problem (or a dshow input)
+    DdaSoftware,       // keep ddagrab, encode with libx264 instead
+    GdiGrab            // drop ddagrab for this run, record with GDI
+};
+// A hardware encoder failure (session limit, driver gone) is retried with
+// ddagrab + libx264 when the probe found that combination working; only a
+// failure of ddagrab itself (or of ddagrab + libx264) falls back to gdigrab.
+// `capabilities` are the ones left after the failed encoder was removed.
+WindowsStartupRetry windowsStartupRetry(const WindowsVideoPlan &failedPlan,
+                                        const WindowsCaptureCapabilities &capabilities,
+                                        bool dshowInputFailed);
 
 // A DXGI output (monitor) in desktop coordinates (physical pixels).
 struct DxgiOutputInfo {

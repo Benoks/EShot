@@ -1,6 +1,7 @@
 #include "WindowsRecordingSupport.h"
 
 #include <QCryptographicHash>
+#include <QDateTime>
 #include <QDir>
 #include <QRegularExpression>
 
@@ -401,21 +402,36 @@ namespace {
 const QString CapabilitiesPrefix = QStringLiteral("v1:");
 }
 
-QString serializeWindowsCaptureCapabilities(const WindowsCaptureCapabilities &capabilities)
+QString serializeWindowsCaptureCapabilities(const WindowsCaptureCapabilities &capabilities,
+                                            qint64 expiresAtMsecs)
 {
     QStringList names;
     for (WindowsVideoEncoder encoder : capabilities.ddaEncoders)
         names.append(ffmpegVideoEncoderName(encoder));
-    return CapabilitiesPrefix + names.join(QLatin1Char(','));
+    QString value = CapabilitiesPrefix + names.join(QLatin1Char(','));
+    if (expiresAtMsecs > 0)
+        value += QStringLiteral(";expires=%1").arg(expiresAtMsecs);
+    return value;
 }
 
-WindowsCaptureCapabilities parseWindowsCaptureCapabilities(const QString &value)
+WindowsCaptureCapabilities parseWindowsCaptureCapabilities(const QString &value, qint64 nowMsecs)
 {
     WindowsCaptureCapabilities capabilities;
     if (!value.startsWith(CapabilitiesPrefix))
         return capabilities;
+    const QStringList fields = value.mid(CapabilitiesPrefix.size()).split(QLatin1Char(';'));
+    for (int i = 1; i < fields.size(); ++i) {
+        const QString field = fields.at(i).trimmed();
+        if (!field.startsWith(QStringLiteral("expires=")))
+            continue;
+        bool ok = false;
+        const qint64 expires = field.mid(8).toLongLong(&ok);
+        const qint64 now = nowMsecs >= 0 ? nowMsecs : QDateTime::currentMSecsSinceEpoch();
+        if (!ok || now >= expires)
+            return capabilities;
+    }
     capabilities.ready = true;
-    const QStringList names = value.mid(CapabilitiesPrefix.size()).split(QLatin1Char(','), Qt::SkipEmptyParts);
+    const QStringList names = fields.first().split(QLatin1Char(','), Qt::SkipEmptyParts);
     for (const QString &name : names) {
         for (WindowsVideoEncoder encoder : {WindowsVideoEncoder::Nvenc, WindowsVideoEncoder::Amf,
                                             WindowsVideoEncoder::Qsv, WindowsVideoEncoder::Libx264}) {
@@ -426,15 +442,51 @@ WindowsCaptureCapabilities parseWindowsCaptureCapabilities(const QString &value)
     return capabilities;
 }
 
-QString windowsCaptureProbeCacheKey(const QString &ffmpegPath, qint64 modifiedMsecs, qint64 size)
+QString windowsCaptureProbeCacheKey(const QString &ffmpegPath, qint64 modifiedMsecs, qint64 size,
+                                    const QString &gpuSignature)
 {
-    const QByteArray identity = QStringLiteral("%1|%2|%3")
-                                    .arg(QDir::cleanPath(ffmpegPath).toLower())
-                                    .arg(modifiedMsecs)
-                                    .arg(size)
-                                    .toUtf8();
-    const QByteArray hash = QCryptographicHash::hash(identity, QCryptographicHash::Sha1).toHex();
+    QString identity = QStringLiteral("%1|%2|%3")
+                           .arg(QDir::cleanPath(ffmpegPath).toLower())
+                           .arg(modifiedMsecs)
+                           .arg(size);
+    // Without a GPU signature the key stays what older versions stored.
+    if (!gpuSignature.isEmpty())
+        identity += QLatin1Char('|') + gpuSignature;
+    const QByteArray hash = QCryptographicHash::hash(identity.toUtf8(), QCryptographicHash::Sha1).toHex();
     return QStringLiteral("recordingCaptureProbe/%1").arg(QString::fromLatin1(hash.left(16)));
+}
+
+QString windowsGpuSignature(const QList<WindowsGpuAdapter> &adapters)
+{
+    QStringList parts;
+    for (const WindowsGpuAdapter &adapter : adapters) {
+        parts << QStringLiteral("%1:%2:%3:%4")
+                     .arg(adapter.vendorId, 4, 16, QLatin1Char('0'))
+                     .arg(adapter.deviceId, 4, 16, QLatin1Char('0'))
+                     .arg(adapter.driverVersion)
+                     .arg(adapter.description.trimmed());
+    }
+    return parts.join(QLatin1Char(';'));
+}
+
+WindowsCaptureCapabilities withoutWindowsDdaEncoder(const WindowsCaptureCapabilities &capabilities,
+                                                    WindowsVideoEncoder encoder)
+{
+    WindowsCaptureCapabilities result = capabilities;
+    result.ddaEncoders.removeAll(encoder);
+    return result;
+}
+
+WindowsStartupRetry windowsStartupRetry(const WindowsVideoPlan &failedPlan,
+                                        const WindowsCaptureCapabilities &capabilities,
+                                        bool dshowInputFailed)
+{
+    if (failedPlan.source != WindowsCaptureSource::DdaGrab || dshowInputFailed)
+        return WindowsStartupRetry::None;
+    if (failedPlan.encoder != WindowsVideoEncoder::Libx264
+        && capabilities.ddaEncoders.contains(WindowsVideoEncoder::Libx264))
+        return WindowsStartupRetry::DdaSoftware;
+    return WindowsStartupRetry::GdiGrab;
 }
 
 DdaOutputMapping ddaOutputForCaptureRect(const QRect &captureRect,

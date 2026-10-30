@@ -306,9 +306,18 @@ VideoRecorder::VideoRecorder(QObject *parent)
 {
 #ifdef Q_OS_WIN
     // Fill the DirectShow device cache in the background so start() does not
-    // have to wait for the enumeration; likewise the capture backend probe.
+    // have to wait for the enumeration, but only when a recording will need
+    // a dshow input; the capture backend probe always runs (it is cached).
     const QString ffmpeg = ffmpegPath();
-    refreshDshowAudioDevices(ffmpeg, true);
+    {
+        QSettings settings(QStringLiteral("EShot"), QStringLiteral("EShot"));
+        const QString desktopDevice = settings.value(QStringLiteral("videoDesktopAudioDevice")).toString().trimmed();
+        const bool desktopDshow = loadRecordingAudioEnabled(settings, RecordingAudioSource::Desktop)
+            && !desktopDevice.isEmpty() && desktopDevice != QStringLiteral("__wasapi__")
+            && desktopDevice != QStringLiteral("virtual-audio-capturer");
+        if (desktopDshow || loadRecordingAudioEnabled(settings, RecordingAudioSource::Microphone))
+            refreshDshowAudioDevices(ffmpeg, true);
+    }
     requestWindowsCaptureProbe(ffmpeg);
 #endif
 #if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
@@ -673,10 +682,28 @@ void VideoRecorder::handleWindowsStartupFailure(QString reason, const QString &s
 
     // Desktop Duplication or the hardware encoder can be unavailable even
     // though the probe passed (remote session, protected content, encoder
-    // sessions in use): record this one, and the rest of this run, with GDI.
+    // sessions in use). A failed hardware encoder is dropped from the probe
+    // result and the recording retried with ddagrab + libx264; only when
+    // ddagrab itself fails does this one, and the rest of this run, use GDI.
     // A failing DirectShow input is handled below instead.
-    if (m_windowsPlan.source == WindowsCaptureSource::DdaGrab
-        && !reason.contains(QStringLiteral("dshow"), Qt::CaseInsensitive)) {
+    const bool dshowFailure = reason.contains(QStringLiteral("dshow"), Qt::CaseInsensitive);
+    if (m_windowsPlan.source == WindowsCaptureSource::DdaGrab && !dshowFailure
+        && m_windowsPlan.encoder != WindowsVideoEncoder::Libx264)
+        markWindowsDdaEncoderFailed(m_ffmpegPath, m_windowsPlan.encoder);
+    const WindowsStartupRetry retry = windowsStartupRetry(
+        m_windowsPlan, cachedWindowsCaptureCapabilities(m_ffmpegPath), dshowFailure);
+    if (retry == WindowsStartupRetry::DdaSoftware) {
+        qWarning() << "VideoRecorder:" << ffmpegVideoEncoderName(m_windowsPlan.encoder)
+                   << "failed to start; retrying ddagrab with libx264:" << reason;
+        m_windowsPlan.encoder = WindowsVideoEncoder::Libx264;
+        QString error;
+        if (startWindowsCapture(&error))
+            return;
+        if (!error.isEmpty())
+            reason = error;
+    }
+    if (retry == WindowsStartupRetry::GdiGrab
+        || (retry == WindowsStartupRetry::DdaSoftware && m_windowsPlan.source == WindowsCaptureSource::DdaGrab)) {
         qWarning() << "VideoRecorder: ddagrab capture failed to start; retrying with gdigrab:" << reason;
         disableWindowsDdaGrabForSession(m_ffmpegPath);
         m_windowsPlan = WindowsVideoPlan();

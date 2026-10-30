@@ -32,11 +32,49 @@ CaptureProbeCache &captureProbeCache()
     return cache;
 }
 
+QList<WindowsGpuAdapter> enumerateGpuAdapters()
+{
+    QList<WindowsGpuAdapter> adapters;
+    IDXGIFactory1 *factory = nullptr;
+    if (FAILED(CreateDXGIFactory1(__uuidof(IDXGIFactory1), reinterpret_cast<void **>(&factory))) || !factory)
+        return adapters;
+    for (UINT index = 0;; ++index) {
+        IDXGIAdapter1 *adapter = nullptr;
+        if (FAILED(factory->EnumAdapters1(index, &adapter)) || !adapter)
+            break;
+        DXGI_ADAPTER_DESC1 desc;
+        ZeroMemory(&desc, sizeof(desc));
+        if (SUCCEEDED(adapter->GetDesc1(&desc)) && !(desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE)) {
+            WindowsGpuAdapter info;
+            info.description = QString::fromWCharArray(desc.Description);
+            info.vendorId = desc.VendorId;
+            info.deviceId = desc.DeviceId;
+            LARGE_INTEGER umdVersion;
+            umdVersion.QuadPart = 0;
+            if (SUCCEEDED(adapter->CheckInterfaceSupport(__uuidof(IDXGIDevice), &umdVersion)))
+                info.driverVersion = umdVersion.QuadPart;
+            adapters.append(info);
+        }
+        adapter->Release();
+    }
+    factory->Release();
+    return adapters;
+}
+
+// GPUs and drivers do not change while EShot runs often enough to matter;
+// the next start sees a new driver.
+QString gpuSignature()
+{
+    static const QString signature = windowsGpuSignature(enumerateGpuAdapters());
+    return signature;
+}
+
 QString probeSettingsKey(const QString &ffmpegPath)
 {
     const QFileInfo info(ffmpegPath);
     return windowsCaptureProbeCacheKey(info.absoluteFilePath(),
-                                       info.lastModified().toMSecsSinceEpoch(), info.size());
+                                       info.lastModified().toMSecsSinceEpoch(), info.size(),
+                                       gpuSignature());
 }
 
 // Runs on the probe worker thread.
@@ -66,10 +104,12 @@ void probeCaptureBackends(const QString &ffmpegPath, const QString &settingsKey)
 {
     WindowsCaptureCapabilities capabilities;
     capabilities.ready = true;
-    // A result that may be temporary (FFmpeg did not run, Desktop
-    // Duplication unavailable right now: secure desktop, remote session) is
-    // only kept for this run, so the next start probes again.
+    // FFmpeg that did not run is only remembered for this run. "No working
+    // Desktop Duplication encoder" may be temporary (secure desktop, remote
+    // session) but is the normal answer on VMs and old GPUs, so it is kept
+    // for a week instead of probing again at every logon.
     bool persist = true;
+    qint64 expiresAtMsecs = 0;
 
     QString filters;
     QString encoders;
@@ -88,10 +128,10 @@ void probeCaptureBackends(const QString &ffmpegPath, const QString &settingsKey)
             }
         }
         if (capabilities.ddaEncoders.isEmpty())
-            persist = false;
+            expiresAtMsecs = QDateTime::currentMSecsSinceEpoch() + WindowsNegativeCaptureProbeLifetimeMs;
     }
-    qInfo() << "[RecordingProbe] ffmpeg capture backends:"
-            << serializeWindowsCaptureCapabilities(capabilities) << (persist ? "" : "(not cached)");
+    const QString stored = serializeWindowsCaptureCapabilities(capabilities, expiresAtMsecs);
+    qInfo() << "[RecordingProbe] ffmpeg capture backends:" << stored << (persist ? "" : "(not cached)");
 
     CaptureProbeCache &cache = captureProbeCache();
     {
@@ -102,7 +142,7 @@ void probeCaptureBackends(const QString &ffmpegPath, const QString &settingsKey)
     if (persist) {
         // QSettings is reentrant; this instance belongs to the worker thread.
         QSettings settings(QStringLiteral("EShot"), QStringLiteral("EShot"));
-        settings.setValue(settingsKey, serializeWindowsCaptureCapabilities(capabilities));
+        settings.setValue(settingsKey, stored);
     }
 }
 #endif
@@ -167,6 +207,31 @@ WindowsCaptureCapabilities cachedWindowsCaptureCapabilities(const QString &ffmpe
 #else
     Q_UNUSED(ffmpegPath);
     return {};
+#endif
+}
+
+void markWindowsDdaEncoderFailed(const QString &ffmpegPath, WindowsVideoEncoder encoder)
+{
+#ifdef Q_OS_WIN
+    if (ffmpegPath.isEmpty())
+        return;
+    CaptureProbeCache &cache = captureProbeCache();
+    {
+        std::lock_guard<std::mutex> lock(cache.mutex);
+        auto it = cache.results.find(ffmpegPath);
+        if (it != cache.results.end())
+            it.value() = withoutWindowsDdaEncoder(it.value(), encoder);
+    }
+    // The stored result loses this encoder too; a new FFmpeg, GPU or driver
+    // gets a new key and probes every encoder again.
+    QSettings settings(QStringLiteral("EShot"), QStringLiteral("EShot"));
+    const QString key = probeSettingsKey(ffmpegPath);
+    const WindowsCaptureCapabilities stored = parseWindowsCaptureCapabilities(settings.value(key).toString());
+    if (stored.ready && stored.ddaEncoders.contains(encoder))
+        settings.setValue(key, serializeWindowsCaptureCapabilities(withoutWindowsDdaEncoder(stored, encoder)));
+#else
+    Q_UNUSED(ffmpegPath);
+    Q_UNUSED(encoder);
 #endif
 }
 
