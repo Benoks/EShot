@@ -170,8 +170,8 @@ void OcrDialog::populateLanguages()
     if (!automaticAvailable) {
         auto *model = qobject_cast<QStandardItemModel *>(m_langCombo->model());
         if (QStandardItem *item = model ? model->item(0) : nullptr) {
+            // The disabled palette group greys the item out in every theme.
             item->setEnabled(false);
-            item->setForeground(QColor(145, 145, 145));
             item->setToolTip(missingTip);
         }
     }
@@ -186,8 +186,8 @@ void OcrDialog::populateLanguages()
         auto *model = qobject_cast<QStandardItemModel *>(m_langCombo->model());
         QStandardItem *item = model ? model->item(row) : nullptr;
         if (!installed && item) {
+            // The disabled palette group greys the item out in every theme.
             item->setEnabled(false);
-            item->setForeground(QColor(145, 145, 145));
             item->setToolTip(missingTip);
         }
     }
@@ -320,11 +320,28 @@ void OcrDialog::onCopyClicked()
     m_statusLabel->setText(TranslationManager::ocrCopied());
 }
 
+namespace {
+// Google Translate accepts at most 5000 characters, and very long URLs fail
+// to launch on some shells and browsers (CJK text grows ~9x when encoded).
+constexpr int kTranslateTextLimit = 4500;
+}
+
 void OcrDialog::onTranslateClicked()
 {
-    const QString text = m_textEdit->toPlainText().trimmed();
+    QString text = m_textEdit->toPlainText().trimmed();
     if (text.isEmpty())
         return;
+
+    const bool truncated = text.size() > kTranslateTextLimit;
+    if (truncated) {
+        // Keep the whole text available: copy it, then send the first part.
+        QGuiApplication::clipboard()->setText(text);
+        text.truncate(kTranslateTextLimit);
+        if (!text.isEmpty() && text.back().isHighSurrogate())
+            text.chop(1);
+        m_statusLabel->setText(
+            TranslationManager::tr("ocrTranslateTruncated").arg(kTranslateTextLimit));
+    }
 
     QUrl url(QStringLiteral("https://translate.google.com/"));
     QUrlQuery query;

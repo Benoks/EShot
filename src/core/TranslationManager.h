@@ -17,20 +17,25 @@ public:
         if (saved >= 0 && saved < LangCount) {
             m_lang = static_cast<Language>(saved);
         } else {
-            QLocale loc = QLocale::system();
-            switch (loc.language()) {
-                case QLocale::Turkish:  m_lang = Turkish; break;
-                case QLocale::German:   m_lang = German; break;
-                case QLocale::French:   m_lang = French; break;
-                case QLocale::Spanish:  m_lang = Spanish; break;
-                case QLocale::Japanese: m_lang = Japanese; break;
-                case QLocale::Chinese:  m_lang = Chinese; break;
-                case QLocale::Russian:  m_lang = Russian; break;
-                default: m_lang = English; break;
-            }
+            m_lang = systemLanguage();
             s.setValue("language", static_cast<int>(m_lang));
         }
     }
+
+    // The supported language that matches the system locale (English otherwise).
+    static Language languageForLocale(const QLocale &locale) {
+        switch (locale.language()) {
+            case QLocale::Turkish:  return Turkish;
+            case QLocale::German:   return German;
+            case QLocale::French:   return French;
+            case QLocale::Spanish:  return Spanish;
+            case QLocale::Japanese: return Japanese;
+            case QLocale::Chinese:  return Chinese;
+            case QLocale::Russian:  return Russian;
+            default: return English;
+        }
+    }
+    static Language systemLanguage() { return languageForLocale(QLocale::system()); }
 
     static void setLanguage(Language lang, bool persist = true) {
         m_lang = lang;
@@ -77,6 +82,10 @@ public:
             return QString::fromUtf8(it.value()->vals[static_cast<int>(m_lang)]);
         return QString::fromUtf8(key);
     }
+
+    // Read access to the table for consistency tests.
+    static int translationCount() { return s_transCount; }
+    static const Trans &translationAt(int index) { return s_trans[index]; }
 
     // ─── Genel ───
     static QString appTitle()         { return tr("appTitle"); }
@@ -513,7 +522,7 @@ private:
         {"darkMode",       {"Koyu tema", "Dark theme", "Dunkles Thema", "Thème sombre", "Tema oscuro", "ダークテーマ", "深色主题", "Тёмная тема"}},
         {"overlaySettings",{"Overlay Ayarları", "Overlay Settings", "Overlay-Einstellungen", "Paramètres superposition", "Configuración superposición", "オーバーレイ設定", "覆盖层设置", "Настройки оверлея"}},
         {"bgOpacity",      {"Arka Plan Opaklığı:", "Background Opacity:", "Hintergrund-Deckkraft:", "Opacité de fond:", "Opacidad de fondo:", "背景の不透明度:", "背景不透明度:", "Прозрачность фона:"}},
-        {"crosshair",      {"Crosshair:", "Crosshair:", "Fadenkreuz:", "Viseur:", "Mira:", "クロスヘア:", "十字准星:", "Перекрестие:"}},
+        {"crosshair",      {"Nişangah:", "Crosshair:", "Fadenkreuz:", "Viseur:", "Mira:", "クロスヘア:", "十字准星:", "Перекрестие:"}},
         {"crossDash",      {"Kesikli çizgi", "Dashed line", "Gestrichelt", "Pointillés", "Discontinua", "破線", "虚线", "Пунктир"}},
         {"crossSolid",     {"Düz çizgi", "Solid line", "Durchgezogen", "Pleine", "Sólida", "実線", "实线", "Сплошная"}},
         {"crossNone",      {"Kapalı", "Off", "Aus", "Désactivé", "Desactivado", "オフ", "关闭", "Выкл."}},
@@ -534,7 +543,7 @@ private:
 
         // ─── Kayıt tab ───
         {"gifFpsLabel",    {"GIF FPS:", "GIF FPS:", "GIF-FPS:", "FPS GIF :", "FPS de GIF:", "GIF フレームレート:", "GIF 帧率:", "FPS GIF:"}},
-        {"videoFpsLabel",  {"Video FPS:", "Video FPS:", "Video-FPS:", "FPS vidéo :", "FPS de video:", "動画フレームレート:", "视频帧率:", "FPS видео:"}},
+        {"videoFpsLabel",  {"Video kare hızı (FPS):", "Video FPS:", "Video-FPS:", "FPS vidéo :", "FPS de video:", "動画フレームレート:", "视频帧率:", "FPS видео:"}},
         {"recordingUnlimited",{"Sınırsız", "Unlimited", "Unbegrenzt", "Illimité", "Ilimitado", "無制限", "无限制", "Без лимита"}},
         {"recordingLoop",  {"Döngü:", "Loop:", "Schleife:", "Boucle :", "Bucle:", "ループ:", "循环:", "Повтор:"}},
         {"recordingLoopInfinite",{"Sonsuz", "Infinite", "Endlos", "Infini", "Infinito", "無限", "无限", "Бесконечно"}},
@@ -649,7 +658,7 @@ private:
         {"visualSearchAction", {"Görselle Ara", "Search by Image", "Mit Bild suchen", "Rechercher par image", "Buscar por imagen", "画像で検索", "以图搜索", "Поиск по картинке"}},
         {"visualSearchGoogleTooltip", {"Google Lens ile ara", "Search with Google Lens", "Mit Google Lens suchen", "Rechercher avec Google Lens", "Buscar con Google Lens", "Google Lens で検索", "使用 Google Lens 搜索", "Искать через Google Lens"}},
         {"visualSearchYandexTooltip", {"Yandex Görseller ile ara", "Search with Yandex Images", "Mit Yandex Bilder suchen", "Rechercher avec Yandex Images", "Buscar con Yandex Imágenes", "Yandex Images で検索", "使用 Yandex 图片搜索", "Искать через Yandex Картинки"}},
-        {"toolEyedropper", {"Renk Seçici", "Eyedropper", "Pipette", "Pipette", "Cuentagotas", "Eyedropper", "取色器", "Пипетка"}},
+        {"toolEyedropper", {"Renk Seçici", "Eyedropper", "Pipette", "Pipette", "Cuentagotas", "スポイト", "取色器", "Пипетка"}},
         {"toolSemiRect",   {"Saydam Kare", "Semi-Transparent", "Halbtransparent", "Semi-transparent", "Semi-transparente", "半透明", "半透明矩形", "Полупрозрачный"}},
 
         // ─── Araç listesi ───
@@ -867,10 +876,6 @@ private:
         {"ocrEngineMissingHint", {"Tesseract OCR motoru eksik. Dil paketleri indirilebilir ama OCR için motorun da kurulu olması gerekir.", "The Tesseract OCR engine is missing. Language packs can be downloaded, but the engine must also be installed for OCR.", "Die Tesseract-OCR-Engine fehlt. Sprachpakete können geladen werden, für OCR muss jedoch auch die Engine installiert sein.", "Le moteur OCR Tesseract est absent. Les modules linguistiques peuvent être téléchargés, mais le moteur doit aussi être installé.", "Falta el motor OCR Tesseract. Se pueden descargar idiomas, pero el motor también debe estar instalado.", "Tesseract OCR エンジンがありません。言語パックはダウンロードできますが、OCR にはエンジンも必要です。", "缺少 Tesseract OCR 引擎。可以下载语言包，但 OCR 还需要安装引擎。", "Отсутствует движок Tesseract OCR. Языковые пакеты можно скачать, но для OCR также нужен сам движок."}},
         {"formatLabel", {"Format:", "Format:", "Format:", "Format :", "Formato:", "形式：", "格式：", "Формат:"}},
         {"instantCopyAfterSelection", {"Alan seçimi bitince hemen kopyala", "Copy immediately after selecting a region", "Nach der Bereichsauswahl sofort kopieren", "Copier immédiatement après la sélection d’une zone", "Copiar inmediatamente después de seleccionar una región", "範囲選択後すぐにコピー", "选择区域后立即复制", "Копировать сразу после выбора области"}},
-        {"gifSizeSmallest", {"En düşük boyut", "Smallest size", "Kleinste Größe", "Taille minimale", "Tamaño mínimo", "最小サイズ", "最小尺寸", "Минимальный размер"}},
-        {"gifSizeBalanced", {"Dengeli", "Balanced", "Ausgewogen", "Équilibré", "Equilibrado", "バランス", "均衡", "Сбалансированный"}},
-        {"gifSizeBest", {"En iyi kalite", "Best quality", "Beste Qualität", "Meilleure qualité", "Mejor calidad", "最高品質", "最佳质量", "Лучшее качество"}},
-        {"gifSizePresetLabel", {"GIF boyut ön ayarı:", "GIF size preset:", "GIF-Größenvorgabe:", "Préréglage de taille GIF :", "Preajuste de tamaño GIF:", "GIF サイズプリセット：", "GIF 尺寸预设：", "Предустановка размера GIF:"}},
         {"recordingStartDelayLabel", {"Başlangıç gecikmesi:", "Start delay:", "Startverzögerung:", "Délai de démarrage :", "Retraso de inicio:", "開始遅延：", "开始延迟：", "Задержка запуска:"}},
         {"desktopVolumeLabel", {"Masaüstü ses düzeyi", "Desktop volume", "Desktop-Lautstärke", "Volume du bureau", "Volumen del escritorio", "デスクトップ音量", "桌面音量", "Громкость системного звука"}},
         {"microphoneVolumeLabel", {"Mikrofon ses düzeyi", "Microphone volume", "Mikrofonlautstärke", "Volume du microphone", "Volumen del micrófono", "マイク音量", "麦克风音量", "Громкость микрофона"}},
@@ -1054,7 +1059,6 @@ private:
         {"recWarnAudioInputFailed", {"Bir ses cihazı açılamadığı için kayıt o cihaz olmadan yapıldı.", "An audio device could not be opened, so the recording was made without it.", "Ein Audiogerät konnte nicht geöffnet werden, daher wurde ohne es aufgenommen.", "Un périphérique audio n'a pas pu être ouvert ; l'enregistrement a été fait sans lui.", "No se pudo abrir un dispositivo de audio, así que se grabó sin él.", "オーディオデバイスを開けなかったため、そのデバイスなしで録画しました。", "无法打开某个音频设备，因此录制时未包含该设备。", "Не удалось открыть аудиоустройство, поэтому запись сделана без него."}},
         // ─── Linux recording backend (portal session end, GStreamer preflight) ───
         {"recWarnSharingStopped", {"Ekran paylaşımı masaüstünden durduruldu; o ana kadarki kayıt kaydedildi.", "Screen sharing was stopped from the desktop; the recording up to that point was saved.", "Die Bildschirmfreigabe wurde über den Desktop beendet; die Aufnahme bis dahin wurde gespeichert.", "Le partage d'écran a été arrêté depuis le bureau ; l'enregistrement jusqu'à ce moment a été sauvegardé.", "Se detuvo el uso compartido de pantalla desde el escritorio; se guardó la grabación hasta ese momento.", "デスクトップから画面共有が停止されたため、その時点までの録画を保存しました。", "已从桌面停止屏幕共享；已保存截至该时刻的录制内容。", "Демонстрация экрана остановлена с рабочего стола; запись до этого момента сохранена."}},
-        {"videoGstreamerElementsMissing", {"Kayıt için gereken GStreamer bileşenleri eksik: %1. Eksik GStreamer eklentilerini kurup tekrar deneyin.", "Required GStreamer components are missing: %1. Install the missing GStreamer plugins and try again.", "Benötigte GStreamer-Komponenten fehlen: %1. Installieren Sie die fehlenden GStreamer-Plugins und versuchen Sie es erneut.", "Des composants GStreamer requis sont manquants : %1. Installez les modules GStreamer manquants puis réessayez.", "Faltan componentes de GStreamer necesarios: %1. Instale los plugins de GStreamer que faltan y vuelva a intentarlo.", "必要な GStreamer コンポーネントがありません: %1。不足している GStreamer プラグインをインストールしてから再試行してください。", "缺少所需的 GStreamer 组件：%1。请安装缺少的 GStreamer 插件后重试。", "Отсутствуют нужные компоненты GStreamer: %1. Установите недостающие плагины GStreamer и повторите попытку."}},
         // ─── Recording UX: controls, tray, finalizing, failures, saved files ───
         {"recModeGif", {"GIF", "GIF", "GIF", "GIF", "GIF", "GIF", "GIF", "GIF"}},
         {"recModeVideo", {"VİDEO", "VIDEO", "VIDEO", "VIDÉO", "VÍDEO", "動画", "视频", "ВИДЕО"}},
@@ -1148,6 +1152,15 @@ private:
         {"tipScreenNowHotkey", {"Fare imlecinin bulunduğu ekranı seçim katmanını açmadan hemen yakalar, ekran görüntüsü klasörüne kaydeder ve panoya kopyalar. Tam ekran oyunlarda işe yarar. Kapatmak için boş bırakın.", "Captures the screen under the mouse right away, without the selection overlay, saves it to the screenshot folder and copies it to the clipboard. Useful over fullscreen games. Leave empty to turn it off.", "Nimmt den Bildschirm unter dem Mauszeiger sofort ohne Auswahlebene auf, speichert ihn im Screenshot-Ordner und kopiert ihn in die Zwischenablage. Nützlich bei Vollbildspielen. Leer lassen zum Deaktivieren.", "Capture immédiatement l'écran sous la souris, sans la sélection, l'enregistre dans le dossier des captures et la copie dans le presse-papiers. Pratique avec les jeux en plein écran. Laissez vide pour désactiver.", "Captura al instante la pantalla bajo el ratón, sin la capa de selección, la guarda en la carpeta de capturas y la copia al portapapeles. Útil con juegos a pantalla completa. Déjalo vacío para desactivarlo.", "選択画面を開かずにマウスのある画面をすぐにキャプチャし、スクリーンショットフォルダーに保存してクリップボードにコピーします。フルスクリーンのゲームで便利です。空欄にすると無効になります。", "无需打开选区界面，立即截取鼠标所在的屏幕，保存到截图文件夹并复制到剪贴板。适用于全屏游戏。留空即可关闭。", "Сразу снимает экран под курсором без окна выделения, сохраняет снимок в папку скриншотов и копирует его в буфер обмена. Удобно в полноэкранных играх. Оставьте пустым, чтобы отключить."}},
         {"sheetCloseCapture", {"Bu yakalamayı kapat", "Close this capture", "Diese Aufnahme schließen", "Fermer cette capture", "Cerrar esta captura", "このキャプチャを閉じる", "关闭此次截图", "Закрыть этот снимок"}},
         {"sheetCaptureScreenNow", {"Ekranı doğrudan yakala", "Capture the screen directly", "Bildschirm direkt aufnehmen", "Capturer directement l'écran", "Capturar la pantalla directamente", "画面を直接キャプチャ", "直接截取屏幕", "Сразу снять экран"}},
+        // ─── 4.7.2 UX: tray, OCR translate, upload and GNOME shortcut messages ───
+        {"trayOpenScreenshotsFolder", {"Ekran Görüntüsü Klasörünü Aç", "Open Screenshots Folder", "Screenshot-Ordner öffnen", "Ouvrir le dossier des captures", "Abrir la carpeta de capturas", "スクリーンショットのフォルダーを開く", "打开截图文件夹", "Открыть папку со снимками"}},
+        {"trayLastScreenshot", {"Son Ekran Görüntüsü", "Last Screenshot", "Letzter Screenshot", "Dernière capture", "Última captura", "最後のスクリーンショット", "最近的截图", "Последний снимок"}},
+        {"trayCopyImage", {"Görüntüyü Kopyala", "Copy Image", "Bild kopieren", "Copier l’image", "Copiar imagen", "画像をコピー", "复制图像", "Копировать изображение"}},
+        {"ocrTranslateTruncated", {"Çeviri için metnin yalnızca ilk %1 karakteri gönderildi; metnin tamamı panoya kopyalandı.", "Only the first %1 characters were sent for translation; the full text was copied to the clipboard.", "Nur die ersten %1 Zeichen wurden zur Übersetzung gesendet; der vollständige Text wurde in die Zwischenablage kopiert.", "Seuls les %1 premiers caractères ont été envoyés pour la traduction ; le texte complet a été copié dans le presse-papiers.", "Solo se enviaron los primeros %1 caracteres para traducir; el texto completo se copió al portapapeles.", "翻訳には先頭の %1 文字のみを送信しました。全文はクリップボードにコピーされています。", "仅发送了前 %1 个字符进行翻译，全文已复制到剪贴板。", "Для перевода отправлены только первые %1 символов; полный текст скопирован в буфер обмена."}},
+        {"uploadProviderUguu", {"Uguu.se (3 saat)", "Uguu.se (3 hours)", "Uguu.se (3 Stunden)", "Uguu.se (3 heures)", "Uguu.se (3 horas)", "Uguu.se（3 時間）", "Uguu.se（3 小时）", "Uguu.se (3 часа)"}},
+        {"gnomeShortcutCommandEmpty", {"EShot yakalama komutu boş.", "The EShot capture command is empty.", "Der EShot-Aufnahmebefehl ist leer.", "La commande de capture d’EShot est vide.", "El comando de captura de EShot está vacío.", "EShot のキャプチャコマンドが空です。", "EShot 截图命令为空。", "Команда захвата EShot пуста."}},
+        {"gnomeShortcutBindingUnsupported", {"GNOME kısayolu boş veya desteklenmiyor.", "The GNOME shortcut is empty or unsupported.", "Das GNOME-Tastenkürzel ist leer oder wird nicht unterstützt.", "Le raccourci GNOME est vide ou non pris en charge.", "El atajo de GNOME está vacío o no es compatible.", "GNOME のショートカットが空か、サポートされていません。", "GNOME 快捷键为空或不受支持。", "Сочетание клавиш GNOME пустое или не поддерживается."}},
+        {"gsettingsNotInstalled", {"gsettings yüklü değil.", "gsettings is not installed.", "gsettings ist nicht installiert.", "gsettings n’est pas installé.", "gsettings no está instalado.", "gsettings がインストールされていません。", "未安装 gsettings。", "gsettings не установлен."}},
     };
 
     static constexpr int s_transCount = sizeof(s_trans) / sizeof(s_trans[0]);

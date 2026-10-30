@@ -1,4 +1,5 @@
 #include "LinuxGnomeShortcutInstaller.h"
+#include "TranslationManager.h"
 
 #include <QProcess>
 #include <QRegularExpression>
@@ -188,15 +189,15 @@ Result installCaptureShortcut(const QString &command, const QString &binding)
 {
     Result result;
     if (command.trimmed().isEmpty()) {
-        result.error = QStringLiteral("The EShot capture command is empty.");
+        result.error = TranslationManager::tr("gnomeShortcutCommandEmpty");
         return result;
     }
     if (binding.trimmed().isEmpty()) {
-        result.error = QStringLiteral("The GNOME shortcut is empty or unsupported.");
+        result.error = TranslationManager::tr("gnomeShortcutBindingUnsupported");
         return result;
     }
     if (QStandardPaths::findExecutable(QStringLiteral("gsettings")).isEmpty()) {
-        result.error = QStringLiteral("gsettings is not installed.");
+        result.error = TranslationManager::tr("gsettingsNotInstalled");
         return result;
     }
 
@@ -278,7 +279,7 @@ Result uninstallCaptureShortcut(bool restoreBuiltInPrintScreen)
 {
     Result result;
     if (QStandardPaths::findExecutable(QStringLiteral("gsettings")).isEmpty()) {
-        result.error = QStringLiteral("gsettings is not installed.");
+        result.error = TranslationManager::tr("gsettingsNotInstalled");
         return result;
     }
 

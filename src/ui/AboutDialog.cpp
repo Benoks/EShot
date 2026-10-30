@@ -1,5 +1,6 @@
 #include "AboutDialog.h"
 #include "../core/TranslationManager.h"
+#include "ThemeColors.h"
 #include <QVBoxLayout>
 #include <QLabel>
 #include <QPushButton>
@@ -12,20 +13,27 @@ AboutDialog::AboutDialog(QWidget *parent) : QDialog(parent)
 {
     setWindowTitle(TranslationManager::aboutTitle());
     setWindowIcon(QIcon(":/icons/pen.svg"));
-    setFixedSize(380, 370);
     // Strip context help and maximize button (to prevent ARM64 Snap Layouts crash)
     setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint & ~Qt::WindowMaximizeButtonHint);
 
     setupUI();
+    // Grows with large fonts, display scaling and long localized status text
+    // instead of clipping them.
+    setMinimumSize(380, 370);
+    adjustSize();
 }
 
 AboutDialog::~AboutDialog() {}
 
-void AboutDialog::setUpdateStatus(const QString &text, const QString &color)
+void AboutDialog::setUpdateStatus(const QString &text, bool highlighted)
 {
     if (!m_updateStatusLabel) return;
     m_updateStatusLabel->setText(text);
-    m_updateStatusLabel->setStyleSheet(QStringLiteral("color: %1; font-size: 11px;").arg(color));
+    ThemeColors::setStyleSheet(m_updateStatusLabel,
+                               highlighted ? QStringLiteral("color: @warning; font-size: 12px;")
+                                           : QStringLiteral("color: @hint; font-size: 12px;"));
+    if (isVisible())
+        adjustSize();
 }
 
 void AboutDialog::setupUI()
@@ -51,26 +59,25 @@ void AboutDialog::setupUI()
     nameFont.setBold(true);
     nameLabel->setFont(nameFont);
     nameLabel->setAlignment(Qt::AlignCenter);
-    nameLabel->setStyleSheet("color: #ffffff;");
     layout->addWidget(nameLabel);
 
     // Version
     QLabel *verLabel = new QLabel(QString("%1 %2").arg(TranslationManager::version(), QApplication::applicationVersion()));
     verLabel->setAlignment(Qt::AlignCenter);
-    verLabel->setStyleSheet("color: #999999; font-size: 11px; margin-bottom: 2px;");
+    ThemeColors::setStyleSheet(verLabel, "color: @hint; font-size: 12px; margin-bottom: 2px;");
     layout->addWidget(verLabel);
 
     // Description
     QLabel *descLabel = new QLabel(TranslationManager::aboutDesc());
     descLabel->setAlignment(Qt::AlignCenter);
-    descLabel->setStyleSheet("color: #bbbbbb; font-size: 12px;");
+    descLabel->setWordWrap(true);
+    ThemeColors::setStyleSheet(descLabel, "color: @secondary; font-size: 12px;");
     layout->addWidget(descLabel);
 
     // GitHub link
     QLabel *linkLabel = new QLabel(
-        "<a href='https://github.com/Benoks/EShot' style='color: #5B9BD5; text-decoration: none;'>"
-        "GitHub</a>"
-    );
+        QStringLiteral("<a href='https://github.com/Benoks/EShot' style='color: %1; text-decoration: none;'>"
+                       "GitHub</a>").arg(ThemeColors::css(ThemeColors::Role::Link)));
     linkLabel->setAlignment(Qt::AlignCenter);
     linkLabel->setOpenExternalLinks(true);
     linkLabel->setStyleSheet("font-size: 11px; margin-top: 4px;");
@@ -83,14 +90,14 @@ void AboutDialog::setupUI()
         TranslationManager::tr("installedVersion").arg(QApplication::applicationVersion()));
     m_updateStatusLabel->setAlignment(Qt::AlignCenter);
     m_updateStatusLabel->setWordWrap(true);
-    m_updateStatusLabel->setStyleSheet("color: #888888; font-size: 11px;");
+    ThemeColors::setStyleSheet(m_updateStatusLabel, "color: @hint; font-size: 12px;");
     m_updateStatusLabel->setMinimumHeight(34);
     layout->addWidget(m_updateStatusLabel);
 
     // Update check
     m_checkUpdateBtn = new QPushButton(TranslationManager::checkForUpdates());
     m_checkUpdateBtn->setCursor(Qt::PointingHandCursor);
-    m_checkUpdateBtn->setFixedHeight(32);
+    m_checkUpdateBtn->setMinimumHeight(32);
     m_checkUpdateBtn->setStyleSheet(R"(
         QPushButton {
             background-color: #0078D4;
@@ -102,26 +109,15 @@ void AboutDialog::setupUI()
             font-size: 12px;
         }
         QPushButton:hover { background-color: #1a8cff; }
-        QPushButton:disabled { background-color: #555; color: #aaa; }
+        QPushButton:disabled { background-color: #555; color: #c8c8c8; }
     )");
     connect(m_checkUpdateBtn, &QPushButton::clicked, this, &AboutDialog::onCheckForUpdates);
     layout->addWidget(m_checkUpdateBtn);
 
-    // Close
-    QPushButton *closeBtn = new QPushButton(TranslationManager::cancel());
+    // Close: a plain dialog button, so it follows the dark/light/high-contrast palette.
+    QPushButton *closeBtn = new QPushButton(TranslationManager::ocrClose());
     closeBtn->setCursor(Qt::PointingHandCursor);
-    closeBtn->setFixedHeight(32);
-    closeBtn->setStyleSheet(R"(
-        QPushButton {
-            background-color: #3a3a3a;
-            color: white;
-            border: 1px solid #505050;
-            border-radius: 4px;
-            padding: 6px 12px;
-            font-size: 12px;
-        }
-        QPushButton:hover { background-color: #4a4a4a; border-color: #666; }
-    )");
+    closeBtn->setMinimumHeight(32);
     connect(closeBtn, &QPushButton::clicked, this, &QDialog::accept);
     layout->addWidget(closeBtn);
 }
@@ -142,8 +138,7 @@ void AboutDialog::setUpdateInfo(bool available, const QString &version, bool bus
         ? (available ? TranslationManager::updateStatusAvailable(version)
                      : TranslationManager::updateStatusIdle())
         : status;
-    setUpdateStatus(visibleStatus,
-                    available ? QStringLiteral("#ff9800") : QStringLiteral("#888888"));
+    setUpdateStatus(visibleStatus, available);
     if (!m_checkUpdateBtn) return;
     m_checkUpdateBtn->setEnabled(!busy);
     m_checkUpdateBtn->setText(available ? TranslationManager::updateNow()

@@ -83,6 +83,7 @@ set(SOURCES
     src/annotation/CounterGeometry.cpp
     src/ui/AnnotationToolbar.cpp
     src/ui/ApplicationTheme.cpp
+    src/ui/ThemeColors.cpp
     src/ui/OverlayPanelStyle.cpp
     src/ui/SettingsDialog.cpp
     src/ui/SettingsHotkeyPolicy.cpp
@@ -172,6 +173,7 @@ set(HEADERS
     src/annotation/CounterGeometry.h
     src/ui/AnnotationToolbar.h
     src/ui/ApplicationTheme.h
+    src/ui/ThemeColors.h
     src/ui/OverlayPanelStyle.h
     src/ui/SettingsDialog.h
     src/ui/SettingsHotkeyPolicy.h
@@ -433,6 +435,14 @@ if(BUILD_TESTING)
         LIBS Qt6::Core
     )
 
+    eshot_add_test(eshot_translation_table_tests translation_table
+        SOURCES
+            tests/TranslationTableTests.cpp
+        LIBS Qt6::Core
+    )
+    target_compile_definitions(eshot_translation_table_tests PRIVATE
+        ESHOT_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+
     eshot_add_test(eshot_capture_geometry_tests capture_geometry
         SOURCES
             tests/CaptureGeometryTests.cpp
@@ -559,14 +569,19 @@ if(BUILD_TESTING)
             tests/ApplicationThemeTests.cpp
             src/ui/ApplicationTheme.cpp
             src/ui/ApplicationTheme.h
+            src/ui/ThemeColors.cpp
+            src/ui/ThemeColors.h
         LIBS Qt6::Core Qt6::Gui Qt6::Widgets
     )
+    set_tests_properties(application_theme PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
     eshot_add_test(eshot_about_dialog_tests about_dialog
         SOURCES
             ${CMAKE_CURRENT_SOURCE_DIR}/tests/AboutDialogTests.cpp
             ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/AboutDialog.cpp
             ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/AboutDialog.h
+            ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/ThemeColors.cpp
+            ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/ThemeColors.h
             ${CMAKE_CURRENT_SOURCE_DIR}/resources/icons.qrc
         LIBS Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network
     )
@@ -577,6 +592,8 @@ if(BUILD_TESTING)
             resources/icons.qrc
             src/ui/FirstRunWizard.cpp
             src/ui/FirstRunWizard.h
+            src/ui/ThemeColors.cpp
+            src/ui/ThemeColors.h
             src/core/HotkeyManager.cpp
             src/core/HotkeyManager.h
             src/core/HotkeySequence.cpp
@@ -607,6 +624,8 @@ if(BUILD_TESTING)
             tests/ControlCenterDialogTests.cpp
             src/ui/ControlCenterDialog.cpp
             src/ui/ControlCenterDialog.h
+            src/ui/ThemeColors.cpp
+            src/ui/ThemeColors.h
             resources/icons.qrc
         LIBS Qt6::Core Qt6::Gui Qt6::Widgets
     )

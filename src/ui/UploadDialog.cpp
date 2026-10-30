@@ -2,6 +2,7 @@
 #include "core/ImageUploader.h"
 #include "core/CatboxUploader.h"
 #include "core/TranslationManager.h"
+#include "ThemeColors.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QFormLayout>
@@ -26,7 +27,7 @@ UploadDialog::UploadDialog(QWidget *parent) : QDialog(parent)
     m_providerCombo = new QComboBox(this);
     m_providerCombo->addItem(QStringLiteral("Catbox.moe"),
                               static_cast<int>(ImageUploader::Provider::Catbox));
-    m_providerCombo->addItem(QStringLiteral("Uguu.se (3 hours)"),
+    m_providerCombo->addItem(TranslationManager::tr("uploadProviderUguu"),
                               static_cast<int>(ImageUploader::Provider::Uguu));
     m_providerCombo->addItem(QStringLiteral("TmpFiles.org"),
                               static_cast<int>(ImageUploader::Provider::TmpFiles));
@@ -52,7 +53,7 @@ UploadDialog::UploadDialog(QWidget *parent) : QDialog(parent)
     m_authHelpLabel->setWordWrap(true);
     m_authHelpLabel->setOpenExternalLinks(true);
     m_authHelpLabel->setTextInteractionFlags(Qt::TextBrowserInteraction);
-    m_authHelpLabel->setStyleSheet(QStringLiteral("color: #9aa0a6; font-size: 11px;"));
+    ThemeColors::setStyleSheet(m_authHelpLabel, QStringLiteral("color: @hint; font-size: 12px;"));
     m_saveAuthBtn = new QPushButton(TranslationManager::save(), this);
     authForm->addRow(QString(), m_authEdit);
     authForm->addRow(QString(), m_authHelpLabel);

@@ -3,6 +3,7 @@
 #include "../core/AppLifecyclePolicy.h"
 #include "../core/ComponentDownloadPolicy.h"
 #include "OnboardingTips.h"
+#include "ThemeColors.h"
 #include "../core/WindowsElevatedStartup.h"
 #include "SettingsHotkeyPolicy.h"
 #include "SettingsLayoutPolicy.h"
@@ -228,8 +229,8 @@ void SettingsDialog::setUpdateInfo(bool available, const QString &version, bool 
     if (m_updateButton) {
         m_updateButton->setEnabled(!busy);
         m_updateButton->setText(available ? TranslationManager::updateNow() : TranslationManager::checkForUpdates());
-        m_updateButton->setStyleSheet(available
-            ? QStringLiteral("color: #f5c542; font-weight: 600;")
+        ThemeColors::setStyleSheet(m_updateButton, available
+            ? QStringLiteral("color: @caution; font-weight: 600;")
             : QString());
     }
 }
@@ -560,7 +561,7 @@ void SettingsDialog::setupUI()
     btnLayout->addStretch();
 
     QPushButton *resetBtn = new QPushButton(TranslationManager::reset());
-    resetBtn->setStyleSheet("color: #ff6b6b;");
+    ThemeColors::setStyleSheet(resetBtn, "color: @danger;");
     connect(resetBtn, &QPushButton::clicked, this, &SettingsDialog::onReset);
     btnLayout->addWidget(resetBtn);
 
@@ -602,7 +603,7 @@ QWidget* SettingsDialog::createGeneralTab()
     QVBoxLayout *updateLayout = new QVBoxLayout(m_updateGroup);
     m_updateStatusLabel = new QLabel(TranslationManager::updateStatusIdle(), m_updateGroup);
     m_updateStatusLabel->setWordWrap(true);
-    m_updateStatusLabel->setStyleSheet("color: #aaa; font-size: 12px;");
+    ThemeColors::setStyleSheet(m_updateStatusLabel, "color: @muted; font-size: 12px;");
     m_updateButton = new QPushButton(TranslationManager::updateNow(), m_updateGroup);
     connect(m_updateButton, &QPushButton::clicked, this, &SettingsDialog::updateRequested);
     updateLayout->addWidget(m_updateStatusLabel);
@@ -679,11 +680,11 @@ QWidget* SettingsDialog::createGeneralTab()
     connect(m_filenamePatternEdit, &QLineEdit::textChanged, this, &SettingsDialog::onFilenamePatternChanged);
     fnLayout->addWidget(m_filenamePatternEdit);
     m_patternPreviewLabel = new QLabel();
-    m_patternPreviewLabel->setStyleSheet("color: #888; font-style: italic;");
+    ThemeColors::setStyleSheet(m_patternPreviewLabel, "color: @hint; font-style: italic;");
     fnLayout->addWidget(m_patternPreviewLabel);
     QLabel *helpLabel = new QLabel(TranslationManager::patternVars());
     helpLabel->setWordWrap(true);
-    helpLabel->setStyleSheet("color: #999; font-size: 11px;");
+    ThemeColors::setStyleSheet(helpLabel, "color: @hint; font-size: 12px;");
     fnLayout->addWidget(helpLabel);
     layout->addWidget(fnGroup);
 
@@ -720,11 +721,6 @@ QWidget* SettingsDialog::createGeneralTab()
     }
     genLayout->addWidget(m_showNotificationsCheck);
     m_notificationOptionsWidget = new QWidget(genGroup);
-    m_notificationOptionsWidget->setStyleSheet(R"(
-        QCheckBox { color: #cfcfcf; }
-        QCheckBox:disabled { color: #777777; }
-        QCheckBox::indicator:disabled { border: 1px solid #555555; background: #333333; }
-    )");
     QVBoxLayout *notifLayout = new QVBoxLayout(m_notificationOptionsWidget);
     notifLayout->setContentsMargins(22, 0, 0, 0);
     notifLayout->setSpacing(2);
@@ -782,7 +778,7 @@ QWidget* SettingsDialog::createGeneralTab()
     QGroupBox *removeGroup = new QGroupBox(TranslationManager::removeFromSystemTitle());
     QHBoxLayout *removeLayout = new QHBoxLayout(removeGroup);
     QPushButton *removeBtn = new QPushButton(TranslationManager::removeFromSystem());
-    removeBtn->setStyleSheet("color: #ff6b6b;");
+    ThemeColors::setStyleSheet(removeBtn, "color: @danger;");
     connect(removeBtn, &QPushButton::clicked, this, &SettingsDialog::onRemoveFromSystem);
     removeLayout->addWidget(removeBtn);
     removeLayout->addStretch();
@@ -823,11 +819,11 @@ QWidget* SettingsDialog::createPackagesTab()
                                QLabel **statusPtr, QPushButton **buttonPtr, const QObject *receiver, const char *slot) {
         QLabel *nameLabel = new QLabel(name, componentsGroup);
         QLabel *statusLabel = new QLabel(status, componentsGroup);
-        statusLabel->setStyleSheet(status == TranslationManager::tr("packageInstalled") ? "color: #8bd17c;" : "color: #f0c36d;");
+        ThemeColors::setStyleSheet(statusLabel, status == TranslationManager::tr("packageInstalled") ? "color: @successSoft;" : "color: @caution;");
         QPushButton *deleteButton = new QPushButton(QIcon::fromTheme(QStringLiteral("edit-delete")), TranslationManager::tr("packageDelete"), componentsGroup);
         deleteButton->setEnabled(canDelete);
         deleteButton->setFixedWidth(82);
-        deleteButton->setStyleSheet("color: #ff6b6b;");
+        ThemeColors::setStyleSheet(deleteButton, "color: @danger;");
         connect(deleteButton, SIGNAL(clicked()), receiver, slot);
         if (statusPtr) *statusPtr = statusLabel;
         if (buttonPtr) *buttonPtr = deleteButton;
@@ -851,16 +847,16 @@ QWidget* SettingsDialog::createPackagesTab()
     QVBoxLayout *ocrLayout = new QVBoxLayout(ocrGroup);
     QLabel *hint = new QLabel(TranslationManager::tr("ocrPackagesHint"), ocrGroup);
     hint->setWordWrap(true);
-    hint->setStyleSheet("color: #aaa; font-size: 12px;");
+    ThemeColors::setStyleSheet(hint, "color: @muted; font-size: 12px;");
     ocrLayout->addWidget(hint);
 
     m_packageList = new QListWidget(ocrGroup);
     m_packageList->setSelectionMode(QAbstractItemView::NoSelection);
     m_packageList->setMinimumHeight(300);
-    m_packageList->setStyleSheet(R"(
+    ThemeColors::setStyleSheet(m_packageList, R"(
         QListWidget {
-            background: #252525;
-            border: 1px solid #3d3d3d;
+            background: @listBackground;
+            border: 1px solid @listBorder;
             border-radius: 6px;
             padding: 6px;
         }
@@ -874,7 +870,7 @@ QWidget* SettingsDialog::createPackagesTab()
     QHBoxLayout *bulkLayout = new QHBoxLayout();
     m_essentialOcrButton = new QPushButton(TranslationManager::tr("downloadEssentials"), ocrGroup);
     m_deleteSelectedOcrButton = new QPushButton(TranslationManager::tr("deleteSelected"), ocrGroup);
-    m_deleteSelectedOcrButton->setStyleSheet("color: #ff6b6b;");
+    ThemeColors::setStyleSheet(m_deleteSelectedOcrButton, "color: @danger;");
     connect(m_essentialOcrButton, &QPushButton::clicked, this, &SettingsDialog::onDownloadEssentialOcr);
     connect(m_deleteSelectedOcrButton, &QPushButton::clicked, this, &SettingsDialog::onDeleteSelectedOcr);
     bulkLayout->addWidget(m_essentialOcrButton);
@@ -884,7 +880,7 @@ QWidget* SettingsDialog::createPackagesTab()
 
     m_packageStatusLabel = new QLabel(ocrGroup);
     m_packageStatusLabel->setWordWrap(true);
-    m_packageStatusLabel->setStyleSheet("color: #aaa; font-size: 12px;");
+    ThemeColors::setStyleSheet(m_packageStatusLabel, "color: @muted; font-size: 12px;");
     ocrLayout->addWidget(m_packageStatusLabel);
 
     layout->addWidget(ocrGroup);
@@ -1374,7 +1370,7 @@ QWidget* SettingsDialog::createInterfaceTab()
     visualSearchLayout->addRow(TranslationManager::visualSearchProvider(), m_visualSearchProviderCombo);
     QLabel *visualSearchPrivacy = new QLabel(TranslationManager::tr("visualSearchPrivacy"), visualSearchGroup);
     visualSearchPrivacy->setWordWrap(true);
-    visualSearchPrivacy->setStyleSheet("color: #aaa; font-size: 12px;");
+    ThemeColors::setStyleSheet(visualSearchPrivacy, "color: @muted; font-size: 12px;");
     visualSearchLayout->addRow(visualSearchPrivacy);
     layout->addWidget(visualSearchGroup);
 
@@ -1385,7 +1381,7 @@ QWidget* SettingsDialog::createInterfaceTab()
 
     QLabel *infoLabel = new QLabel(TranslationManager::toolbarDesc());
     infoLabel->setWordWrap(true);
-    infoLabel->setStyleSheet("color: #aaa; font-size: 12px;");
+    ThemeColors::setStyleSheet(infoLabel, "color: @muted; font-size: 12px;");
     toolsLayout->addWidget(infoLabel);
 
     auto configureList = [](QListWidget *list) {
@@ -1396,10 +1392,10 @@ QWidget* SettingsDialog::createInterfaceTab()
         list->setSpacing(1);
         list->setMinimumHeight(300);
         list->setMaximumHeight(330);
-        list->setStyleSheet(R"(
+        ThemeColors::setStyleSheet(list, R"(
         QListWidget {
-            background: #252525;
-            border: 1px solid #3d3d3d;
+            background: @listBackground;
+            border: 1px solid @listBorder;
             border-radius: 6px;
             padding: 6px;
         }
@@ -1409,7 +1405,7 @@ QWidget* SettingsDialog::createInterfaceTab()
             padding: 2px 6px;
         }
         QListWidget::item:hover {
-            background: #303030;
+            background: @listHover;
         }
         QListWidget::indicator {
             width: 16px;
@@ -1469,7 +1465,7 @@ QWidget* SettingsDialog::createInterfaceTab()
         columnLayout->setSpacing(5);
 
         QLabel *titleLabel = new QLabel(title, column);
-        titleLabel->setStyleSheet("color: #8ab4f8; font-weight: 600; font-size: 12px;");
+        ThemeColors::setStyleSheet(titleLabel, "color: @accentText; font-weight: 600; font-size: 12px;");
         columnLayout->addWidget(titleLabel);
 
         *listPtr = new QListWidget(column);
@@ -1525,30 +1521,30 @@ QWidget* SettingsDialog::createHotkeyTab()
 
     QLabel *desc = new QLabel(TranslationManager::hotkeyDesc());
     desc->setWordWrap(true);
-    desc->setStyleSheet("color: #ccc; font-size: 12px;");
+    ThemeColors::setStyleSheet(desc, "color: @secondary; font-size: 12px;");
     gl->addWidget(desc);
 
     m_hotkeyEdit = new QKeySequenceEdit();
     m_hotkeyEdit->setMinimumHeight(40);
-    m_hotkeyEdit->setStyleSheet(R"(
+    ThemeColors::setStyleSheet(m_hotkeyEdit, R"(
         QKeySequenceEdit {
             font-size: 14px;
             font-weight: bold;
             padding: 6px 12px;
             border: 2px solid #0078D4;
             border-radius: 6px;
-            background: #2a2a2a;
-            color: #ffffff;
+            background: @inputBackground;
+            color: @inputText;
         }
         QKeySequenceEdit:focus { border-color: #1a8cff; }
-        QKeySequenceEdit[hotkeyConflict="true"] { border-color: #ff9800; }
+        QKeySequenceEdit[hotkeyConflict="true"] { border-color: @warning; }
     )");
     connect(m_hotkeyEdit, &QKeySequenceEdit::keySequenceChanged,
             this, &SettingsDialog::onHotkeyChanged);
     gl->addWidget(m_hotkeyEdit);
 
     m_hotkeyStatusLabel = new QLabel(TranslationManager::hotkeyValid());
-    m_hotkeyStatusLabel->setStyleSheet("color: #4caf50; font-size: 12px;");
+    ThemeColors::setStyleSheet(m_hotkeyStatusLabel, "color: @success; font-size: 12px;");
     gl->addWidget(m_hotkeyStatusLabel);
 
     // Inline duplicate warnings, shown under the field that repeats a key.
@@ -1556,7 +1552,7 @@ QWidget* SettingsDialog::createHotkeyTab()
     auto makeConflictLabel = []() {
         auto *label = new QLabel();
         label->setWordWrap(true);
-        label->setStyleSheet("color: #ff9800; font-size: 12px;");
+        ThemeColors::setStyleSheet(label, "color: @warning; font-size: 12px;");
         label->hide();
         return label;
     };
@@ -1582,8 +1578,8 @@ QWidget* SettingsDialog::createHotkeyTab()
 
     m_printScreenConflictLabel = new QLabel(printScreenConflictMessage());
     m_printScreenConflictLabel->setWordWrap(true);
-    m_printScreenConflictLabel->setStyleSheet(
-        "background: rgba(255, 193, 7, 0.14); color: #ffd166; "
+    ThemeColors::setStyleSheet(m_printScreenConflictLabel,
+        "background: rgba(255, 193, 7, 0.14); color: @bannerText; "
         "border: 1px solid rgba(255, 193, 7, 0.45); border-radius: 6px; "
         "padding: 8px; font-size: 12px;");
     gl->addWidget(m_printScreenConflictLabel);
@@ -1609,7 +1605,7 @@ QWidget* SettingsDialog::createHotkeyTab()
 #endif
 
     QPushButton *resetHkBtn = new QPushButton(TranslationManager::hotkeyReset());
-    resetHkBtn->setStyleSheet("color: #aaa;");
+    ThemeColors::setStyleSheet(resetHkBtn, "color: @muted;");
     connect(resetHkBtn, &QPushButton::clicked, [this]() {
         m_hotkeyEdit->setKeySequence(QKeySequence(Qt::Key_Print));
     });
@@ -1620,16 +1616,16 @@ QWidget* SettingsDialog::createHotkeyTab()
     auto makeRecordingHotkeyEdit = []() {
         auto *edit = new QKeySequenceEdit();
         edit->setMinimumHeight(32);
-        edit->setStyleSheet(R"(
+        ThemeColors::setStyleSheet(edit, R"(
             QKeySequenceEdit {
                 padding: 5px 10px;
-                border: 1px solid #555;
+                border: 1px solid @inputBorder;
                 border-radius: 5px;
-                background: #2a2a2a;
-                color: #ffffff;
+                background: @inputBackground;
+                color: @inputText;
             }
             QKeySequenceEdit:focus { border-color: #1a8cff; }
-            QKeySequenceEdit[hotkeyConflict="true"] { border-color: #ff9800; }
+            QKeySequenceEdit[hotkeyConflict="true"] { border-color: @warning; }
         )");
         return edit;
     };
@@ -1696,7 +1692,7 @@ QWidget* SettingsDialog::createHotkeyTab()
         const int row = i / 2;
         const int col = (i % 2) * 2;
         QLabel *label = new QLabel(overlayDefs[i].label, overlayGroup);
-        label->setStyleSheet(QStringLiteral("color: #d0d0d0; font-size: 12px;"));
+        ThemeColors::setStyleSheet(label, QStringLiteral("color: @secondary; font-size: 12px;"));
         auto *edit = makeRecordingHotkeyEdit();
         edit->setMinimumHeight(28);
         edit->setToolTip(TranslationManager::tr("tipOverlayShortcut"));
@@ -1708,7 +1704,7 @@ QWidget* SettingsDialog::createHotkeyTab()
 
     QLabel *noteLabel = new QLabel(TranslationManager::hotkeyNote());
     noteLabel->setWordWrap(true);
-    noteLabel->setStyleSheet("color: #888; font-size: 11px;");
+    ThemeColors::setStyleSheet(noteLabel, "color: @hint; font-size: 12px;");
     gl->addWidget(noteLabel);
 
     layout->addWidget(group);
@@ -1744,12 +1740,12 @@ void SettingsDialog::refreshPackageStatus()
     auto setComponentStatus = [](QLabel *label, QPushButton *button, bool installed, bool canUse, bool downloadWhenMissing = false) {
         if (label) {
             label->setText(installed ? TranslationManager::tr("packageInstalled") : TranslationManager::tr("packageMissing"));
-            label->setStyleSheet(installed ? "color: #8bd17c;" : "color: #f0c36d;");
+            ThemeColors::setStyleSheet(label, installed ? "color: @successSoft;" : "color: @caution;");
         }
         if (button) {
             button->setText(installed ? TranslationManager::tr("packageDelete") : TranslationManager::tr("packageDownload"));
             button->setIcon(installed ? QIcon::fromTheme(QStringLiteral("edit-delete")) : QIcon());
-            button->setStyleSheet(installed ? "color: #ff6b6b;" : QString());
+            ThemeColors::setStyleSheet(button, installed ? "color: @danger;" : QString());
             button->setEnabled(canUse || (!installed && downloadWhenMissing));
         }
     };
@@ -1788,14 +1784,14 @@ void SettingsDialog::refreshPackageStatus()
         nameLabel->setFixedWidth(150);
         nameLabel->setToolTip(QStringLiteral("%1 (%2)").arg(name, code));
         QLabel *statusLabel = new QLabel(active ? TranslationManager::tr("packageDownloading") : packageStatusText(installed), row);
-        statusLabel->setStyleSheet(installed ? "color: #8bd17c;" : "color: #f0c36d;");
+        ThemeColors::setStyleSheet(statusLabel, installed ? "color: @successSoft;" : "color: @caution;");
         statusLabel->setFixedWidth(128);
 
         QPushButton *downloadButton = new QPushButton(TranslationManager::tr("packageDownload"), row);
         QPushButton *deleteButton = new QPushButton(QIcon::fromTheme(QStringLiteral("edit-delete")), TranslationManager::tr("packageDelete"), row);
         downloadButton->setFixedWidth(78);
         deleteButton->setFixedWidth(78);
-        deleteButton->setStyleSheet("color: #ff6b6b;");
+        ThemeColors::setStyleSheet(deleteButton, "color: @danger;");
         downloadButton->setEnabled(tesseractInstalled && !busy && !installed);
         deleteButton->setEnabled(tesseractInstalled && !busy && installed);
         downloadButton->setVisible(!installed);
@@ -2484,7 +2480,7 @@ void SettingsDialog::loadSettings()
         }
     }
     m_hotkeyStatusLabel->setText(TranslationManager::hotkeyValid());
-    m_hotkeyStatusLabel->setStyleSheet("color: #4caf50; font-size: 12px;");
+    ThemeColors::setStyleSheet(m_hotkeyStatusLabel, "color: @success; font-size: 12px;");
     updatePrintScreenConflictUi();
     updateHotkeyConflictUi();
 
@@ -2516,10 +2512,10 @@ void SettingsDialog::onHotkeyChanged(const QKeySequence &seq)
     bool ok = keySequenceToWin32(seq, mod, vk);
     if (!ok || seq.isEmpty()) {
         m_hotkeyStatusLabel->setText(TranslationManager::hotkeyInvalid());
-        m_hotkeyStatusLabel->setStyleSheet("color: #ff9800; font-size: 12px;");
+        ThemeColors::setStyleSheet(m_hotkeyStatusLabel, "color: @warning; font-size: 12px;");
     } else {
         m_hotkeyStatusLabel->setText(QString("OK: %1").arg(seq.toString(QKeySequence::NativeText)));
-        m_hotkeyStatusLabel->setStyleSheet("color: #4caf50; font-size: 12px;");
+        ThemeColors::setStyleSheet(m_hotkeyStatusLabel, "color: @success; font-size: 12px;");
     }
     updatePrintScreenConflictUi();
 }

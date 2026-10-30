@@ -23,7 +23,7 @@ private slots:
 
 private:
     void setupUI();
-    void setUpdateStatus(const QString &text, const QString &color);
+    void setUpdateStatus(const QString &text, bool highlighted);
 
     QLabel *m_updateStatusLabel = nullptr;
     QPushButton *m_checkUpdateBtn = nullptr;
