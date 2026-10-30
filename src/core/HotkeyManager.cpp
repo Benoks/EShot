@@ -482,10 +482,7 @@ bool HotkeyManager::registerPlatformHotkey(int id, UINT modifiers, UINT virtualK
         m_registeredHotkeys.removeAll(id);
         // Push the previous definitions back so partially applied
         // registrations do not leave ghost entries in kglobalaccel.
-        if (!previous.isEmpty())
-            m_kdeShortcuts->setShortcuts(previous);
-        else
-            m_kdeShortcuts->deRegisterShortcut(id);
+        m_kdeShortcuts->setShortcuts(previous);
         return false;
     }
     Display *display = static_cast<Display *>(m_x11Display);
@@ -564,10 +561,7 @@ bool HotkeyManager::registerPlatformHotkey(int id, UINT modifiers, UINT virtualK
         m_registeredHotkeys.removeAll(id);
         // Push the previous definitions back so partially applied
         // registrations do not leave ghost entries in kglobalaccel.
-        if (!previous.isEmpty())
-            m_kdeShortcuts->setShortcuts(previous);
-        else
-            m_kdeShortcuts->deRegisterShortcut(id);
+        m_kdeShortcuts->setShortcuts(previous);
         return false;
     }
     if (!m_portalShortcuts || !m_portalShortcuts->isAvailable())
@@ -656,7 +650,7 @@ void HotkeyManager::unregisterHotkey(int id)
     m_registeredHotkeyDefs.remove(id);
 #if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
     if (m_kdeShortcuts && m_kdeShortcuts->isAvailable() && !m_usePortalShortcuts) {
-        m_kdeShortcuts->deRegisterShortcut(id);
+        // Only the removed id is touched; the others stay as they are.
         m_kdeShortcuts->setShortcuts(m_registeredHotkeyDefs);
     }
 #endif
@@ -674,6 +668,10 @@ void HotkeyManager::unregisterAllHotkeys()
 #endif
     m_registeredHotkeys.clear();
     m_registeredHotkeyDefs.clear();
+#if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
+    if (m_kdeShortcuts && m_kdeShortcuts->isAvailable() && !m_usePortalShortcuts)
+        m_kdeShortcuts->setShortcuts(m_registeredHotkeyDefs);
+#endif
     refreshPortalShortcuts();
 }
 

@@ -131,6 +131,46 @@ private slots:
         QVERIFY(!LinuxKGlobalAccelShortcuts::shouldUsePortalFallback(true, true));
         QVERIFY(!LinuxKGlobalAccelShortcuts::shouldUsePortalFallback(false, false));
     }
+
+    void plansOnlyChangedKdeShortcuts()
+    {
+        using Defs = QHash<int, QPair<UINT, UINT>>;
+        const Defs current{{1, {0u, UINT(VK_SNAPSHOT)}},
+                           {2, {UINT(MOD_CONTROL | MOD_ALT), UINT('P')}},
+                           {3, {UINT(MOD_CONTROL | MOD_ALT), UINT('S')}},
+                           {4, {UINT(MOD_CONTROL | MOD_ALT), UINT('X')}}};
+
+        // Recording stopped: only the three recording ids are released.
+        const Defs idle{{1, {0u, UINT(VK_SNAPSHOT)}}};
+        auto changes = LinuxKGlobalAccelShortcuts::planChanges(current, idle);
+        QCOMPARE(changes.remove, (QList<int>{2, 3, 4}));
+        QVERIFY(changes.assign.isEmpty());
+
+        // Nothing changed: no D-Bus work at all.
+        changes = LinuxKGlobalAccelShortcuts::planChanges(current, current);
+        QVERIFY(changes.remove.isEmpty());
+        QVERIFY(changes.assign.isEmpty());
+
+        // A changed key and a new id are assigned; unchanged ones are not.
+        Defs edited = current;
+        edited.insert(3, {UINT(MOD_CONTROL | MOD_SHIFT), UINT('S')});
+        edited.insert(5, {UINT(MOD_SHIFT), UINT(VK_SNAPSHOT)});
+        changes = LinuxKGlobalAccelShortcuts::planChanges(current, edited);
+        QVERIFY(changes.remove.isEmpty());
+        QCOMPARE(changes.assign, (QList<int>{3, 5}));
+
+        // A zero key counts as absent on both sides.
+        Defs cleared = current;
+        cleared.insert(4, {0u, 0u});
+        changes = LinuxKGlobalAccelShortcuts::planChanges(current, cleared);
+        QCOMPARE(changes.remove, (QList<int>{4}));
+        QVERIFY(changes.assign.isEmpty());
+
+        // A failed earlier assignment ({0,0}) is retried with its real key.
+        const Defs failed{{1, {0u, 0u}}};
+        changes = LinuxKGlobalAccelShortcuts::planChanges(failed, idle);
+        QCOMPARE(changes.assign, (QList<int>{1}));
+    }
 };
 
 QTEST_APPLESS_MAIN(LinuxPortalShortcutTests)
