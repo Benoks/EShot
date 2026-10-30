@@ -175,6 +175,8 @@ private:
     QString m_portalSourcePath;
     PortalCropGeometry m_portalCrop;
     QString m_gstAacEncoder;
+    // Optional element properties the installed GStreamer supports.
+    GstElementProperties m_gstProperties;
     // Encoder of this recording (kept for every pause/resume segment so the
     // segments join) and the software fallback found by the preflight.
     QString m_gstH264Encoder = QStringLiteral("x264enc");

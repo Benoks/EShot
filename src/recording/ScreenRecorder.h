@@ -164,6 +164,8 @@ private:
     QString m_portalSessionHandle;
     LinuxPortalScreenCast::Stream m_preparedStream;
     QString m_gstH264Encoder = QStringLiteral("x264enc");
+    // Optional element properties the installed GStreamer supports.
+    GstElementProperties m_gstProperties;
     // GIF size when the recorded region is larger than the GIF limit.
     QSize m_portalGifScale;
     // Portal segment state: launch-to-exit clock, the output read so far

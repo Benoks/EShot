@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QHash>
 #include <QList>
 #include <QPair>
 #include <QPoint>
@@ -21,7 +22,10 @@ struct PortalCropGeometry {
     bool valid = false;
 };
 
-QString pipeWireSourcePath(uint nodeId, quint64 pipewireSerial = 0);
+// "target-object=<serial>" (PipeWire >= 0.3.64), else "path=<node id>";
+// `targetObjectSupported` false (an older pipewiresrc) always uses path.
+QString pipeWireSourcePath(uint nodeId, quint64 pipewireSerial = 0,
+                           bool targetObjectSupported = true);
 // Maps the capture region into the portal stream. A crop with an odd width
 // or height grows by one pixel on the right/bottom (or shrinks when it
 // already touches that edge) so the crop matches the even encoder size.
@@ -43,6 +47,9 @@ QStringList missingPortalRecordingElements(const QStringList &availableElements,
                                            bool joinsSegments);
 // "missing gstreamer elements: x264enc, mp4mux"
 QString gstMissingElementsReason(const QStringList &missingElements);
+// gst-inspect-1.0 failed or timed out, so the needed elements (an AAC
+// encoder for audio) could not be checked.
+QString gstInspectFailedReason();
 // Reported instead of a failure when the user closes the portal picker.
 QString portalCanceledReason();
 // gst-launch prints progress ("Setting pipeline to PAUSED ...") before the
@@ -57,6 +64,35 @@ QStringList cachedGstElements(const QString &inspectProgram, bool *ok = nullptr)
 // may install before the next attempt.
 void invalidateGstElementCache();
 QString discoverGstAacEncoder(const QString &inspectProgram = QString());
+
+// ── Optional element properties ──
+// Properties newer than the oldest supported GStreamer/PipeWire (e.g.
+// pipewiresrc on-disconnect/keepalive-time) are only passed when the
+// installed element has them: gst-launch rejects the whole pipeline for an
+// unknown property ("no property ... in element ...").
+struct GstElementProperties {
+    // Element -> its property names. An element that is not listed is
+    // unknown (gst-inspect could not tell) and keeps every property.
+    QHash<QString, QStringList> known;
+    bool supports(const QString &element, const QString &property) const;
+};
+// Property names from `gst-inspect-1.0 <element>` output.
+QStringList gstElementPropertiesFromInspect(const QString &inspectOutput);
+// Cached per gst-inspect binary and element; *ok is false when gst-inspect
+// could not describe the element.
+QStringList cachedGstElementProperties(const QString &inspectProgram, const QString &element,
+                                       bool *ok = nullptr);
+// True when the element has the property, or when that cannot be told.
+bool gstElementHasProperty(const QString &inspectProgram, const QString &element,
+                           const QString &property);
+// Elements whose optional properties the portal pipelines check.
+QStringList portalPipelinePropertyCheckedElements();
+GstElementProperties cachedPortalPipelineProperties(const QString &inspectProgram);
+// Fills the element catalog and the property cache of the portal pipeline
+// elements on a worker thread, so the first recording does not run
+// gst-inspect on the GUI thread. A synchronous lookup made meanwhile waits
+// for the running fetch instead of starting a second one.
+void warmGstInspectCacheAsync(const QString &inspectProgram);
 // gst-inspect-1.0 next to the given gst-launch-1.0 (bundled runtimes), else
 // the one on PATH.
 QString gstInspectPathFor(const QString &gstLaunchPath);
@@ -72,6 +108,8 @@ struct PortalVideoPipelineOptions {
     QString h264Encoder = QStringLiteral("x264enc");
     // Near-lossless intermediate for the GIF conversion.
     bool losslessIntermediate = false;
+    // Optional properties the installed elements support (default: all).
+    GstElementProperties properties;
 };
 
 // pipewiresrc keepalive so static screens still produce frames.
@@ -183,7 +221,8 @@ QStringList waylandRecordingAudioArguments(bool desktopEnabled, int desktopVolum
                                            const QString &desktopDevice,
                                            bool microphoneEnabled, int microphoneVolume,
                                            const QString &microphoneDevice,
-                                           const QString &aacEncoder);
+                                           const QString &aacEncoder,
+                                           const GstElementProperties &properties = {});
 // PulseAudio names that work on PulseAudio and pipewire-pulse alike.
 QString linuxDesktopAudioDevice(const QString &configuredDevice);
 struct LinuxMicrophoneResolution {

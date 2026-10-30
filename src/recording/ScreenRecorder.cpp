@@ -69,6 +69,14 @@ ScreenRecorder::ScreenRecorder(QObject *parent) : QObject(parent)
 #ifdef Q_OS_WIN
     requestWindowsCaptureProbe(ffmpegPath());
 #endif
+#if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
+    // gst-inspect runs off the GUI thread (see warmGstInspectCacheAsync()).
+    if (LinuxPortalScreenCast::isWaylandSession()) {
+        const QString gst = gstLaunchPath();
+        if (!gst.isEmpty())
+            warmGstInspectCacheAsync(gstInspectPathFor(gst));
+    }
+#endif
 }
 
 ScreenRecorder::~ScreenRecorder()
@@ -745,12 +753,15 @@ QString ScreenRecorder::portalPreflightError()
     if (ffmpegPath().isEmpty())
         return QStringLiteral("ffmpeg not found");
     bool catalogOk = false;
-    const QStringList elements = cachedGstElements(gstInspectPathFor(gst), &catalogOk);
+    const QString inspect = gstInspectPathFor(gst);
+    const QStringList elements = cachedGstElements(inspect, &catalogOk);
     if (!catalogOk) {
         // gst-inspect-1.0 could not run; let gst-launch report problems.
         m_gstH264Encoder = QStringLiteral("x264enc");
+        m_gstProperties = {};
         return {};
     }
+    m_gstProperties = cachedPortalPipelineProperties(inspect);
     // Paused parts are joined with ffmpeg, so splitmuxsrc is not needed.
     const QStringList missing = missingPortalRecordingElements(elements, false, false, false);
     if (!missing.isEmpty()) {
@@ -804,7 +815,9 @@ bool ScreenRecorder::startWaylandPortalRecording(const QRect &captureRect)
         return false;
     }
     m_portalSessionHandle = stream.sessionHandle;
-    m_portalSourcePath = pipeWireSourcePath(stream.nodeId, stream.pipewireSerial);
+    m_portalSourcePath = pipeWireSourcePath(
+        stream.nodeId, stream.pipewireSerial,
+        m_gstProperties.supports(QStringLiteral("pipewiresrc"), QStringLiteral("target-object")));
     m_portalCrop = crop;
     const QSize gifSize = boundedOutputSize(crop.cropSize);
     m_portalGifScale = gifSize != crop.cropSize ? gifSize : QSize();
@@ -878,6 +891,7 @@ QStringList ScreenRecorder::portalCaptureArguments(int pipewireFd, const QString
     // The GIF is built from this file: keep it (near) lossless so the
     // palette pass sees the real colours instead of encoder artefacts.
     options.losslessIntermediate = true;
+    options.properties = m_gstProperties;
     return portalRecordingPipelineArguments(options, outputPath);
 }
 

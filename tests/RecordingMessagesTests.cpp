@@ -43,6 +43,7 @@ private slots:
             {"already recording", "recFailAlreadyRecording"},
             {"failed to convert portal video to GIF", "recFailGifConvert"},
             {"gstreamer pipeline exited during startup", "recFailGstStartup"},
+            {"gst-inspect-1.0 could not list the GStreamer plugins", "recFailGstInspect"},
         };
         for (const auto &row : rows)
             QTest::newRow(row.first) << QString::fromLatin1(row.first) << QString::fromLatin1(row.second);

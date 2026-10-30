@@ -326,8 +326,16 @@ VideoRecorder::VideoRecorder(QObject *parent)
 #if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
     // Find working hardware encoders while the user picks the source; the
     // first recording falls back to software if this is not done in time.
-    if (LinuxPortalScreenCast::isWaylandSession() && GstH264EncoderProbe::hardwareEncodingEnabled())
-        GstH264EncoderProbe::instance()->ensureStarted(gstLaunchPath());
+    if (LinuxPortalScreenCast::isWaylandSession()) {
+        const QString gst = gstLaunchPath();
+        if (GstH264EncoderProbe::hardwareEncodingEnabled())
+            GstH264EncoderProbe::instance()->ensureStarted(gst);
+        // The element catalog and property checks run gst-inspect, which
+        // can take seconds after a plugin update; keep that off the GUI
+        // thread of the first recording.
+        if (!gst.isEmpty())
+            warmGstInspectCacheAsync(gstInspectPathFor(gst));
+    }
 #endif
 }
 
@@ -1491,15 +1499,18 @@ QString VideoRecorder::portalPreflightError(bool includeAudio)
     const bool withAudio = includeAudio && (wantDesktopAudio || wantMicrophoneAudio);
 
     bool catalogOk = false;
-    const QStringList elements = cachedGstElements(gstInspectPathFor(gst), &catalogOk);
+    const QString inspect = gstInspectPathFor(gst);
+    const QStringList elements = cachedGstElements(inspect, &catalogOk);
     if (!catalogOk) {
         // gst-inspect-1.0 could not run: keep the previous behaviour and let
         // gst-launch report problems, but an AAC encoder cannot be guessed.
         m_gstH264Encoder = QStringLiteral("x264enc");
         m_gstSoftwareH264Encoder = m_gstH264Encoder;
         m_gstAacEncoder.clear();
-        return withAudio ? QStringLiteral("No GStreamer AAC encoder is installed") : QString();
+        m_gstProperties = {};
+        return withAudio ? gstInspectFailedReason() : QString();
     }
+    m_gstProperties = cachedPortalPipelineProperties(inspect);
     const QStringList missing = missingPortalRecordingElements(
         elements, withAudio, wantDesktopAudio && wantMicrophoneAudio, true);
     if (!missing.isEmpty()) {
@@ -1561,7 +1572,9 @@ bool VideoRecorder::startWaylandPortalRecording(const QRect &captureRect)
         return false;
     }
     m_portalSessionHandle = stream.sessionHandle;
-    m_portalSourcePath = pipeWireSourcePath(stream.nodeId, stream.pipewireSerial);
+    m_portalSourcePath = pipeWireSourcePath(
+        stream.nodeId, stream.pipewireSerial,
+        m_gstProperties.supports(QStringLiteral("pipewiresrc"), QStringLiteral("target-object")));
     m_portalCrop = crop;
     {
         // Probe results known so far; a probe still running means software.
@@ -1617,6 +1630,7 @@ QStringList VideoRecorder::gstCaptureArguments(int pipewireFd, const QString &ou
     options.fps = m_fps;
     options.crf = m_crf;
     options.h264Encoder = m_gstH264Encoder;
+    options.properties = m_gstProperties;
 
     const bool wantDesktopAudio = m_desktopAudioEnabled && m_desktopVolume > 0 && !m_desktopAudioDevice.isEmpty();
     const bool wantMicrophoneAudio = m_microphoneEnabled && m_microphoneVolume > 0 && !m_microphoneDevice.isEmpty();
@@ -1625,7 +1639,7 @@ QStringList VideoRecorder::gstCaptureArguments(int pipewireFd, const QString &ou
         waylandRecordingAudioArguments(
             wantDesktopAudio, m_desktopVolume, m_desktopAudioDevice,
             wantMicrophoneAudio, m_microphoneVolume, m_microphoneDevice,
-            m_gstAacEncoder));
+            m_gstAacEncoder, m_gstProperties));
 }
 
 bool VideoRecorder::startGstSegment(const QSharedPointer<int> &pipewireFd, const QString &outputPath,

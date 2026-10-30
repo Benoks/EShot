@@ -5,11 +5,15 @@
 #include <QHash>
 #include <QProcess>
 #include <QRegularExpression>
+#include <QProcessEnvironment>
 #include <QStandardPaths>
+#include <QThreadPool>
 
-QString pipeWireSourcePath(uint nodeId, quint64 pipewireSerial)
+#include <mutex>
+
+QString pipeWireSourcePath(uint nodeId, quint64 pipewireSerial, bool targetObjectSupported)
 {
-    if (pipewireSerial > 0)
+    if (pipewireSerial > 0 && (targetObjectSupported || nodeId == 0))
         return QStringLiteral("target-object=%1").arg(pipewireSerial);
     return nodeId > 0 ? QStringLiteral("path=%1").arg(nodeId) : QString();
 }
@@ -147,10 +151,51 @@ QString firstAvailable(const QStringList &availableElements, const QStringList &
     return {};
 }
 
-QHash<QString, QStringList> &gstElementCache()
+struct GstInspectCache {
+    // Guards the hashes below.
+    std::mutex dataMutex;
+    // Held while gst-inspect runs, so a lookup on the GUI thread waits for
+    // the background warm-up instead of running the same process again.
+    std::recursive_mutex fetchMutex;
+    QHash<QString, QStringList> elements;
+    // "<program>\n<element>" -> property names.
+    QHash<QString, QStringList> properties;
+};
+
+GstInspectCache &gstInspectCache()
 {
-    static QHash<QString, QStringList> cache;
+    static GstInspectCache cache;
     return cache;
+}
+
+QString gstInspectProgram(const QString &inspectProgram)
+{
+    return inspectProgram.isEmpty() ? QStringLiteral("gst-inspect-1.0") : inspectProgram;
+}
+
+// Runs gst-inspect with English messages; empty on failure.
+bool runGstInspect(const QString &program, const QStringList &arguments, int timeoutMs,
+                   QString *output)
+{
+    QProcess inspect;
+    inspect.setProgram(program);
+    inspect.setArguments(arguments);
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    env.insert(QStringLiteral("LANGUAGE"), QStringLiteral("en"));
+    inspect.setProcessEnvironment(env);
+    inspect.setStandardErrorFile(QProcess::nullDevice());
+    inspect.start();
+    bool finished = inspect.waitForStarted(2000);
+    if (finished && !inspect.waitForFinished(timeoutMs)) {
+        inspect.kill();
+        inspect.waitForFinished(1000);
+        finished = false;
+    }
+    if (!finished || inspect.exitStatus() != QProcess::NormalExit || inspect.exitCode() != 0)
+        return false;
+    if (output)
+        *output = QString::fromLocal8Bit(inspect.readAllStandardOutput());
+    return true;
 }
 }
 
@@ -221,6 +266,11 @@ QString gstMissingElementsReason(const QStringList &missingElements)
         .arg(missingElements.join(QStringLiteral(", ")));
 }
 
+QString gstInspectFailedReason()
+{
+    return QStringLiteral("gst-inspect-1.0 could not list the GStreamer plugins");
+}
+
 QString portalCanceledReason()
 {
     return QStringLiteral("portal canceled");
@@ -228,45 +278,148 @@ QString portalCanceledReason()
 
 QStringList cachedGstElements(const QString &inspectProgram, bool *ok)
 {
-    const QString program = inspectProgram.isEmpty()
-        ? QStringLiteral("gst-inspect-1.0") : inspectProgram;
-    auto &cache = gstElementCache();
-    const auto cached = cache.constFind(program);
-    if (cached != cache.constEnd()) {
-        if (ok)
-            *ok = true;
-        return cached.value();
+    const QString program = gstInspectProgram(inspectProgram);
+    GstInspectCache &cache = gstInspectCache();
+    std::lock_guard<std::recursive_mutex> fetchLock(cache.fetchMutex);
+    {
+        std::lock_guard<std::mutex> lock(cache.dataMutex);
+        const auto cached = cache.elements.constFind(program);
+        if (cached != cache.elements.constEnd()) {
+            if (ok)
+                *ok = true;
+            return cached.value();
+        }
     }
 
     // A single bare gst-inspect-1.0 call lists every installed element. It
     // runs once per app run; later recordings use the cached list.
-    QProcess inspect;
-    inspect.setProgram(program);
-    inspect.setStandardErrorFile(QProcess::nullDevice());
-    inspect.start();
-    bool finished = inspect.waitForStarted(2000);
-    if (finished && !inspect.waitForFinished(15000)) {
-        inspect.kill();
-        inspect.waitForFinished(1000);
-        finished = false;
-    }
-    if (!finished || inspect.exitStatus() != QProcess::NormalExit || inspect.exitCode() != 0) {
+    QString output;
+    if (!runGstInspect(program, {}, 15000, &output)) {
         if (ok)
             *ok = false;
         return {};
     }
-    const QStringList elements = gstElementNamesFromInspect(
-        QString::fromLocal8Bit(inspect.readAllStandardOutput()));
+    const QStringList elements = gstElementNamesFromInspect(output);
     if (ok)
         *ok = !elements.isEmpty();
-    if (!elements.isEmpty())
-        cache.insert(program, elements);
+    if (!elements.isEmpty()) {
+        std::lock_guard<std::mutex> lock(cache.dataMutex);
+        cache.elements.insert(program, elements);
+    }
     return elements;
 }
 
 void invalidateGstElementCache()
 {
-    gstElementCache().clear();
+    GstInspectCache &cache = gstInspectCache();
+    std::lock_guard<std::mutex> lock(cache.dataMutex);
+    cache.elements.clear();
+    cache.properties.clear();
+}
+
+bool GstElementProperties::supports(const QString &element, const QString &property) const
+{
+    const auto it = known.constFind(element);
+    return it == known.constEnd() || it.value().contains(property);
+}
+
+QStringList gstElementPropertiesFromInspect(const QString &inspectOutput)
+{
+    // "Element Properties:" rows look like
+    //   "  keepalive-time      : Periodically send last buffer ..."
+    //   "                        flags: readable, writable"
+    // A property row has a two-space indent and is followed by its flags
+    // line; signal and pad rows look different, so headers (which may be
+    // translated) are not needed.
+    static const QRegularExpression row(QStringLiteral("^  ([A-Za-z][A-Za-z0-9_-]*)\\s*:"));
+    QStringList properties;
+    const QStringList lines = inspectOutput.split(QLatin1Char('\n'));
+    for (int i = 0; i + 1 < lines.size(); ++i) {
+        const QRegularExpressionMatch match = row.match(lines.at(i));
+        if (!match.hasMatch())
+            continue;
+        const QString next = lines.at(i + 1).trimmed();
+        if (!next.startsWith(QStringLiteral("flags:")))
+            continue;
+        const QString name = match.captured(1);
+        if (!properties.contains(name))
+            properties.append(name);
+    }
+    return properties;
+}
+
+QStringList cachedGstElementProperties(const QString &inspectProgram, const QString &element,
+                                       bool *ok)
+{
+    const QString program = gstInspectProgram(inspectProgram);
+    const QString key = program + QLatin1Char('\n') + element;
+    GstInspectCache &cache = gstInspectCache();
+    std::lock_guard<std::recursive_mutex> fetchLock(cache.fetchMutex);
+    {
+        std::lock_guard<std::mutex> lock(cache.dataMutex);
+        const auto cached = cache.properties.constFind(key);
+        if (cached != cache.properties.constEnd()) {
+            if (ok)
+                *ok = !cached.value().isEmpty();
+            return cached.value();
+        }
+    }
+    QString output;
+    const bool ran = runGstInspect(program, {element}, 10000, &output);
+    const QStringList properties = ran ? gstElementPropertiesFromInspect(output) : QStringList();
+    if (ok)
+        *ok = !properties.isEmpty();
+    // A failed lookup (missing element, timeout) is cached as "unknown" so
+    // it is not retried on every recording; unknown keeps every property.
+    {
+        std::lock_guard<std::mutex> lock(cache.dataMutex);
+        cache.properties.insert(key, properties);
+    }
+    return properties;
+}
+
+bool gstElementHasProperty(const QString &inspectProgram, const QString &element,
+                           const QString &property)
+{
+    bool ok = false;
+    const QStringList properties = cachedGstElementProperties(inspectProgram, element, &ok);
+    return !ok || properties.contains(property);
+}
+
+QStringList portalPipelinePropertyCheckedElements()
+{
+    return {QStringLiteral("pipewiresrc"), QStringLiteral("videorate"), QStringLiteral("audiomixer")};
+}
+
+GstElementProperties cachedPortalPipelineProperties(const QString &inspectProgram)
+{
+    GstElementProperties result;
+    for (const QString &element : portalPipelinePropertyCheckedElements()) {
+        bool ok = false;
+        const QStringList properties = cachedGstElementProperties(inspectProgram, element, &ok);
+        if (ok)
+            result.known.insert(element, properties);
+    }
+    return result;
+}
+
+void warmGstInspectCacheAsync(const QString &inspectProgram)
+{
+    const QString program = gstInspectProgram(inspectProgram);
+    QThreadPool::globalInstance()->start([program]() {
+        GstInspectCache &cache = gstInspectCache();
+        // Held for the whole warm-up: a recording that starts meanwhile
+        // waits for these results instead of starting gst-inspect itself.
+        std::lock_guard<std::recursive_mutex> fetchLock(cache.fetchMutex);
+        bool ok = false;
+        const QStringList elements = cachedGstElements(program, &ok);
+        if (!ok)
+            return;
+        for (const QString &element : portalPipelinePropertyCheckedElements()) {
+            if (catalogHasElement(elements, element))
+                cachedGstElementProperties(program, element);
+        }
+    });
 }
 
 QString discoverGstAacEncoder(const QString &inspectProgram)
@@ -617,10 +770,16 @@ QStringList portalVideoBranchArguments(const PortalVideoPipelineOptions &options
     // keepalive-time resends the last frame while the screen is static, so
     // the encoder keeps receiving frames; on-disconnect=eos finishes the file
     // when the user stops sharing from the desktop.
-    args << QStringLiteral("do-timestamp=true")
-         << QStringLiteral("keepalive-time=%1").arg(pipeWireKeepaliveMs(fps))
-         << QStringLiteral("on-disconnect=eos")
-         << QStringLiteral("!")
+    // Each is left out when the installed pipewiresrc lacks it.
+    const GstElementProperties &props = options.properties;
+    const QString source = QStringLiteral("pipewiresrc");
+    if (props.supports(source, QStringLiteral("do-timestamp")))
+        args << QStringLiteral("do-timestamp=true");
+    if (props.supports(source, QStringLiteral("keepalive-time")))
+        args << QStringLiteral("keepalive-time=%1").arg(pipeWireKeepaliveMs(fps));
+    if (props.supports(source, QStringLiteral("on-disconnect")))
+        args << QStringLiteral("on-disconnect=eos");
+    args << QStringLiteral("!")
          << QStringLiteral("queue")
          << QStringLiteral("max-size-buffers=4")
          << QStringLiteral("max-size-bytes=0")
@@ -632,12 +791,13 @@ QStringList portalVideoBranchArguments(const PortalVideoPipelineOptions &options
          // arrive without a timestamp, and passing those on makes mp4mux
          // fail with "Could not multiplex stream" a few seconds in. The full
          // mode drops them and repeats the last frame on a static screen.
-         << QStringLiteral("videorate")
-         // Start the frame grid at the first frame: a late first frame (slow
-         // portal or GPU encoder start) otherwise lets a burst of frames
-         // through at the source rate.
-         << QStringLiteral("skip-to-first=true")
-         << QStringLiteral("!")
+         << QStringLiteral("videorate");
+    // Start the frame grid at the first frame: a late first frame (slow
+    // portal or GPU encoder start) otherwise lets a burst of frames through
+    // at the source rate.
+    if (props.supports(QStringLiteral("videorate"), QStringLiteral("skip-to-first")))
+        args << QStringLiteral("skip-to-first=true");
+    args << QStringLiteral("!")
          << QStringLiteral("videocrop")
          << QStringLiteral("left=%1").arg(crop.left)
          << QStringLiteral("right=%1").arg(crop.right)
@@ -694,7 +854,8 @@ QStringList waylandRecordingAudioArguments(bool desktopEnabled, int desktopVolum
                                            const QString &desktopDevice,
                                            bool microphoneEnabled, int microphoneVolume,
                                            const QString &microphoneDevice,
-                                           const QString &aacEncoder)
+                                           const QString &aacEncoder,
+                                           const GstElementProperties &properties)
 {
     struct AudioSource {
         QString device;
@@ -758,9 +919,11 @@ QStringList waylandRecordingAudioArguments(bool desktopEnabled, int desktopVolum
     }
 
     args << QStringLiteral("audiomixer")
-         << QStringLiteral("name=mix")
-         << QStringLiteral("ignore-inactive-pads=true")
-         << QStringLiteral("latency=100000000")
+         << QStringLiteral("name=mix");
+    // GStreamer >= 1.20; older mixers simply wait for every pad.
+    if (properties.supports(QStringLiteral("audiomixer"), QStringLiteral("ignore-inactive-pads")))
+        args << QStringLiteral("ignore-inactive-pads=true");
+    args << QStringLiteral("latency=100000000")
          << QStringLiteral("!")
          << QStringLiteral("audioconvert")
          << QStringLiteral("!")

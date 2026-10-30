@@ -167,6 +167,78 @@ private slots:
         QVERIFY(args.contains(QStringLiteral("audio/x-raw,rate=48000,channels=2")));
     }
 
+    void leavesOutMixerPropertiesAnOlderGStreamerLacks()
+    {
+        GstElementProperties properties;
+        properties.known.insert(QStringLiteral("audiomixer"),
+                                {QStringLiteral("latency"), QStringLiteral("name")});
+        const QStringList args = waylandRecordingAudioArguments(
+            true, 80, QStringLiteral("@DEFAULT_MONITOR@"),
+            true, 70, QStringLiteral("easyeffects_source"),
+            QStringLiteral("fdkaacenc"), properties);
+        QVERIFY(!args.contains(QStringLiteral("ignore-inactive-pads=true")));
+        QVERIFY(args.contains(QStringLiteral("latency=100000000")));
+    }
+
+    void parsesElementPropertiesFromGstInspect()
+    {
+        const QString output = QStringLiteral(
+            "Factory Details:\n"
+            "  Rank                     primary (256)\n"
+            "  Long-name                PipeWire source\n"
+            "\n"
+            "Pad Templates:\n"
+            "  SRC template: 'src'\n"
+            "    Availability: Always\n"
+            "\n"
+            "Element Properties:\n"
+            "\n"
+            "  always-copy         : Always copy the buffer and data\n"
+            "                        flags: okunabilir, yazılabilir, kullanım dışı\n"
+            "                        Boolean. Default: false\n"
+            "  \n"
+            "  keepalive-time      : Periodically send last buffer (in milliseconds, 0 = disabled)\n"
+            "                        flags: readable, writable\n"
+            "                        Integer. Range: 0 - 2147483647 Default: 0 \n"
+            "  \n"
+            "  on-disconnect       : Action to take on disconnect\n"
+            "                        flags: readable, writable\n"
+            "                        Enum \"GstPipeWireSrcOnDisconnect\" Default: 0, \"none\"\n"
+            "                           (0): none             - GST_PIPEWIRE_SRC_ON_DISCONNECT_NONE\n"
+            "\n"
+            "Element Signals:\n"
+            "  \"state-changed\" :  void user_function (GstElement* object,\n"
+            "                                           gpointer user_data);\n");
+        const QStringList properties = gstElementPropertiesFromInspect(output);
+        QCOMPARE(properties, QStringList({QStringLiteral("always-copy"), QStringLiteral("keepalive-time"),
+                                          QStringLiteral("on-disconnect")}));
+        QVERIFY(gstElementPropertiesFromInspect(QString()).isEmpty());
+    }
+
+    void leavesOutPipeWirePropertiesTheInstalledSourceLacks()
+    {
+        PortalVideoPipelineOptions options;
+        options.pipewireFd = 42;
+        options.sourcePath = pipeWireSourcePath(77, 9001, false);
+        QCOMPARE(options.sourcePath, QStringLiteral("path=77"));
+        options.crop = portalCropGeometry(QRect(0, 0, 640, 480), QRect(), QPoint(0, 0),
+                                          QSize(1920, 1080), QSize(640, 480));
+        // Unknown elements keep every property.
+        QVERIFY(GstElementProperties().supports(QStringLiteral("pipewiresrc"), QStringLiteral("x")));
+        options.properties.known.insert(QStringLiteral("pipewiresrc"),
+                                        {QStringLiteral("fd"), QStringLiteral("path"),
+                                         QStringLiteral("do-timestamp")});
+        options.properties.known.insert(QStringLiteral("videorate"), {QStringLiteral("rate")});
+        const QStringList args = portalVideoBranchArguments(options);
+        QVERIFY(args.contains(QStringLiteral("do-timestamp=true")));
+        QVERIFY(!args.contains(QStringLiteral("on-disconnect=eos")));
+        QVERIFY(!args.join(QLatin1Char(' ')).contains(QStringLiteral("keepalive-time")));
+        QVERIFY(!args.contains(QStringLiteral("skip-to-first=true")));
+        QCOMPARE(args.at(args.indexOf(QStringLiteral("videorate")) + 1), QStringLiteral("!"));
+        // Only a node id: target-object is used whatever the property check says.
+        QCOMPARE(pipeWireSourcePath(0, 9001, false), QStringLiteral("target-object=9001"));
+    }
+
     void usesPulseAudioDefaultsThatWorkOnPulseAndPipeWire()
     {
         QCOMPARE(linuxDesktopAudioDevice(QString()), QStringLiteral("@DEFAULT_MONITOR@"));
