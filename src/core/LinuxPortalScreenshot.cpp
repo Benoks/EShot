@@ -9,6 +9,8 @@
 #include <QFile>
 #include <QGuiApplication>
 #include <QImage>
+#include <QElapsedTimer>
+#include <QPointer>
 #include <QProcess>
 #include <QScreen>
 #include <QStandardPaths>
@@ -35,9 +37,13 @@
 
 namespace {
 
+QPointer<QProcess> s_kwinPermissionRefresh;
+
 #if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
 QPixmap grabKWinScreenshot(const QString &method, QList<QVariant> arguments, int timeoutMs)
 {
+    // KWin checks the service cache before allowing ScreenShot2 access.
+    LinuxPortalScreenshot::waitForKWinPermissionRefresh();
     QDBusConnection bus = QDBusConnection::sessionBus();
     if (!bus.isConnected()) {
         qWarning() << "[LinuxScreenshot]" << method << "failed: session bus is unavailable";
@@ -456,4 +462,51 @@ void LinuxPortalScreenshot::onPortalResponse(uint response, const QVariantMap &r
     Q_UNUSED(response);
     Q_UNUSED(results);
 #endif
+}
+
+void LinuxPortalScreenshot::startKWinPermissionRefresh(const QString &cacheBuilder)
+{
+    if (cacheBuilder.isEmpty() || (s_kwinPermissionRefresh
+                                   && s_kwinPermissionRefresh->state() != QProcess::NotRunning)) {
+        return;
+    }
+    auto *builder = new QProcess(QCoreApplication::instance());
+    auto *timer = new QElapsedTimer;
+    timer->start();
+    QObject::connect(builder, &QProcess::finished, builder,
+                     [builder, timer](int exitCode, QProcess::ExitStatus status) {
+        if (status != QProcess::NormalExit || exitCode != 0) {
+            qWarning() << "[KWinPermission] cache refresh failed with exit code="
+                       << (status == QProcess::NormalExit ? exitCode : -1);
+        } else {
+            qInfo() << "[KWinPermission] direct KWin capture prepared in"
+                    << timer->elapsed() << "ms";
+        }
+        delete timer;
+        builder->deleteLater();
+    });
+    QObject::connect(builder, &QProcess::errorOccurred, builder,
+                     [builder, timer](QProcess::ProcessError error) {
+        if (error != QProcess::FailedToStart)
+            return;
+        qWarning() << "[KWinPermission] cache refresh could not start";
+        delete timer;
+        builder->deleteLater();
+    });
+    // Never leave a hung rebuild running.
+    QTimer::singleShot(15000, builder, [builder]() {
+        if (builder->state() != QProcess::NotRunning)
+            builder->kill();
+    });
+    s_kwinPermissionRefresh = builder;
+    builder->start(cacheBuilder, {});
+}
+
+void LinuxPortalScreenshot::waitForKWinPermissionRefresh(int timeoutMs)
+{
+    QProcess *builder = s_kwinPermissionRefresh.data();
+    if (!builder || builder->state() == QProcess::NotRunning)
+        return;
+    qInfo() << "[KWinPermission] waiting for the service cache rebuild before capturing";
+    builder->waitForFinished(timeoutMs);
 }

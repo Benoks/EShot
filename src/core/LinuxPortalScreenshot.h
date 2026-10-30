@@ -20,6 +20,11 @@ public:
     static QPixmap grabScreen(QScreen *screen, QWidget *parent = nullptr, int timeoutMs = 5000);
     static QPixmap grabWorkspace(QWidget *parent = nullptr, int timeoutMs = 5000);
     static QPixmap grabSpectacleWorkspace(QWidget *parent = nullptr, int timeoutMs = 15000);
+    // Rebuilds KDE's service cache in the background so KWin learns about
+    // EShot's ScreenShot2 permission entry without delaying startup. A KWin
+    // capture that starts before the rebuild finished waits for it.
+    static void startKWinPermissionRefresh(const QString &cacheBuilder);
+    static void waitForKWinPermissionRefresh(int timeoutMs = 10000);
 
 private:
     explicit LinuxPortalScreenshot(QObject *parent = nullptr);

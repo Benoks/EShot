@@ -52,6 +52,7 @@
 #if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
 #include "core/LinuxDesktopNotification.h"
 #include "core/LinuxPortalHostRegistry.h"
+#include "core/LinuxPortalScreenshot.h"
 #include "core/LinuxUninstaller.h"
 #endif
 #include "capture/CaptureOverlay.h"
@@ -203,25 +204,12 @@ void prepareKWinScreenshotPermission()
         }
     }
 
-    // KWin checks the service cache before allowing ScreenShot2 access. Wait
-    // for this small rebuild so the very first capture is not raced against
-    // authorization setup, but never block startup on a hung rebuild.
-    QElapsedTimer timer;
-    timer.start();
-    QProcess builder;
-    builder.start(cacheBuilder, {});
-    const bool finished = builder.waitForStarted(3000) && builder.waitForFinished(10000);
-    if (!finished)
-        builder.kill();
-    const int exitCode = finished && builder.exitStatus() == QProcess::NormalExit
-        ? builder.exitCode() : -1;
-    if (exitCode != 0) {
-        qWarning() << "[KWinPermission] cache refresh failed with exit code="
-                   << exitCode << "desktop=" << desktopPath;
-        return;
-    }
-    qInfo() << "[KWinPermission] direct KWin capture prepared in"
-            << timer.elapsed() << "ms executable=" << executablePath;
+    // KWin checks the service cache before allowing ScreenShot2 access. The
+    // rebuild runs in the background so the tray icon is not held up (an
+    // AppImage's mount path changes on every launch, so it runs every time);
+    // a KWin capture that starts before it finishes waits for it.
+    qInfo() << "[KWinPermission] refreshing the service cache for" << executablePath;
+    LinuxPortalScreenshot::startKWinPermissionRefresh(cacheBuilder);
 #endif
 }
 
