@@ -4,6 +4,7 @@
 #include "CaptureScreenViews.h"
 #include "WindowSnapPolicy.h"
 #include "WindowsWindowProvider.h"
+#include "WindowsScreenGrab.h"
 #include "PinnedWindow.h"
 #include "annotation/AnnotationEngine.h"
 #include "annotation/AnnotationRotationGeometry.h"
@@ -2140,6 +2141,11 @@ void CaptureOverlay::performCapture()
         m_annotationEngine->setSnapshotScale(m_dpr);
     }
 
+#ifdef Q_OS_WIN
+    // Over an exclusive fullscreen game, show without activating; a click on
+    // the overlay or the capture hotkey still works.
+    setAttribute(Qt::WA_ShowWithoutActivating, !m_takeForegroundOnPresent);
+#endif
     presentCapture();
 
 #ifdef Q_OS_WIN
@@ -2147,9 +2153,12 @@ void CaptureOverlay::performCapture()
     // input over elevated windows because EShot runs under the signed-in user.
     HWND hwnd = reinterpret_cast<HWND>(winId());
     ::SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
-                   SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
-    ::SetForegroundWindow(hwnd);
-    ::BringWindowToTop(hwnd);
+                   SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW
+                       | (m_takeForegroundOnPresent ? 0 : SWP_NOACTIVATE));
+    if (m_takeForegroundOnPresent) {
+        ::SetForegroundWindow(hwnd);
+        ::BringWindowToTop(hwnd);
+    }
 
     if (m_selectionMode == CaptureSelectionMode::Window) {
         m_windowSnapCandidates = windowsForCaptureOverlay(
@@ -2160,7 +2169,7 @@ void CaptureOverlay::performCapture()
 #endif
     // Native views activate their own output window. All other platforms keep
     // the original focus order, including Win32's foreground-window handling.
-    if (!m_screenViews || !m_screenViews->isActive()) {
+    if ((!m_screenViews || !m_screenViews->isActive()) && m_takeForegroundOnPresent) {
         activateWindow();
         setFocus(Qt::ActiveWindowFocusReason);
         raise();
@@ -2213,6 +2222,7 @@ void CaptureOverlay::captureAllScreens()
     m_captureScreen = nullptr;
     m_screenSnapshot = QPixmap();
     m_screenImages.clear();
+    m_takeForegroundOnPresent = true;
 #ifdef Q_OS_WIN
     int vx = GetSystemMetrics(SM_XVIRTUALSCREEN);
     int vy = GetSystemMetrics(SM_YVIRTUALSCREEN);
@@ -2262,35 +2272,26 @@ void CaptureOverlay::captureAllScreens()
     m_virtualDesktopRect = QRect(qRound(vx / m_dpr), qRound(vy / m_dpr),
                                  qRound(vw / m_dpr), qRound(vh / m_dpr));
 
-    HDC hScreen = GetDC(nullptr);
-    if (!hScreen) return;
-    HDC hMem = CreateCompatibleDC(hScreen);
-    if (!hMem) { ReleaseDC(nullptr, hScreen); return; }
-    HBITMAP hBmp = CreateCompatibleBitmap(hScreen, vw, vh);
-    if (!hBmp) { DeleteDC(hMem); ReleaseDC(nullptr, hScreen); return; }
-
-    HBITMAP hOld = (HBITMAP)SelectObject(hMem, hBmp);
-    // CAPTUREBLT ensures layered/translucent windows are included in the grab
-    BitBlt(hMem, 0, 0, vw, vh, hScreen, vx, vy, SRCCOPY | CAPTUREBLT);
-    SelectObject(hMem, hOld);
-
-    BITMAPINFOHEADER bi = {};
-    bi.biSize = sizeof(bi);
-    bi.biWidth = vw;
-    bi.biHeight = -vh;
-    bi.biPlanes = 1;
-    bi.biBitCount = 32;
-    bi.biCompression = BI_RGB;
-
-    QImage img(vw, vh, QImage::Format_ARGB32);
-    GetDIBits(hMem, hBmp, 0, vh, img.bits(), (BITMAPINFO*)&bi, DIB_RGB_COLORS);
-
-    m_screenSnapshot = QPixmap::fromImage(img);
+    const QRect physicalVirtualDesktop(vx, vy, vw, vh);
+    const WindowsCapturePlan plan = windowsCapturePlan(windowsExclusiveFullscreenRunning());
+    m_takeForegroundOnPresent = plan.takeForeground;
+    QImage image = plan.preferDuplication
+        ? grabWindowsDesktopDuplication(physicalVirtualDesktop)
+        : grabWindowsDesktopGdi(physicalVirtualDesktop);
+    const char *backend = plan.preferDuplication ? "dxgi-duplication" : "gdi";
+    if (image.isNull()) {
+        image = plan.preferDuplication ? grabWindowsDesktopGdi(physicalVirtualDesktop)
+                                       : grabWindowsDesktopDuplication(physicalVirtualDesktop);
+        backend = plan.preferDuplication ? "gdi" : "dxgi-duplication";
+    }
+    if (image.isNull()) {
+        qCritical() << "[CaptureOverlay] Windows desktop capture failed";
+        return;
+    }
+    qInfo() << "[CaptureOverlay] selected capture backend=" << backend
+            << "exclusiveFullscreen=" << plan.preferDuplication;
+    m_screenSnapshot = QPixmap::fromImage(image);
     m_screenSnapshot.setDevicePixelRatio(1.0);
-
-    DeleteObject(hBmp);
-    DeleteDC(hMem);
-    ReleaseDC(nullptr, hScreen);
 #else
     const QString currentDesktop = qEnvironmentVariable("XDG_CURRENT_DESKTOP");
     const QString sessionDesktop = qEnvironmentVariable("XDG_SESSION_DESKTOP");

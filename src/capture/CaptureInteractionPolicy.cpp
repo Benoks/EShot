@@ -158,6 +158,14 @@ QString applyWindowTitleToken(const QString &pattern, const QString &title)
     return result;
 }
 
+WindowsCapturePlan windowsCapturePlan(bool exclusiveFullscreen)
+{
+    WindowsCapturePlan plan;
+    plan.preferDuplication = exclusiveFullscreen;
+    plan.takeForeground = !exclusiveFullscreen;
+    return plan;
+}
+
 bool shouldDetachModalFromOverlay(bool xwaylandOverlay)
 {
     return xwaylandOverlay;

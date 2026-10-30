@@ -347,6 +347,9 @@ private:
     // Set while captureAllScreens() runs: portal and KWin grabs spin nested
     // event loops that also deliver hotkeys.
     bool m_captureInFlight = false;
+    // Windows: false while an exclusive fullscreen app runs, so the overlay
+    // is shown without taking the foreground (the game would minimise).
+    bool m_takeForegroundOnPresent = true;
     // Incremented by every capture; delayed hint timers check it so a timer
     // from an earlier capture cannot change the current one.
     quint64 m_captureGeneration = 0;

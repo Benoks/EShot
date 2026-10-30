@@ -89,6 +89,15 @@ CaptureActivationAction captureActivationAction(qint64 elapsedMs, bool proxyActi
                                                 bool compositorActivationAvailable);
 
 bool shouldDetachModalFromOverlay(bool xwaylandOverlay);
+
+// Windows snapshot strategy. With an exclusive (D3D) fullscreen app, GDI
+// usually returns black and taking the foreground makes the game minimise,
+// so Desktop Duplication goes first and the overlay does not steal focus.
+struct WindowsCapturePlan {
+    bool preferDuplication = false;
+    bool takeForeground = true;
+};
+WindowsCapturePlan windowsCapturePlan(bool exclusiveFullscreen);
 // Replaces %T in a file name pattern with the window title. Without a title
 // the token is removed together with one separator next to it, so
 // "Shot_%T_%Y" becomes "Shot_%Y" instead of "Shot__%Y".

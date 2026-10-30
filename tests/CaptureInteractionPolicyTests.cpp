@@ -147,6 +147,16 @@ private slots:
         QCOMPARE(applyWindowTitleToken(QStringLiteral("Shot_%Y"), QString()), QStringLiteral("Shot_%Y"));
     }
 
+    void exclusiveFullscreenUsesDuplicationWithoutForeground()
+    {
+        const WindowsCapturePlan normal = windowsCapturePlan(false);
+        QVERIFY(!normal.preferDuplication);
+        QVERIFY(normal.takeForeground);
+        const WindowsCapturePlan game = windowsCapturePlan(true);
+        QVERIFY(game.preferDuplication);
+        QVERIFY(!game.takeForeground);
+    }
+
     void cornerResizeKeepsOppositeCornerFixed()
     {
         const QRect start(100, 200, 50, 40);

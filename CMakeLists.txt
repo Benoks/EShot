@@ -74,6 +74,7 @@ set(SOURCES
     src/capture/CaptureInteractionPolicy.cpp
     src/capture/WindowSnapPolicy.cpp
     src/capture/WindowsWindowProvider.cpp
+    src/capture/WindowsScreenGrab.cpp
     src/capture/CaptureOverlay.cpp
     src/capture/PinnedWindow.cpp
     src/annotation/AnnotationEngine.cpp
@@ -162,6 +163,7 @@ set(HEADERS
     src/capture/CaptureInteractionPolicy.h
     src/capture/WindowSnapPolicy.h
     src/capture/WindowsWindowProvider.h
+    src/capture/WindowsScreenGrab.h
     src/capture/CaptureOverlay.h
     src/capture/PinnedWindow.h
     src/annotation/AnnotationEngine.h
@@ -273,6 +275,7 @@ if(WIN32)
         ole32
         oleaut32
         dxgi
+        d3d11
     )
 endif()
 
