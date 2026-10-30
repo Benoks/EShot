@@ -44,6 +44,11 @@
   <url type="homepage">https://github.com/Benoks/EShot</url>
   <url type="bugtracker">https://github.com/Benoks/EShot/issues</url>
   <releases>
+    <release version="4.8.0" date="2026-10-30">
+      <description>
+        <p>Fixes the capture overlay freezing over fullscreen games, adds a Capture screen now hotkey, makes recording more robust against missing devices and component versions, improves light and high-contrast themes, and builds the AppImage with Qt 6.8.</p>
+      </description>
+    </release>
     <release version="4.7.1" date="2026-10-22">
       <description>
         <p>Fixes Windows video and GIF recordings failing at start when an FFmpeg from an older installation was still in use, and replaces that FFmpeg when upgrading.</p>
