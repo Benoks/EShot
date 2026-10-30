@@ -81,7 +81,16 @@ jobs:
             xdg-desktop-portal \
             xdg-desktop-portal-gtk \
             xvfb \
-            xauth
+            xauth \
+            libegl1 \
+            libopengl0 \
+            libxkbcommon-x11-0 \
+            libxcb-icccm4 \
+            libxcb-image0 \
+            libxcb-keysyms1 \
+            libxcb-render-util0 \
+            libxcb-shape0 \
+            libxcb-xkb1
 
       - name: Validate Linux desktop metadata
         run: |
@@ -119,10 +128,29 @@ jobs:
           QT_QPA_PLATFORM: offscreen
         run: ${{ env.DIST_DIR }}/bin/EShot --test-gif
 
+      # The tar.gz and .deb above use the distro Qt (6.2.4) they depend on.
+      # The AppImage bundles its own Qt, so it uses the official Qt release
+      # that Windows ships. Those binaries need glibc 2.28, so the 22.04
+      # runner keeps the AppImage's glibc 2.35 baseline. set-env is off so
+      # the distro Qt build and tests above are not affected.
+      - name: Install Qt for the AppImage
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          host: linux
+          target: desktop
+          arch: linux_gcc_64
+          dir: ${{ github.workspace }}/qt-appimage
+          install-deps: 'false'
+          set-env: 'false'
+          cache: true
+
       - name: Package Linux builds
         run: |
           bash scripts/linux/package-linux.sh
-          bash scripts/linux/build-appimage.sh
+          qt_qmake="$(find "${{ github.workspace }}/qt-appimage" -maxdepth 5 -path "*/${QT_VERSION}/*/bin/qmake" -type f | head -n1)"
+          test -n "${qt_qmake}"
+          ESHOT_APPIMAGE_QT_DIR="$(dirname "$(dirname "${qt_qmake}")")" bash scripts/linux/build-appimage.sh
 
       - name: Smoke test AppImage
         env:
@@ -133,6 +161,9 @@ jobs:
 
       - name: Verify AppImage portability
         run: bash scripts/linux/verify-appimage-portability.sh "packages/EShot-v${APP_VERSION}-x86_64.AppImage"
+
+      - name: Verify AppImage Qt runtime
+        run: bash scripts/linux/verify-appimage-qt.sh "packages/EShot-v${APP_VERSION}-x86_64.AppImage" "${QT_VERSION}"
 
       - name: Inspect Linux packages
         run: |

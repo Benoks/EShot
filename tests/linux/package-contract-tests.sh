@@ -45,6 +45,8 @@ grep -F 'BtbN/FFmpeg-Builds/releases/download/autobuild-2026-09-30-13-08/ffmpeg-
 grep -F 'BtbN/FFmpeg-Builds/releases/download/autobuild-2026-09-30-13-08/ffmpeg-n8.1.3-9-g29e619e767-winarm64-gpl-8.1.zip' "${workflow}" >/dev/null
 test "$(grep -cE "ffmpeg_sha256: '[0-9a-f]{64}'" "${workflow}")" -eq 2
 grep -F 'Get-FileHash ffmpeg.zip -Algorithm SHA256' "${workflow}" >/dev/null
+test "$(grep -cE "tesseract_sha256: '[0-9a-f]{64}'" "${workflow}")" -eq 2
+grep -F 'Get-FileHash tesseract-runtime.zip -Algorithm SHA256' "${workflow}" >/dev/null
 grep -F 'third_party/ffmpeg/bin/ffmpeg.exe -Force' "${workflow}" >/dev/null
 grep -F 'releases/download/$release/$archive' "${workflow}" >/dev/null
 grep -F 'EShot-$release-${{ matrix.arch }}-portable.zip' "${workflow}" >/dev/null
@@ -121,6 +123,14 @@ grep -F 'Exec=eshot-launcher --quit' "${repo_root}/packaging/linux/io.github.ben
 grep -F 'export NO_STRIP=1' "${build_script}" >/dev/null
 grep -F 'qmake-appimage-wrapper.sh' "${build_script}" >/dev/null
 grep -F 'qt-plugin-dir.sh' "${build_script}" >/dev/null
+# The AppImage bundles the same official Qt release as Windows, not the
+# runner's distro Qt (6.2.4 on Ubuntu 22.04).
+grep -F 'ESHOT_APPIMAGE_QT_DIR' "${build_script}" >/dev/null
+grep -F 'export LD_LIBRARY_PATH="${qt_lib_dir}' "${build_script}" >/dev/null
+grep -F 'ESHOT_APPIMAGE_QT_DIR=' "${workflow}" >/dev/null
+grep -F 'arch: linux_gcc_64' "${workflow}" >/dev/null
+grep -F "set-env: 'false'" "${workflow}" >/dev/null
+grep -F 'scripts/linux/verify-appimage-qt.sh "packages/EShot-v${APP_VERSION}-x86_64.AppImage" "${QT_VERSION}"' "${workflow}" >/dev/null
 grep -F 'libqwayland*.so' "${build_script}" >/dev/null || {
   echo 'AppImage must bundle a native Qt Wayland platform plugin for the XWayland fallback' >&2
   exit 1

@@ -45,7 +45,32 @@ appimagetool="${tools_dir}/appimagetool-x86_64.AppImage"
 runtime_file="${tools_dir}/runtime-x86_64"
 qmake_wrapper="${tools_dir}/qmake-appimage-wrapper"
 qt_plugin_dir="${build_dir}/qt-plugins"
-system_qt_plugin_dir="$(bash "${repo_root}/scripts/linux/qt-plugin-dir.sh")"
+# ESHOT_APPIMAGE_QT_DIR selects a Qt prefix other than the system Qt, for
+# example the official Qt 6.8 that CI installs on the Ubuntu 22.04 runner
+# (newer Qt, same glibc baseline). Without it the system qmake6 is used.
+qt_prefix="${ESHOT_APPIMAGE_QT_DIR:-}"
+cmake_qt_args=()
+if [[ -n "${qt_prefix}" ]]; then
+  real_qmake=""
+  for candidate in "${qt_prefix}/bin/qmake6" "${qt_prefix}/bin/qmake"; do
+    if [[ -x "${candidate}" ]]; then
+      real_qmake="${candidate}"
+      break
+    fi
+  done
+  [[ -n "${real_qmake}" ]] || { printf 'qmake not found under %s/bin\n' "${qt_prefix}" >&2; exit 1; }
+  system_qt_plugin_dir="$("${real_qmake}" -query QT_INSTALL_PLUGINS)"
+  qt_lib_dir="$("${real_qmake}" -query QT_INSTALL_LIBS)"
+  cmake_qt_args=(-DCMAKE_PREFIX_PATH="${qt_prefix}")
+  # linuxdeploy resolves the Qt libraries of EShot and every plugin through
+  # the library search path; a Qt outside /usr is not on it by default.
+  export LD_LIBRARY_PATH="${qt_lib_dir}${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+  export PATH="${qt_prefix}/bin:${PATH}"
+else
+  real_qmake="$(command -v qmake6 || command -v qmake || true)"
+  [[ -n "${real_qmake}" ]] || { printf 'qmake6 was not found. Install the Qt 6 development tools.\n' >&2; exit 1; }
+  system_qt_plugin_dir="$(bash "${repo_root}/scripts/linux/qt-plugin-dir.sh")"
+fi
 [[ -d "${system_qt_plugin_dir}" ]] || { printf 'Qt plugin directory not found: %s\n' "${system_qt_plugin_dir}" >&2; exit 1; }
 
 download_verified "${linuxdeploy_url}" "${linuxdeploy_sha256}" "${linuxdeploy}"
@@ -60,7 +85,8 @@ rm -rf "${appdir}"
 cmake -S "${repo_root}" -B "${build_dir}" -G Ninja \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_INSTALL_PREFIX=/usr \
-  -DBUILD_TESTING=OFF
+  -DBUILD_TESTING=OFF \
+  "${cmake_qt_args[@]}"
 cmake --build "${build_dir}" --parallel
 DESTDIR="${appdir}" cmake --install "${build_dir}"
 
@@ -100,7 +126,7 @@ done
 
 export APPIMAGE_EXTRACT_AND_RUN=1
 export NO_STRIP=1
-export ESHOT_REAL_QMAKE="$(command -v qmake6)"
+export ESHOT_REAL_QMAKE="${real_qmake}"
 export ESHOT_QT_PLUGIN_DIR="${qt_plugin_dir}"
 export QMAKE="${qmake_wrapper}"
 export PATH="${tools_dir}:${PATH}"
