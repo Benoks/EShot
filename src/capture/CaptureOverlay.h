@@ -340,6 +340,8 @@ private:
 
     // Active window title (for %T)
     EShotNativeWindowHandle m_foregroundHwnd = nullptr;
+    // Linux: title of the active window when the capture started.
+    QString m_capturedWindowTitle;
 
     QTimer *m_captureDelayTimer;
     // Set while captureAllScreens() runs: portal and KWin grabs spin nested

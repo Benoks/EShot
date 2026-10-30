@@ -137,6 +137,27 @@ CaptureActivationAction captureActivationAction(qint64 elapsedMs, bool proxyActi
     return CaptureActivationAction::None;
 }
 
+QString applyWindowTitleToken(const QString &pattern, const QString &title)
+{
+    const QString token = QStringLiteral("%T");
+    QString result = pattern;
+    if (!title.isEmpty())
+        return result.replace(token, title);
+    const QString separators = QStringLiteral(" _-.");
+    qsizetype index = result.indexOf(token);
+    while (index >= 0) {
+        qsizetype start = index;
+        qsizetype end = index + token.size();
+        if (start > 0 && separators.contains(result.at(start - 1)))
+            --start;
+        else if (end < result.size() && separators.contains(result.at(end)))
+            ++end;
+        result.remove(start, end - start);
+        index = result.indexOf(token, start);
+    }
+    return result;
+}
+
 bool shouldDetachModalFromOverlay(bool xwaylandOverlay)
 {
     return xwaylandOverlay;

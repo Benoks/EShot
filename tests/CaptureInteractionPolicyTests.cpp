@@ -134,6 +134,19 @@ private slots:
         QCOMPARE(captureActivationAction(CaptureActivationCheckMs, true, false, false, true), A::None);
     }
 
+    void windowTitleTokenIsFilledOrDroppedWithItsSeparator()
+    {
+        QCOMPARE(applyWindowTitleToken(QStringLiteral("Shot_%T_%Y"), QStringLiteral("Game")),
+                 QStringLiteral("Shot_Game_%Y"));
+        QCOMPARE(applyWindowTitleToken(QStringLiteral("Shot_%T_%Y"), QString()),
+                 QStringLiteral("Shot_%Y"));
+        QCOMPARE(applyWindowTitleToken(QStringLiteral("%T-%Y"), QString()), QStringLiteral("%Y"));
+        QCOMPARE(applyWindowTitleToken(QStringLiteral("Shot %T"), QString()), QStringLiteral("Shot"));
+        QCOMPARE(applyWindowTitleToken(QStringLiteral("%T"), QString()), QString());
+        QCOMPARE(applyWindowTitleToken(QStringLiteral("A_%T_%T_B"), QString()), QStringLiteral("A_B"));
+        QCOMPARE(applyWindowTitleToken(QStringLiteral("Shot_%Y"), QString()), QStringLiteral("Shot_%Y"));
+    }
+
     void cornerResizeKeepsOppositeCornerFixed()
     {
         const QRect start(100, 200, 50, 40);

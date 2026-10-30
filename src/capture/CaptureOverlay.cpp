@@ -20,6 +20,7 @@
 #include "core/HotkeyManager.h"
 #include "core/LinuxDesktopIntegration.h"
 #include "core/LinuxKWinActivation.h"
+#include "core/LinuxActiveWindowTitle.h"
 #include "core/LinuxPortalScreenshot.h"
 #include "core/LinuxScreenshotPolicy.h"
 #include "core/VisualSearch.h"
@@ -1901,6 +1902,8 @@ void CaptureOverlay::captureScreenNow()
     }
 #ifdef Q_OS_WIN
     m_foregroundHwnd = GetForegroundWindow();
+#else
+    m_capturedWindowTitle = LinuxActiveWindowTitle::current();
 #endif
     m_captureInFlight = true;
     QPixmap screen = grabScreenUnderCursor();
@@ -2050,6 +2053,7 @@ void CaptureOverlay::startCaptureInternal(CaptureSelectionMode selectionMode, bo
     m_foregroundHwnd = GetForegroundWindow();
 #else
     m_foregroundHwnd = nullptr;
+    m_capturedWindowTitle = LinuxActiveWindowTitle::current();
 #endif
 
     // Load settings
@@ -3914,8 +3918,9 @@ QString CaptureOverlay::resolveFilenamePattern(const QString &pattern) const
     result.replace("%h", now.toString("HH"));
     result.replace("%m", now.toString("mm"));
     result.replace("%s", now.toString("ss"));
-    result.replace("%T", resolveWindowTitle());
-
+    result = applyWindowTitleToken(result, resolveWindowTitle());
+    if (result.trimmed().isEmpty())
+        result = QStringLiteral("Screenshot_%1").arg(now.toString(QStringLiteral("yyyy-MM-dd_HH-mm-ss")));
     return result;
 }
 
@@ -3933,6 +3938,12 @@ QString CaptureOverlay::resolveWindowTitle() const
             windowTitle.replace(QRegularExpression("[\\\\/:*?\"<>|]"), "_");
             return windowTitle.left(50);
         }
+    }
+#else
+    if (!m_capturedWindowTitle.isEmpty()) {
+        QString windowTitle = m_capturedWindowTitle;
+        windowTitle.replace(QRegularExpression("[\\\\/:*?\"<>|]"), "_");
+        return windowTitle.left(50).trimmed();
     }
 #endif
     return "";

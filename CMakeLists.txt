@@ -38,6 +38,7 @@ set(SOURCES
     src/core/LinuxPortalScreenCast.cpp
     src/core/LinuxPortalScreenshot.cpp
     src/core/LinuxKWinActivation.cpp
+    src/core/LinuxActiveWindowTitle.cpp
     src/core/LinuxDesktopIntegration.cpp
     src/core/LinuxGnomeShortcutInstaller.cpp
     src/core/LinuxPortalRequest.cpp
@@ -125,6 +126,7 @@ set(HEADERS
     src/core/LinuxPortalScreenCast.h
     src/core/LinuxPortalScreenshot.h
     src/core/LinuxKWinActivation.h
+    src/core/LinuxActiveWindowTitle.h
     src/core/LinuxDesktopIntegration.h
     src/core/LinuxGnomeShortcutInstaller.h
     src/core/LinuxPortalRequest.h

@@ -89,6 +89,10 @@ CaptureActivationAction captureActivationAction(qint64 elapsedMs, bool proxyActi
                                                 bool compositorActivationAvailable);
 
 bool shouldDetachModalFromOverlay(bool xwaylandOverlay);
+// Replaces %T in a file name pattern with the window title. Without a title
+// the token is removed together with one separator next to it, so
+// "Shot_%T_%Y" becomes "Shot_%Y" instead of "Shot__%Y".
+QString applyWindowTitleToken(const QString &pattern, const QString &title);
 // Top-left of a window resized from a corner so the opposite corner stays
 // where it was. dragLeft/dragTop say which edges the dragged corner moves.
 QPoint cornerResizeTopLeft(const QRect &startGeometry, const QSize &newSize,
