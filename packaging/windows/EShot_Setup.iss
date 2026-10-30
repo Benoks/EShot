@@ -14,6 +14,10 @@
 #ifndef ReleaseDir
 #define ReleaseDir     "EShot_Release"
 #endif
+; CI passes /DArch=x64 or /DArch=arm64 for the payload in ReleaseDir.
+#ifndef Arch
+#define Arch           "x64"
+#endif
 
 [Setup]
 SourceDir={#RepoRoot}
@@ -40,7 +44,15 @@ WizardStyle=modern
 LanguageDetectionMethod=none
 
 MinVersion=10.0
+; An Arm64 payload cannot start on x64 Windows, and installing it there would
+; replace a working x64 install (same AppId). x64 builds also run on Arm64.
+#if Arch == "arm64"
+ArchitecturesAllowed=arm64
+ArchitecturesInstallIn64BitMode=arm64
+#else
+ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
+#endif
 
 UninstallDisplayName={#MyAppName}
 UninstallDisplayIcon={app}\{#MyAppExeName}
@@ -201,9 +213,22 @@ Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchAfterInstall}"; Flags: shellexec nowait postinstall skipifsilent
 
 [UninstallRun]
+; Fallback only: CurUninstallStepChanged first asks EShot to quit normally.
 Filename: "{cmd}"; Parameters: "/C taskkill /F /IM {#MyAppExeName}"; Flags: runhidden; RunOnceId: "KillEShot"
 Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command ""Unregister-ScheduledTask -TaskName '{#MyAppName}' -Confirm:$false -ErrorAction SilentlyContinue"""; Flags: runhidden; RunOnceId: "DeleteEShotStartupTask"
 Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command ""Unregister-ScheduledTask -TaskName 'EShot Elevated' -Confirm:$false -ErrorAction SilentlyContinue"""; Flags: runhidden; RunOnceId: "DeleteEShotElevatedTask"
+
+[UninstallDelete]
+; Settings can download Tesseract, OCR languages and FFmpeg after setup. Those
+; files are not in the uninstall log, so remove them explicitly. User settings
+; (registry) and saved screenshots/recordings are kept.
+Type: filesandordirs; Name: "{app}\tesseract"
+Type: filesandordirs; Name: "{app}\ffmpeg"
+Type: dirifempty;     Name: "{app}"
+Type: filesandordirs; Name: "{localappdata}\EShot\components"
+Type: filesandordirs; Name: "{localappdata}\EShot\EShot\cache"
+Type: dirifempty;     Name: "{localappdata}\EShot\EShot"
+Type: dirifempty;     Name: "{localappdata}\EShot"
 
 [Code]
 var
@@ -220,6 +245,50 @@ begin
     RegDeleteValue(RootKey, RunKey, '{#MyAppName}');
 end;
 
+function IsEShotRunning: Boolean;
+var
+  ResultCode: Integer;
+begin
+  // find.exe exits with 0 only when tasklist printed a matching process.
+  Result := Exec(ExpandConstant('{cmd}'),
+                 '/C ""' + ExpandConstant('{sys}\tasklist.exe') + '" /NH /FI "IMAGENAME eq {#MyAppExeName}" | "' +
+                 ExpandConstant('{sys}\find.exe') + '" /I "{#MyAppExeName}""',
+                 '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and (ResultCode = 0);
+end;
+
+function WaitForEShotExit(TimeoutMs: Integer): Boolean;
+var
+  Waited: Integer;
+begin
+  Waited := 0;
+  Result := not IsEShotRunning;
+  while (not Result) and (Waited < TimeoutMs) do begin
+    Sleep(250);
+    Waited := Waited + 250;
+    Result := not IsEShotRunning;
+  end;
+end;
+
+// Ask the running EShot to quit through its single-instance channel so it can
+// finish a recording and write pending settings, then force it only if needed.
+procedure CloseRunningEShot;
+var
+  ResultCode: Integer;
+  AppExe: String;
+begin
+  if not IsEShotRunning then
+    Exit;
+  AppExe := ExpandConstant('{app}\{#MyAppExeName}');
+  if FileExists(AppExe) then
+    Exec(AppExe, '--quit', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  if WaitForEShotExit(5000) then
+    Exit;
+  Exec(ExpandConstant('{cmd}'), '/C taskkill /F /IM {#MyAppExeName}', '', SW_HIDE,
+       ewWaitUntilTerminated, ResultCode);
+  // Wait until the process is gone so its file locks are released.
+  WaitForEShotExit(3000);
+end;
+
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
   RunKey: String;
@@ -230,6 +299,8 @@ var
 begin
   if CurUninstallStep <> usUninstall then
     Exit;
+
+  CloseRunningEShot;
 
   // Settings can enable auto-start after Setup finishes, so its Run value
   // may not appear in the install log. Never delete another EShot copy's entry.
@@ -416,8 +487,6 @@ begin
 end;
 
 function PrepareToInstall(var NeedsRestart: Boolean): String;
-var
-  ResultCode: Integer;
 begin
   Result := '';
   // Freeze the "already installed" state before any files are copied
@@ -425,8 +494,6 @@ begin
   GOcrPreinstalled := IsInstalledFile('tesseract\tesseract.exe');
   GFfmpegPreinstalled := IsInstalledFile('ffmpeg\ffmpeg.exe');
   GInstallStateFrozen := True;
-  // Close EShot if it is running
-  Exec(ExpandConstant('{cmd}'), '/C taskkill /F /IM {#MyAppExeName}', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-  // Brief wait so the file lock is released
-  Sleep(500);
+  // Close EShot if it is running (graceful first, forced as a fallback).
+  CloseRunningEShot;
 end;

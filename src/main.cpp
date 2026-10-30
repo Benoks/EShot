@@ -2303,6 +2303,10 @@ int main(int argc, char *argv[])
 
     if (forwardToRunningInstance())
         return 0;
+    // Nothing to quit. Return before the elevated hand-over below, which would
+    // otherwise start EShot (Setup runs "EShot.exe --quit" before updating).
+    if (parser.isSet(quitOption))
+        return 0;
 
 #ifdef Q_OS_WIN
     // "Start as administrator": a normal start hands over to the elevated
@@ -2313,9 +2317,6 @@ int main(int argc, char *argv[])
         return 0;
     }
 #endif
-
-    if (parser.isSet(quitOption))
-        return 0;
 
     QLocalServer instanceServer;
     instanceServer.setSocketOptions(QLocalServer::UserAccessOption);
