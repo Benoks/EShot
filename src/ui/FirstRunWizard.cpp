@@ -2,6 +2,7 @@
 #include "../core/HotkeyManager.h"
 #include "../core/HotkeySequence.h"
 #include "../core/TranslationManager.h"
+#include "ThemeColors.h"
 #ifdef Q_OS_LINUX
 #include "../core/LinuxDependencySelection.h"
 #include "../core/LinuxDesktopIntegration.h"
@@ -32,6 +33,8 @@
 #include <QCursor>
 #include <QScrollArea>
 #include <QStyle>
+#include <QSignalBlocker>
+#include <utility>
 #ifdef Q_OS_LINUX
 #include <QCheckBox>
 #include <QProcess>
@@ -49,10 +52,10 @@ FirstRunWizard::FirstRunWizard(QWidget *parent)
     // Strip maximize button to prevent Windows 11 ARM64 Snap Layouts crash.
     setWindowFlags(windowFlags() & ~Qt::WindowMaximizeButtonHint);
 #endif
-    setWindowTitle(TranslationManager::wizardTitle());
     setWindowIcon(QIcon(":/icons/pen.svg"));
     setupUi();
     loadDefaults();
+    connect(m_langCombo, &QComboBox::currentIndexChanged, this, &FirstRunWizard::onLanguageChanged);
 
     // Measure after defaults have revealed/hidden platform-specific rows. Keep
     // the footer visible on small screens and let only the form scroll.
@@ -92,8 +95,39 @@ bool FirstRunWizard::shouldShow()
 #endif
 }
 
+void FirstRunWizard::addTranslatedText(std::function<void()> apply)
+{
+    apply();
+    m_retranslations.append(std::move(apply));
+}
+
+void FirstRunWizard::retranslateUi()
+{
+    for (const auto &apply : std::as_const(m_retranslations))
+        apply();
+}
+
+void FirstRunWizard::onLanguageChanged()
+{
+    // Preview the picked language right away; Finish saves it.
+    TranslationManager::setLanguage(languageFromCode(m_langCombo->currentData().toString()), false);
+    retranslateUi();
+    onHotkeyChanged();
+}
+
+TranslationManager::Language FirstRunWizard::languageFromCode(const QString &code)
+{
+    static const char *codes[] = {"tr", "en", "de", "fr", "es", "ja", "zh", "ru"};
+    for (int i = 0; i < TranslationManager::LangCount; ++i) {
+        if (code == QLatin1String(codes[i]))
+            return static_cast<TranslationManager::Language>(i);
+    }
+    return TranslationManager::English;
+}
+
 void FirstRunWizard::setupUi()
 {
+    addTranslatedText([this]() { setWindowTitle(TranslationManager::wizardTitle()); });
     QVBoxLayout *outerLayout = new QVBoxLayout(this);
     outerLayout->setContentsMargins(8, 8, 8, 8);
 
@@ -114,13 +148,15 @@ void FirstRunWizard::setupUi()
     titleFont.setPointSize(16);
     titleFont.setBold(true);
 
-    QLabel *titleLabel = new QLabel(TranslationManager::wizardTitle());
+    QLabel *titleLabel = new QLabel();
     titleLabel->setFont(titleFont);
+    addTranslatedText([titleLabel]() { titleLabel->setText(TranslationManager::wizardTitle()); });
     mainLayout->addWidget(titleLabel);
 
-    QLabel *descLabel = new QLabel(TranslationManager::wizardDesc());
+    QLabel *descLabel = new QLabel();
     descLabel->setWordWrap(true);
-    descLabel->setStyleSheet("color: #aaa;");
+    ThemeColors::setStyleSheet(descLabel, QStringLiteral("color: @muted;"));
+    addTranslatedText([descLabel]() { descLabel->setText(TranslationManager::wizardDesc()); });
     mainLayout->addWidget(descLabel);
 
 #ifdef Q_OS_LINUX
@@ -133,39 +169,45 @@ void FirstRunWizard::setupUi()
     if (supportLevel != LinuxDesktopSupportLevel::Supported) {
         auto *supportWarning = new QLabel();
         supportWarning->setWordWrap(true);
-        supportWarning->setStyleSheet(
+        ThemeColors::setStyleSheet(supportWarning,
             supportLevel == LinuxDesktopSupportLevel::Unsupported
-                ? "background: rgba(220, 53, 69, 0.16); color: #ffb3bc; "
+                ? "background: rgba(220, 53, 69, 0.16); color: @bannerErrorText; "
                   "border: 1px solid rgba(220, 53, 69, 0.60); border-radius: 6px; "
                   "padding: 8px; font-size: 12px;"
-                : "background: rgba(255, 193, 7, 0.14); color: #ffd166; "
+                : "background: rgba(255, 193, 7, 0.14); color: @bannerText; "
                   "border: 1px solid rgba(255, 193, 7, 0.45); border-radius: 6px; "
                   "padding: 8px; font-size: 12px;");
-        if (supportLevel == LinuxDesktopSupportLevel::Unsupported) {
-            QString detectedName = currentDesktop.trimmed();
-            if (detectedName.isEmpty())
-                detectedName = sessionDesktop.trimmed();
-            if (detectedName.isEmpty())
-                detectedName = TranslationManager::tr("desktopUnknown");
-            supportWarning->setText(TranslationManager::tr("desktopUnsupportedWarning")
-                                        .arg(detectedName.toHtmlEscaped()));
-        } else {
-            supportWarning->setText(TranslationManager::tr("desktopLimitedWarning"));
-        }
+        addTranslatedText([supportWarning, supportLevel, currentDesktop, sessionDesktop]() {
+            if (supportLevel == LinuxDesktopSupportLevel::Unsupported) {
+                QString detectedName = currentDesktop.trimmed();
+                if (detectedName.isEmpty())
+                    detectedName = sessionDesktop.trimmed();
+                if (detectedName.isEmpty())
+                    detectedName = TranslationManager::tr("desktopUnknown");
+                supportWarning->setText(TranslationManager::tr("desktopUnsupportedWarning")
+                                            .arg(detectedName.toHtmlEscaped()));
+            } else {
+                supportWarning->setText(TranslationManager::tr("desktopLimitedWarning"));
+            }
+        });
         mainLayout->addWidget(supportWarning);
     }
     if (isAppImageManagedExternally(qEnvironmentVariable("APPIMAGE"), QDir::homePath())) {
-        auto *managerWarning = new QLabel(TranslationManager::tr("appImageManagerWarning"));
+        auto *managerWarning = new QLabel();
+        addTranslatedText([managerWarning]() {
+            managerWarning->setText(TranslationManager::tr("appImageManagerWarning"));
+        });
         managerWarning->setWordWrap(true);
-        managerWarning->setStyleSheet(
-            "background: rgba(255, 193, 7, 0.14); color: #ffd166; "
+        ThemeColors::setStyleSheet(managerWarning,
+            "background: rgba(255, 193, 7, 0.14); color: @bannerText; "
             "border: 1px solid rgba(255, 193, 7, 0.45); border-radius: 6px; "
             "padding: 8px; font-size: 12px;");
         mainLayout->addWidget(managerWarning);
     }
 #endif
 
-    QGroupBox *langGroup = new QGroupBox(TranslationManager::language());
+    QGroupBox *langGroup = new QGroupBox();
+    addTranslatedText([langGroup]() { langGroup->setTitle(TranslationManager::language()); });
     QVBoxLayout *langLayout = new QVBoxLayout(langGroup);
     m_langCombo = new QComboBox();
     m_langCombo->addItem(QString::fromUtf8("Türkçe"), "tr");
@@ -176,13 +218,15 @@ void FirstRunWizard::setupUi()
     m_langCombo->addItem(QString::fromUtf8("日本語"), "ja");
     m_langCombo->addItem(QString::fromUtf8("中文"), "zh");
     m_langCombo->addItem(QString::fromUtf8("Русский"), "ru");
-    m_langCombo->setToolTip(TranslationManager::tr("wizardLanguageTip"));
+    addTranslatedText([this]() { m_langCombo->setToolTip(TranslationManager::tr("wizardLanguageTip")); });
     langLayout->addWidget(m_langCombo);
     mainLayout->addWidget(langGroup);
 
-    QGroupBox *hkGroup = new QGroupBox(TranslationManager::hotkeyTitle());
+    QGroupBox *hkGroup = new QGroupBox();
+    addTranslatedText([hkGroup]() { hkGroup->setTitle(TranslationManager::hotkeyTitle()); });
     QVBoxLayout *hkLayout = new QVBoxLayout(hkGroup);
-    QLabel *hkDesc = new QLabel(TranslationManager::wizardHotkeyDesc());
+    QLabel *hkDesc = new QLabel();
+    addTranslatedText([hkDesc]() { hkDesc->setText(TranslationManager::wizardHotkeyDesc()); });
     hkDesc->setWordWrap(true);
     hkLayout->addWidget(hkDesc);
     m_hotkeyEdit = new QKeySequenceEdit();
@@ -195,15 +239,21 @@ void FirstRunWizard::setupUi()
     m_hotkeyStatusLabel->setStyleSheet("font-size: 12px;");
     hkLayout->addWidget(m_hotkeyStatusLabel);
 
-    m_printScreenConflictLabel = new QLabel(TranslationManager::printScreenConflictMessage());
+    m_printScreenConflictLabel = new QLabel();
+    addTranslatedText([this]() {
+        m_printScreenConflictLabel->setText(TranslationManager::printScreenConflictMessage());
+    });
     m_printScreenConflictLabel->setWordWrap(true);
-    m_printScreenConflictLabel->setStyleSheet(
-        "background: rgba(255, 193, 7, 0.14); color: #ffd166; "
+    ThemeColors::setStyleSheet(m_printScreenConflictLabel,
+        "background: rgba(255, 193, 7, 0.14); color: @bannerText; "
         "border: 1px solid rgba(255, 193, 7, 0.45); border-radius: 6px; "
         "padding: 7px; font-size: 12px;");
     hkLayout->addWidget(m_printScreenConflictLabel);
 
-    m_printScreenFixButton = new QPushButton(TranslationManager::printScreenConflictFix());
+    m_printScreenFixButton = new QPushButton();
+    addTranslatedText([this]() {
+        m_printScreenFixButton->setText(TranslationManager::printScreenConflictFix());
+    });
     connect(m_printScreenFixButton, &QPushButton::clicked,
             this, &FirstRunWizard::onDisableWindowsPrintScreenSnipping);
     hkLayout->addWidget(m_printScreenFixButton);
@@ -211,38 +261,50 @@ void FirstRunWizard::setupUi()
     const LinuxDesktopEnvironment desktop = LinuxDesktopIntegration::detect(
         qEnvironmentVariable("XDG_CURRENT_DESKTOP"),
         qEnvironmentVariable("XDG_SESSION_DESKTOP"));
-    auto *activatePrintButton = new QPushButton(TranslationManager::tr("usePrintScreenForEshot"));
-    activatePrintButton->setToolTip(desktop == LinuxDesktopEnvironment::Kde
-        ? TranslationManager::tr("usePrintScreenKdeTip")
-        : TranslationManager::tr("usePrintScreenTip"));
+    auto *activatePrintButton = new QPushButton();
+    addTranslatedText([activatePrintButton, desktop]() {
+        activatePrintButton->setText(TranslationManager::tr("usePrintScreenForEshot"));
+        activatePrintButton->setToolTip(desktop == LinuxDesktopEnvironment::Kde
+            ? TranslationManager::tr("usePrintScreenKdeTip")
+            : TranslationManager::tr("usePrintScreenTip"));
+    });
     connect(activatePrintButton, &QPushButton::clicked,
             this, &FirstRunWizard::onActivateLinuxPrintScreen);
     hkLayout->addWidget(activatePrintButton);
 #endif
     mainLayout->addWidget(hkGroup);
 
-    QGroupBox *pathGroup = new QGroupBox(TranslationManager::saveDir());
+    QGroupBox *pathGroup = new QGroupBox();
+    addTranslatedText([pathGroup]() { pathGroup->setTitle(TranslationManager::saveDir()); });
     QHBoxLayout *pathLayout = new QHBoxLayout(pathGroup);
     m_savePathEdit = new QLineEdit();
-    QPushButton *browseBtn = new QPushButton(TranslationManager::browse());
+    QPushButton *browseBtn = new QPushButton();
+    addTranslatedText([browseBtn]() { browseBtn->setText(TranslationManager::browse()); });
     connect(browseBtn, &QPushButton::clicked, this, &FirstRunWizard::onBrowse);
     pathLayout->addWidget(m_savePathEdit);
     pathLayout->addWidget(browseBtn);
     mainLayout->addWidget(pathGroup);
 
 #ifdef Q_OS_LINUX
-    QGroupBox *depsGroup = new QGroupBox(TranslationManager::tr("linuxOptionalFeatures"));
+    QGroupBox *depsGroup = new QGroupBox();
     QVBoxLayout *depsLayout = new QVBoxLayout(depsGroup);
-    QLabel *depsHint = new QLabel(TranslationManager::tr("linuxOptionalFeaturesHint"));
+    QLabel *depsHint = new QLabel();
     depsHint->setWordWrap(true); depsLayout->addWidget(depsHint);
-    m_linuxFfmpegCheck = new QCheckBox(TranslationManager::tr("linuxFeatureFfmpeg"));
+    m_linuxFfmpegCheck = new QCheckBox();
     m_linuxOcrCheck = new QCheckBox(QStringLiteral("Tesseract OCR"));
-    m_linuxDesktopCheck = new QCheckBox(TranslationManager::tr("linuxFeaturePortal"));
-    m_linuxAppImageIntegrationCheck = new QCheckBox(TranslationManager::tr("linuxFeatureAppMenu"));
-    m_linuxFfmpegCheck->setToolTip(TranslationManager::tr("linuxFeatureFfmpegTip"));
-    m_linuxOcrCheck->setToolTip(TranslationManager::tr("linuxFeatureOcrTip"));
-    m_linuxDesktopCheck->setToolTip(TranslationManager::tr("linuxFeaturePortalTip"));
-    m_linuxAppImageIntegrationCheck->setToolTip(TranslationManager::tr("linuxFeatureAppMenuTip"));
+    m_linuxDesktopCheck = new QCheckBox();
+    m_linuxAppImageIntegrationCheck = new QCheckBox();
+    addTranslatedText([this, depsGroup, depsHint]() {
+        depsGroup->setTitle(TranslationManager::tr("linuxOptionalFeatures"));
+        depsHint->setText(TranslationManager::tr("linuxOptionalFeaturesHint"));
+        m_linuxFfmpegCheck->setText(TranslationManager::tr("linuxFeatureFfmpeg"));
+        m_linuxDesktopCheck->setText(TranslationManager::tr("linuxFeaturePortal"));
+        m_linuxAppImageIntegrationCheck->setText(TranslationManager::tr("linuxFeatureAppMenu"));
+        m_linuxFfmpegCheck->setToolTip(TranslationManager::tr("linuxFeatureFfmpegTip"));
+        m_linuxOcrCheck->setToolTip(TranslationManager::tr("linuxFeatureOcrTip"));
+        m_linuxDesktopCheck->setToolTip(TranslationManager::tr("linuxFeaturePortalTip"));
+        m_linuxAppImageIntegrationCheck->setToolTip(TranslationManager::tr("linuxFeatureAppMenuTip"));
+    });
     m_linuxFfmpegCheck->setChecked(true); m_linuxOcrCheck->setChecked(true);
     m_linuxDesktopCheck->setChecked(defaultLinuxPortalSelection(qEnvironmentVariable("XDG_SESSION_TYPE")));
     const bool offerAppImageIntegration = shouldOfferAppImageIntegration(
@@ -254,11 +316,14 @@ void FirstRunWizard::setupUi()
     const auto names = ocrLanguageDisplayNames();
     const auto defaults = defaultOcrLanguageCodes(QLocale::system().name());
     int languageIndex = 0;
-    for (const QString &code : supportedOcrLanguageCodes()) { auto *check = new QCheckBox(names.value(code)); check->setProperty("ocrCode", code); check->setChecked(defaults.contains(code)); check->setToolTip(TranslationManager::tr("ocrLanguageDataTip").arg(names.value(code))); languages->addWidget(check, languageIndex / 2, languageIndex % 2); m_linuxLanguageChecks << check; ++languageIndex; }
+    for (const QString &code : supportedOcrLanguageCodes()) { auto *check = new QCheckBox(names.value(code)); check->setProperty("ocrCode", code); check->setChecked(defaults.contains(code)); addTranslatedText([check, name = names.value(code)]() { check->setToolTip(TranslationManager::tr("ocrLanguageDataTip").arg(name)); }); languages->addWidget(check, languageIndex / 2, languageIndex % 2); m_linuxLanguageChecks << check; ++languageIndex; }
     depsLayout->addLayout(languages);
     connect(m_linuxOcrCheck, &QCheckBox::toggled, depsGroup, [this](bool enabled) { for (auto *check : m_linuxLanguageChecks) check->setEnabled(enabled); });
-    QPushButton *skipDeps = new QPushButton(TranslationManager::tr("linuxSkipOptionalSetup"));
-    skipDeps->setToolTip(TranslationManager::tr("linuxSkipOptionalSetupTip"));
+    QPushButton *skipDeps = new QPushButton();
+    addTranslatedText([skipDeps]() {
+        skipDeps->setText(TranslationManager::tr("linuxSkipOptionalSetup"));
+        skipDeps->setToolTip(TranslationManager::tr("linuxSkipOptionalSetupTip"));
+    });
     connect(skipDeps, &QPushButton::clicked, depsGroup, [this] { m_linuxExplicitSkip = true; m_linuxFfmpegCheck->setChecked(false); m_linuxOcrCheck->setChecked(false); m_linuxDesktopCheck->setChecked(false); m_linuxAppImageIntegrationCheck->setChecked(false); m_linuxInstallStatus->setText(TranslationManager::tr("linuxSetupWillBeSkipped")); });
     depsLayout->addWidget(skipDeps);
     m_skipDepsButton = skipDeps;
@@ -272,7 +337,8 @@ void FirstRunWizard::setupUi()
 
     QHBoxLayout *btnLayout = new QHBoxLayout();
     btnLayout->addStretch();
-    QPushButton *finishBtn = new QPushButton(TranslationManager::wizardFinish());
+    QPushButton *finishBtn = new QPushButton();
+    addTranslatedText([finishBtn]() { finishBtn->setText(TranslationManager::wizardFinish()); });
 #ifdef Q_OS_LINUX
     m_finishButton = finishBtn;
 #endif
@@ -291,13 +357,17 @@ void FirstRunWizard::loadDefaults()
 {
     QSettings s("EShot", "EShot");
 
-    // Match the onboarding language chosen by startup, even when a previous
-    // installation has saved another language. Finish saves the user's choice.
+    // Match the onboarding language chosen by startup (the system language on
+    // a first run). Picking another one retranslates the wizard right away;
+    // Finish saves the choice.
     const int langInt = static_cast<int>(TranslationManager::currentLanguage());
     static const char* langCodes[] = {"tr","en","de","fr","es","ja","zh","ru"};
     QString lang = (langInt >= 0 && langInt < TranslationManager::LangCount) ? langCodes[langInt] : "en";
     int li = m_langCombo->findData(lang);
-    if (li >= 0) m_langCombo->setCurrentIndex(li);
+    if (li >= 0) {
+        const QSignalBlocker blocker(m_langCombo);
+        m_langCombo->setCurrentIndex(li);
+    }
 
     UINT savedMod = static_cast<UINT>(s.value("hotkeyModifiers", 0).toUInt());
     UINT savedVKey = static_cast<UINT>(s.value("hotkeyVKey", VK_SNAPSHOT).toUInt());
@@ -341,10 +411,10 @@ void FirstRunWizard::onHotkeyChanged()
     const bool ok = keySequenceToWin32(m_hotkeyEdit->keySequence(), mod, vk);
     if (ok) {
         m_hotkeyStatusLabel->setText(QStringLiteral("OK: %1").arg(m_hotkeyEdit->keySequence().toString(QKeySequence::NativeText)));
-        m_hotkeyStatusLabel->setStyleSheet("color: #4caf50; font-size: 12px;");
+        ThemeColors::setStyleSheet(m_hotkeyStatusLabel, QStringLiteral("color: @success; font-size: 12px;"));
     } else {
         m_hotkeyStatusLabel->setText(TranslationManager::hotkeyInvalid());
-        m_hotkeyStatusLabel->setStyleSheet("color: #ff9800; font-size: 12px;");
+        ThemeColors::setStyleSheet(m_hotkeyStatusLabel, QStringLiteral("color: @warning; font-size: 12px;"));
     }
     updatePrintScreenConflictUi();
 }
@@ -381,7 +451,7 @@ void FirstRunWizard::onActivateLinuxPrintScreen()
         qEnvironmentVariable("XDG_SESSION_DESKTOP"));
     if (desktop == LinuxDesktopEnvironment::Other) {
         m_hotkeyStatusLabel->setText(TranslationManager::tr("printScreenDesktopsOnly"));
-        m_hotkeyStatusLabel->setStyleSheet("color: #ff9800; font-size: 12px;");
+        ThemeColors::setStyleSheet(m_hotkeyStatusLabel, QStringLiteral("color: @warning; font-size: 12px;"));
         return;
     }
 
@@ -390,13 +460,13 @@ void FirstRunWizard::onActivateLinuxPrintScreen()
         if (HotkeyManager::instance().linuxPortalShortcutsAvailable()) {
             if (!HotkeyManager::instance().reRegisterCaptureHotkey(0, VK_SNAPSHOT)) {
                 m_hotkeyStatusLabel->setText(TranslationManager::tr("gnomePrintScreenDenied"));
-                m_hotkeyStatusLabel->setStyleSheet("color: #ff9800; font-size: 12px;");
+                ThemeColors::setStyleSheet(m_hotkeyStatusLabel, QStringLiteral("color: @warning; font-size: 12px;"));
                 return;
             }
             if (shouldOfferAppImageIntegration(qEnvironmentVariable("APPIMAGE")))
                 m_linuxAppImageIntegrationCheck->setChecked(true);
             m_hotkeyStatusLabel->setText(TranslationManager::tr("gnomePrintScreenChoose"));
-            m_hotkeyStatusLabel->setStyleSheet("color: #4caf50; font-size: 12px;");
+            ThemeColors::setStyleSheet(m_hotkeyStatusLabel, QStringLiteral("color: @success; font-size: 12px;"));
             return;
         }
 
@@ -413,11 +483,11 @@ void FirstRunWizard::onActivateLinuxPrintScreen()
             LinuxGnomeShortcutInstaller::captureCommand(executable));
         if (!installed.success) {
             m_hotkeyStatusLabel->setText(TranslationManager::tr("gnomePrintScreenFailed").arg(installed.error));
-            m_hotkeyStatusLabel->setStyleSheet("color: #ff9800; font-size: 12px;");
+            ThemeColors::setStyleSheet(m_hotkeyStatusLabel, QStringLiteral("color: @warning; font-size: 12px;"));
             return;
         }
         m_hotkeyStatusLabel->setText(TranslationManager::tr("gnomePrintScreenActivated"));
-        m_hotkeyStatusLabel->setStyleSheet("color: #4caf50; font-size: 12px;");
+        ThemeColors::setStyleSheet(m_hotkeyStatusLabel, QStringLiteral("color: @success; font-size: 12px;"));
         return;
     }
 
@@ -436,7 +506,7 @@ void FirstRunWizard::onActivateLinuxPrintScreen()
         QStringLiteral("shortcut"), spectacleLaunchId);
     if (!globalAccel.isValid() || !currentReply.isValid()) {
         m_hotkeyStatusLabel->setText(TranslationManager::tr("kdeShortcutsReadFailed"));
-        m_hotkeyStatusLabel->setStyleSheet("color: #ff9800; font-size: 12px;");
+        ThemeColors::setStyleSheet(m_hotkeyStatusLabel, QStringLiteral("color: @warning; font-size: 12px;"));
         return;
     }
 
@@ -449,7 +519,7 @@ void FirstRunWizard::onActivateLinuxPrintScreen()
         QVariant::fromValue(shortcutsForEshot));
     if (!setReply.isValid()) {
         m_hotkeyStatusLabel->setText(TranslationManager::tr("kdeShortcutChangeDenied"));
-        m_hotkeyStatusLabel->setStyleSheet("color: #ff9800; font-size: 12px;");
+        ThemeColors::setStyleSheet(m_hotkeyStatusLabel, QStringLiteral("color: @warning; font-size: 12px;"));
         return;
     }
 
@@ -464,14 +534,14 @@ void FirstRunWizard::onActivateLinuxPrintScreen()
             : TranslationManager::tr("kdeSpectacleRestoreFailed");
         m_hotkeyStatusLabel->setText(
             TranslationManager::tr("kdePrintScreenRegisterFailed").arg(recovery));
-        m_hotkeyStatusLabel->setStyleSheet("color: #ff9800; font-size: 12px;");
+        ThemeColors::setStyleSheet(m_hotkeyStatusLabel, QStringLiteral("color: @warning; font-size: 12px;"));
         return;
     }
 
     if (shouldOfferAppImageIntegration(qEnvironmentVariable("APPIMAGE")))
         m_linuxAppImageIntegrationCheck->setChecked(true);
     m_hotkeyStatusLabel->setText(TranslationManager::tr("kdePrintScreenActivated"));
-    m_hotkeyStatusLabel->setStyleSheet("color: #4caf50; font-size: 12px;");
+    ThemeColors::setStyleSheet(m_hotkeyStatusLabel, QStringLiteral("color: @success; font-size: 12px;"));
 }
 #endif
 
@@ -545,15 +615,7 @@ void FirstRunWizard::onFinish()
         return;
     }
 
-    QString lang = m_langCombo->currentData().toString();
-    TranslationManager::Language langEnum = TranslationManager::English;
-    if (lang == "tr") langEnum = TranslationManager::Turkish;
-    else if (lang == "de") langEnum = TranslationManager::German;
-    else if (lang == "fr") langEnum = TranslationManager::French;
-    else if (lang == "es") langEnum = TranslationManager::Spanish;
-    else if (lang == "ja") langEnum = TranslationManager::Japanese;
-    else if (lang == "zh") langEnum = TranslationManager::Chinese;
-    else if (lang == "ru") langEnum = TranslationManager::Russian;
+    const TranslationManager::Language langEnum = languageFromCode(m_langCombo->currentData().toString());
 
     TranslationManager::setLanguage(langEnum);
 

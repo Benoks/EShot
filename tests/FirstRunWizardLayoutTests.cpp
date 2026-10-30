@@ -19,6 +19,44 @@ class FirstRunWizardLayoutTests : public QObject
 {
     Q_OBJECT
 private slots:
+    void pickingALanguageRetranslatesTheWizardWithoutSavingIt()
+    {
+        QSettings settings("EShot", "EShot");
+        const bool hadLanguage = settings.contains("language");
+        const QVariant language = settings.value("language");
+        const auto restore = qScopeGuard([&] {
+            if (hadLanguage) settings.setValue("language", language);
+            else settings.remove("language");
+            TranslationManager::setLanguage(TranslationManager::English, false);
+        });
+        settings.setValue("language", static_cast<int>(TranslationManager::English));
+        TranslationManager::setLanguage(TranslationManager::German, false);
+        FirstRunWizard wizard;
+        auto *languageCombo = wizard.findChild<QComboBox *>();
+        QVERIFY(languageCombo);
+        QCOMPARE(languageCombo->currentData().toString(), QStringLiteral("de"));
+
+        languageCombo->setCurrentIndex(languageCombo->findData(QStringLiteral("tr")));
+        QCOMPARE(TranslationManager::currentLanguage(), TranslationManager::Turkish);
+        QCOMPARE(wizard.windowTitle(), TranslationManager::wizardTitle());
+        bool finishFound = false;
+        for (QPushButton *button : wizard.findChildren<QPushButton *>())
+            finishFound = finishFound || button->text() == TranslationManager::wizardFinish();
+        QVERIFY(finishFound);
+        bool groupFound = false;
+        for (QGroupBox *group : wizard.findChildren<QGroupBox *>())
+            groupFound = groupFound || group->title() == TranslationManager::language();
+        QVERIFY(groupFound);
+        QCOMPARE(settings.value("language").toInt(), static_cast<int>(TranslationManager::English));
+    }
+
+    void systemLanguageFollowsTheLocale()
+    {
+        QCOMPARE(TranslationManager::languageForLocale(QLocale(QLocale::Turkish)), TranslationManager::Turkish);
+        QCOMPARE(TranslationManager::languageForLocale(QLocale(QLocale::German)), TranslationManager::German);
+        QCOMPARE(TranslationManager::languageForLocale(QLocale(QLocale::Italian)), TranslationManager::English);
+    }
+
     void onboardingKeepsItsEnglishDefaultDespiteSavedLanguage()
     {
         QSettings settings("EShot", "EShot");
