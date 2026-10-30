@@ -1,4 +1,5 @@
 #include "CaptureOverlay.h"
+#include "../core/ProtectedFolderHint.h"
 #include "CaptureInteractionPolicy.h"
 #include "CaptureScreenViews.h"
 #include "WindowSnapPolicy.h"
@@ -5005,13 +5006,15 @@ void CaptureOverlay::onSave()
         filename = cliFullPath;
         QFileInfo fi(filename);
         if (!fi.absoluteDir().exists() && !QDir().mkpath(fi.absolutePath())) {
-            QMessageBox::warning(this, TranslationManager::errTitle(), TranslationManager::errSaveDir() + fi.absolutePath());
+            ProtectedFolderHint::warnScreenshotSaveFailed(this, TranslationManager::errTitle(), filename, result,
+                                                          TranslationManager::errSaveDir() + fi.absolutePath());
             return;
         }
     } else {
         QDir dir(path);
         if (!dir.exists() && !dir.mkpath(".")) {
-            QMessageBox::warning(this, TranslationManager::errTitle(), TranslationManager::errSaveDir() + path);
+            ProtectedFolderHint::warnScreenshotSaveFailed(this, TranslationManager::errTitle(), path, result,
+                                                          TranslationManager::errSaveDir() + path);
             return;
         }
 
@@ -5043,7 +5046,8 @@ void CaptureOverlay::onSave()
         }
     } else {
         qWarning() << "[CaptureOverlay] Save failed:" << filename;
-        QMessageBox::warning(this, TranslationManager::errTitle(), QStringLiteral("Save failed:\n") + QDir::toNativeSeparators(filename));
+        ProtectedFolderHint::warnScreenshotSaveFailed(this, TranslationManager::errTitle(), filename, result,
+                                                      QStringLiteral("Save failed:\n") + QDir::toNativeSeparators(filename));
         return;
     }
 

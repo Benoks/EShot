@@ -2,6 +2,7 @@
 
 #include "core/AppLifecyclePolicy.h"
 #include "core/WindowsElevatedStartup.h"
+#include "core/ProtectedFolderHint.h"
 
 using namespace AppLifecyclePolicy;
 
@@ -69,6 +70,23 @@ private slots:
         QVERIFY(!windowsStartupApprovedDisabled(QByteArray::fromHex("060000000000000000000000")));
         QVERIFY(windowsStartupApprovedDisabled(QByteArray::fromHex("03000000d0c1f2c3a4b5d601")));
         QVERIFY(windowsStartupApprovedDisabled(QByteArray::fromHex("07")));
+    }
+
+    void controlledFolderHintOnlyForProtectedWindowsFolders()
+    {
+        const QStringList roots{QStringLiteral("C:\\Users\\me\\Pictures"),
+                                QStringLiteral("C:/Users/me/Videos/")};
+        QVERIFY(ProtectedFolderHint::pathIsInside(
+            QStringLiteral("C:\\Users\\me\\Pictures\\EShot\\Screenshots\\a.png"), roots));
+        QVERIFY(ProtectedFolderHint::pathIsInside(QStringLiteral("c:/users/ME/videos"), roots));
+        QVERIFY(!ProtectedFolderHint::pathIsInside(QStringLiteral("C:/Users/me/PicturesOld/a.png"), roots));
+        QVERIFY(!ProtectedFolderHint::pathIsInside(QStringLiteral("D:/Shots/a.png"), roots));
+
+        QVERIFY(ProtectedFolderHint::shouldShowHint(true, true, true, false));
+        QVERIFY(ProtectedFolderHint::shouldShowHint(true, true, false, true));
+        QVERIFY(!ProtectedFolderHint::shouldShowHint(true, true, false, false));
+        QVERIFY(!ProtectedFolderHint::shouldShowHint(true, false, true, true));
+        QVERIFY(!ProtectedFolderHint::shouldShowHint(false, true, true, true));
     }
 };
 

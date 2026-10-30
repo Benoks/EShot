@@ -50,6 +50,7 @@
 #include "core/NotificationFolderOpener.h"
 #include "core/ApplicationInstanceCommand.h"
 #include "core/AppLifecyclePolicy.h"
+#include "core/ProtectedFolderHint.h"
 #if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
 #include "core/LinuxDesktopNotification.h"
 #include "core/LinuxPortalHostRegistry.h"
@@ -983,9 +984,10 @@ public slots:
         logRecordingFailure(reason, failure);
         if (!failure.silent) {
             // Long enough to read where a kept recording is.
-            showFailureNotification(TranslationManager::recordingFailed() + QStringLiteral(": ")
-                                        + failure.text,
-                                    failure.text.contains(QLatin1Char('\n')) ? 10000 : 5000);
+            const QString hint = ProtectedFolderHint::recordingFailureHint(false);
+            const QString text = failure.text + (hint.isEmpty() ? QString() : QStringLiteral("\n") + hint);
+            showFailureNotification(TranslationManager::recordingFailed() + QStringLiteral(": ") + text,
+                                    text.contains(QLatin1Char('\n')) ? 10000 : 5000);
         }
         rebuildTrayMenu();
     }
@@ -1047,9 +1049,11 @@ public slots:
         const RecordingFailureMessage failure = recordingFailureMessage(reason);
         logRecordingFailure(reason, failure);
         if (!failure.silent) {
-            showFailureNotification(TranslationManager::videoFailed() + QStringLiteral(": ")
-                                        + failure.text,
-                                    failure.text.contains(QLatin1Char('\n')) ? 10000 : 5000);
+            // Controlled folder access blocks ffmpeg.exe separately from EShot.
+            const QString hint = ProtectedFolderHint::recordingFailureHint(true);
+            const QString text = failure.text + (hint.isEmpty() ? QString() : QStringLiteral("\n") + hint);
+            showFailureNotification(TranslationManager::videoFailed() + QStringLiteral(": ") + text,
+                                    text.contains(QLatin1Char('\n')) ? 10000 : 5000);
         }
         rebuildTrayMenu();
     }

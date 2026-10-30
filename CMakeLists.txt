@@ -59,6 +59,7 @@ set(SOURCES
     src/capture/ShortcutSheet.cpp
     src/core/LinuxUpdateScript.cpp
     src/core/AppLifecyclePolicy.cpp
+    src/core/ProtectedFolderHint.cpp
     src/core/LinuxDependencySelection.cpp
     src/core/CatboxUploader.cpp
     src/core/UguuUploader.cpp
@@ -144,6 +145,7 @@ set(HEADERS
     src/capture/ShortcutSheet.h
     src/core/LinuxUpdateScript.h
     src/core/AppLifecyclePolicy.h
+    src/core/ProtectedFolderHint.h
     src/core/LinuxDependencySelection.h
     src/core/CatboxUploader.h
     src/core/UguuUploader.h
@@ -931,7 +933,11 @@ if(BUILD_TESTING)
             src/core/AppLifecyclePolicy.h
             src/core/WindowsElevatedStartup.cpp
             src/core/WindowsElevatedStartup.h
-        LIBS Qt6::Core
+            src/core/ProtectedFolderHint.cpp
+            src/core/ProtectedFolderHint.h
+            src/core/ComponentPaths.cpp
+            src/core/ComponentPaths.h
+        LIBS Qt6::Core Qt6::Gui Qt6::Widgets
     )
     if(WIN32)
         target_link_libraries(eshot_app_lifecycle_policy_tests PRIVATE shell32 advapi32)
