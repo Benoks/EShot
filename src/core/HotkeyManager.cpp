@@ -441,7 +441,10 @@ bool HotkeyManager::registerPlatformHotkey(int id, UINT modifiers, UINT virtualK
     if (virtualKey == 0)
         return true;
 #ifdef Q_OS_WIN
-    if (RegisterHotKey(nullptr, id, modifiers, virtualKey)) {
+    // MOD_NOREPEAT stops auto-repeat from sending WM_HOTKEY while the key
+    // is held (a held pause key would otherwise toggle many times). It is
+    // added only for the Win32 call; stored definitions stay unchanged.
+    if (RegisterHotKey(nullptr, id, modifiers | MOD_NOREPEAT, virtualKey)) {
         if (!m_registeredHotkeys.contains(id))
             m_registeredHotkeys.append(id);
         m_registeredHotkeyDefs.insert(id, qMakePair(modifiers, virtualKey));
