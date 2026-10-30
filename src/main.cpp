@@ -1899,7 +1899,13 @@ private:
         bool finished = false;
         poll.setInterval(250);
         connect(&poll, &QTimer::timeout, &loop, [&]() {
-            const bool overlayVisible = m_overlay && m_overlay->isVisible();
+            bool overlayVisible = m_overlay && m_overlay->isVisible();
+            // Native KDE per-output mode shows the capture in separate views.
+            const auto windows = QApplication::topLevelWidgets();
+            for (QWidget *window : windows) {
+                if (window && window->isVisible() && window->property("captureScreenName").isValid())
+                    overlayVisible = true;
+            }
             overlaySeen = overlaySeen || overlayVisible;
             // Instant captures and failed starts never show the overlay.
             const bool captureStartedOrGaveUp = overlaySeen || waited.elapsed() > 3000;
