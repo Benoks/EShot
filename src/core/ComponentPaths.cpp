@@ -71,9 +71,13 @@ QString ffmpegPath()
 #ifndef Q_OS_WIN
     candidates << QDir(appDir).filePath(QStringLiteral("../third_party/ffmpeg/bin/ffmpeg"));
 #endif
+#ifdef ESHOT_DEV_FFMPEG_FROM_CWD
+    // Development only: a CLI launch from an arbitrary folder must never
+    // pick up whatever ffmpeg binary that folder contains.
     candidates << QDir::current().filePath(QStringLiteral("third_party/ffmpeg/bin/ffmpeg.exe"));
 #ifndef Q_OS_WIN
     candidates << QDir::current().filePath(QStringLiteral("third_party/ffmpeg/bin/ffmpeg"));
+#endif
 #endif
     for (const QString &path : candidates) {
         const QFileInfo info(path);
