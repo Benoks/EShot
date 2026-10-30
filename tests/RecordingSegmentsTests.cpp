@@ -73,6 +73,38 @@ private slots:
                                               QDateTime(), now));
     }
 
+    void sweepsOnlyStaleIntermediates()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QDateTime now = QDateTime::currentDateTime();
+        auto touch = [&](const QString &name, const QDateTime &modified) {
+            QFile file(dir.filePath(name));
+            QVERIFY(file.open(QIODevice::WriteOnly));
+            file.write("x");
+            file.flush();
+            QVERIFY(file.setFileTime(modified, QFileDevice::FileModificationTime));
+            file.close();
+        };
+        touch(QStringLiteral(".eshot_segment_old_000.mp4"), now.addDays(-2));
+        touch(QStringLiteral(".eshot_gif_old.mp4"), now.addDays(-3));
+        touch(QStringLiteral(".eshot_segment_new_000.mp4"), now.addSecs(-60));
+        touch(QStringLiteral("EShot_Video_old.mp4"), now.addDays(-30));
+        QCOMPARE(sweepStaleRecordingIntermediates(dir.path(), now), 2);
+        QVERIFY(!QFileInfo::exists(dir.filePath(QStringLiteral(".eshot_gif_old.mp4"))));
+        QVERIFY(QFileInfo::exists(dir.filePath(QStringLiteral(".eshot_segment_new_000.mp4"))));
+        QVERIFY(QFileInfo::exists(dir.filePath(QStringLiteral("EShot_Video_old.mp4"))));
+    }
+
+    void gifIntermediateIsAHiddenEshotFile()
+    {
+        const QString path = gifIntermediateVideoPath(QStringLiteral("/gifs"), QStringLiteral("20261030_120000_001"));
+        QCOMPARE(path, QStringLiteral("/gifs/.eshot_gif_20261030_120000_001.mp4"));
+        QVERIFY(isStaleRecordingIntermediate(QFileInfo(path).fileName(),
+                                             QDateTime::currentDateTime().addDays(-2),
+                                             QDateTime::currentDateTime()));
+    }
+
     void concatListKeepsNonAsciiPathsAsUtf8()
     {
         const QByteArray list = ffmpegConcatList({QStringLiteral("/home/u/Masaüstü/a.mp4")});

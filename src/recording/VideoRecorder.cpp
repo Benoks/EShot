@@ -158,18 +158,6 @@ void stopWithRecorder(QProcess *process)
 }
 
 #ifdef Q_OS_WIN
-// Removes `.eshot_*` intermediates a crashed recording left behind.
-void sweepStaleRecordingIntermediates(const QString &directory)
-{
-    const QDateTime now = QDateTime::currentDateTime();
-    const QFileInfoList entries = QDir(directory).entryInfoList(
-        {QStringLiteral(".eshot_*")}, QDir::Files | QDir::Hidden | QDir::System);
-    for (const QFileInfo &entry : entries) {
-        if (isStaleRecordingIntermediate(entry.fileName(), entry.lastModified(), now))
-            QFile::remove(entry.absoluteFilePath());
-    }
-}
-
 void writeSilence(QFile &file, quint64 bytes)
 {
     static const QByteArray zeros(64 * 1024, '\0');
@@ -447,6 +435,8 @@ void VideoRecorder::start(const QRect &captureRect, int fps, int maxSeconds, int
     m_segmentCount = 0;
     m_segmentDirectory = dir.absolutePath();
     m_segmentStamp = QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd_hhmmss_zzz"));
+    // `.eshot_*` intermediates a crashed recording left behind (all platforms).
+    sweepStaleRecordingIntermediates(m_segmentDirectory, QDateTime::currentDateTime());
 
 #if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
     if (LinuxPortalScreenCast::isWaylandSession()) {
@@ -470,7 +460,6 @@ void VideoRecorder::start(const QRect &captureRect, int fps, int maxSeconds, int
 
     QString error;
 #ifdef Q_OS_WIN
-    sweepStaleRecordingIntermediates(m_segmentDirectory);
     // Kept for every segment of this recording, so they can be joined.
     m_windowsPlan = windowsVideoPlanForRecording(m_ffmpegPath, m_captureRect, false);
     // recordingStarted() follows once FFmpeg reports progress (see

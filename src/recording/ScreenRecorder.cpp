@@ -832,8 +832,12 @@ bool ScreenRecorder::startWaylandPortalRecording(const QRect &captureRect)
     const QSize gifSize = boundedOutputSize(crop.cropSize);
     m_portalGifScale = gifSize != crop.cropSize ? gifSize : QSize();
     m_timeline = RecordingTimeline();
-    m_portalVideoPath = m_outputPath + QStringLiteral(".portal.mp4");
     m_portalSegmentStamp = QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd_hhmmss_zzz"));
+    // Hidden, so it does not show up in the GIF folder while recording; a
+    // crash leaves it to the stale-intermediate sweep.
+    const QString gifDirectory = QFileInfo(m_outputPath).absolutePath();
+    sweepStaleRecordingIntermediates(gifDirectory, QDateTime::currentDateTime());
+    m_portalVideoPath = gifIntermediateVideoPath(gifDirectory, m_portalSegmentStamp);
     QFile::remove(m_portalVideoPath);
 
     m_recording = true;
@@ -1381,7 +1385,8 @@ bool ScreenRecorder::startWindowsFfmpegRecording()
     updateWindowsGifScale();
     m_timeline = RecordingTimeline();
     m_portalSegmentStamp = QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd_hhmmss_zzz"));
-    m_portalVideoPath = dir.filePath(QStringLiteral(".eshot_gif_%1.mp4").arg(m_portalSegmentStamp));
+    sweepStaleRecordingIntermediates(dir.absolutePath(), QDateTime::currentDateTime());
+    m_portalVideoPath = gifIntermediateVideoPath(dir.absolutePath(), m_portalSegmentStamp);
     QFile::remove(m_portalVideoPath);
 
     m_recording = true;

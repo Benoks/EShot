@@ -36,3 +36,9 @@ QString uniqueRecordingOutputPath(const QString &path,
 // safe to sweep when a new recording starts in the same folder.
 bool isStaleRecordingIntermediate(const QString &fileName, const QDateTime &lastModified,
                                   const QDateTime &now);
+// Removes the stale `.eshot_*` intermediates (see above) from `directory`;
+// returns how many were removed.
+int sweepStaleRecordingIntermediates(const QString &directory, const QDateTime &now);
+// Hidden intermediate video a portal or Windows GIF recording is captured
+// to before the GIF conversion.
+QString gifIntermediateVideoPath(const QString &directory, const QString &stamp);

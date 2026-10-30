@@ -2,6 +2,7 @@
 
 #include <QDateTime>
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 
 QString recordingSegmentPath(const QString &directory, const QString &stamp, int index)
@@ -114,4 +115,22 @@ bool isStaleRecordingIntermediate(const QString &fileName, const QDateTime &last
     if (!fileName.startsWith(QStringLiteral(".eshot_")) || !lastModified.isValid())
         return false;
     return lastModified.secsTo(now) > 24 * 60 * 60;
+}
+
+int sweepStaleRecordingIntermediates(const QString &directory, const QDateTime &now)
+{
+    int removed = 0;
+    const QFileInfoList entries = QDir(directory).entryInfoList(
+        {QStringLiteral(".eshot_*")}, QDir::Files | QDir::Hidden | QDir::System);
+    for (const QFileInfo &entry : entries) {
+        if (isStaleRecordingIntermediate(entry.fileName(), entry.lastModified(), now)
+            && QFile::remove(entry.absoluteFilePath()))
+            ++removed;
+    }
+    return removed;
+}
+
+QString gifIntermediateVideoPath(const QString &directory, const QString &stamp)
+{
+    return QDir(directory).filePath(QStringLiteral(".eshot_gif_%1.mp4").arg(stamp));
 }
