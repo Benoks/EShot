@@ -324,6 +324,16 @@ public slots:
         rebuildTrayMenu();
     }
 
+    // A capture hotkey pressed while the overlay is open closes it, so a
+    // fullscreen app that keeps the mouse and keyboard cannot trap the user.
+    bool cancelOpenCapture()
+    {
+        if (!m_overlay || !m_overlay->isCaptureActive())
+            return false;
+        m_overlay->cancelActiveCapture();
+        return true;
+    }
+
     void onCaptureRequested()
     {
         if (captureBlockedByDialog())
@@ -332,7 +342,7 @@ public slots:
             QTimer::singleShot(80, this, &EShotApp::onCaptureRequested);
             return;
         }
-        if (m_overlay && m_overlay->isVisible()) return;
+        if (cancelOpenCapture()) return;
         ensureOverlay();
         m_overlay->startCapture();
     }
@@ -346,7 +356,7 @@ public slots:
             QTimer::singleShot(80, this, &EShotApp::onWindowCaptureRequested);
             return;
         }
-        if (m_overlay && m_overlay->isVisible()) return;
+        if (cancelOpenCapture()) return;
         ensureOverlay();
         m_overlay->startWindowCapture();
 #endif
@@ -799,7 +809,7 @@ public slots:
         }
         if (cancelPendingRecordingStart()) return;
         if (recordingBusy()) return;
-        if (m_overlay && m_overlay->isVisible()) return;
+        if (cancelOpenCapture()) return;
         m_pendingMode = 2;
         ensureOverlay();
         m_overlay->startCaptureForRecording();
@@ -813,7 +823,7 @@ public slots:
         }
         if (cancelPendingRecordingStart()) return;
         if (recordingBusy()) return;
-        if (m_overlay && m_overlay->isVisible()) return;
+        if (cancelOpenCapture()) return;
         m_pendingMode = 3;
         ensureOverlay();
         m_overlay->startCaptureForRecording();
@@ -827,7 +837,7 @@ public slots:
             QTimer::singleShot(80, this, &EShotApp::onInstantCaptureRequested);
             return;
         }
-        if (m_overlay && m_overlay->isVisible()) return;
+        if (cancelOpenCapture()) return;
         ensureOverlay();
         m_overlay->startInstantCapture();
     }
