@@ -38,6 +38,7 @@ set(SOURCES
     src/core/LinuxPortalScreenCast.cpp
     src/core/LinuxPortalScreenshot.cpp
     src/core/LinuxKWinActivation.cpp
+    src/core/LinuxKWinScript.cpp
     src/core/LinuxActiveWindowTitle.cpp
     src/core/LinuxDesktopIntegration.cpp
     src/core/LinuxGnomeShortcutInstaller.cpp
@@ -128,6 +129,8 @@ set(HEADERS
     src/core/LinuxPortalScreenCast.h
     src/core/LinuxPortalScreenshot.h
     src/core/LinuxKWinActivation.h
+    src/core/LinuxKWinScript.h
+    src/core/WindowCaptureSupport.h
     src/core/LinuxActiveWindowTitle.h
     src/core/LinuxDesktopIntegration.h
     src/core/LinuxGnomeShortcutInstaller.h
@@ -215,6 +218,8 @@ set(RESOURCES
 if(UNIX AND NOT APPLE)
     list(APPEND SOURCES src/core/LinuxKGlobalAccelShortcuts.cpp)
     list(APPEND HEADERS src/core/LinuxKGlobalAccelShortcuts.h)
+    list(APPEND SOURCES src/capture/KWinWindowList.cpp src/capture/KWinWindowListClient.cpp)
+    list(APPEND HEADERS src/capture/KWinWindowList.h src/capture/KWinWindowListClient.h)
     list(APPEND SOURCES src/core/LinuxDesktopNotification.cpp)
     list(APPEND HEADERS src/core/LinuxDesktopNotification.h)
     list(APPEND SOURCES src/core/LinuxUninstallPolicy.cpp src/core/LinuxUninstaller.cpp)
@@ -751,8 +756,31 @@ if(BUILD_TESTING)
                 tests/LinuxKWinActivationTests.cpp
                 src/core/LinuxKWinActivation.cpp
                 src/core/LinuxKWinActivation.h
+                src/core/LinuxKWinScript.cpp
+                src/core/LinuxKWinScript.h
             LIBS Qt6::Core Qt6::DBus
         )
+
+        eshot_add_test(eshot_kwin_window_list_tests kwin_window_list
+            SOURCES
+                tests/KWinWindowListTests.cpp
+                src/capture/KWinWindowList.cpp
+                src/capture/KWinWindowList.h
+                src/capture/KWinWindowListClient.cpp
+                src/capture/KWinWindowListClient.h
+                src/capture/WindowSnapPolicy.cpp
+                src/capture/WindowSnapPolicy.h
+                src/core/LinuxKWinScript.cpp
+                src/core/LinuxKWinScript.h
+            LIBS Qt6::Core Qt6::DBus
+        )
+        # The generated KWin script is also run against mocked KWin 6 and
+        # KWin 5 APIs when Qt's JavaScript engine is installed.
+        find_package(Qt6 QUIET COMPONENTS Qml)
+        if(TARGET Qt6::Qml)
+            target_link_libraries(eshot_kwin_window_list_tests PRIVATE Qt6::Qml)
+            target_compile_definitions(eshot_kwin_window_list_tests PRIVATE ESHOT_TEST_HAVE_QJSENGINE=1)
+        endif()
 
         eshot_add_test(eshot_linux_portal_shortcut_tests linux_portal_shortcut
             SOURCES

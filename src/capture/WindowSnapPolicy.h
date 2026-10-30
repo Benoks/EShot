@@ -23,6 +23,10 @@ QRect windowSnapTargetForMode(CaptureSelectionMode mode,
                               const QRect &overlayBounds);
 
 bool allowsManualSelection(CaptureSelectionMode mode);
+// windowModeAllowsDrag: a window capture also accepts a dragged region. On
+// KDE the window list arrives from KWin asynchronously and may be missing,
+// so dragging stays available there; Windows keeps clicks only.
+bool allowsManualSelection(CaptureSelectionMode mode, bool windowModeAllowsDrag);
 
 int windowSnapAnimationDurationMs();
 QRect windowSnapTransitionRect(const QRect &from, const QRect &to, qreal progress);

@@ -72,6 +72,11 @@ bool useGnomeShortcutFallback(LinuxDesktopEnvironment desktop, bool portalAvaila
     return desktop == LinuxDesktopEnvironment::Gnome && !portalAvailable;
 }
 
+bool supportsWindowCapture(LinuxDesktopEnvironment desktop)
+{
+    return desktop == LinuxDesktopEnvironment::Kde;
+}
+
 bool shouldShowControlCenter(LinuxDesktopEnvironment desktop, bool trayAvailable, bool silent)
 {
     return desktop == LinuxDesktopEnvironment::Gnome && !trayAvailable && !silent;

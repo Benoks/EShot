@@ -28,6 +28,11 @@ class QPainter;
 #include "CaptureScreenImage.h"
 #include "WindowSnapPolicy.h"
 
+#if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
+#include "KWinWindowList.h"
+class KWinWindowListClient;
+#endif
+
 #ifdef Q_OS_WIN
 #include <windows.h>
 using EShotNativeWindowHandle = HWND;
@@ -122,6 +127,14 @@ private:
     bool handleSelectionNudgeKey(QKeyEvent *event);
     QRegion visibleSelectionUiRegion() const;
     void setHoveredWindowRect(const QRect &targetRect);
+    bool manualSelectionAllowed() const;
+#if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
+    // KDE window selection: KWin's window list arrives asynchronously while
+    // the screenshot is taken and fills m_windowSnapCandidates once both
+    // the list and the overlay geometry are known.
+    void requestKdeWindowList();
+    void applyKdeWindowList();
+#endif
     void updateOverlayRegion(const QRegion &region);
     void resetGestureState();
     void resetSelection();
@@ -171,6 +184,10 @@ private:
     QPoint m_windowSnapPressPosition;
     bool m_windowSnapClickPending = false;
     CaptureSelectionMode m_selectionMode = CaptureSelectionMode::FreeRegion;
+#if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
+    KWinWindowListClient *m_kwinWindowList = nullptr;
+    KWinWindowSnapshot m_kdeWindowSnapshot;
+#endif
 
     QRect m_virtualDesktopRect;
     QScreen *m_captureScreen = nullptr;

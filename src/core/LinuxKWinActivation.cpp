@@ -1,30 +1,19 @@
 #include "LinuxKWinActivation.h"
 
-#include <QJsonArray>
-#include <QJsonDocument>
+#include "LinuxKWinScript.h"
 
 #if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
 #include <QCoreApplication>
 #include <QDBusConnection>
 #include <QDBusMessage>
 #include <QDebug>
-#include <QDir>
 #include <QFile>
-#include <QStandardPaths>
-#include <QTemporaryFile>
 #include <QTimer>
 #endif
 
 namespace LinuxKWinActivation {
 
 namespace {
-
-QString jsString(const QString &value)
-{
-    // A one-element JSON array gives correctly escaped string syntax.
-    const QByteArray json = QJsonDocument(QJsonArray{value}).toJson(QJsonDocument::Compact);
-    return QString::fromUtf8(json.mid(1, json.size() - 2));
-}
 
 #if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
 QDBusMessage callScripting(const QString &method, const QList<QVariant> &arguments)
@@ -57,7 +46,7 @@ QString activationScript(qint64 pid, const QString &caption)
         "            workspace.activeClient = window;\n"
         "        break;\n"
         "    }\n"
-        "})();\n").arg(QString::number(pid), jsString(caption));
+        "})();\n").arg(QString::number(pid), LinuxKWinScript::jsString(caption));
 }
 
 QString pluginName(qint64 pid)
@@ -70,18 +59,9 @@ bool requestActivation(qint64 pid, const QString &caption)
 #if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
     if (!QDBusConnection::sessionBus().isConnected())
         return false;
-    QString directory = QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation);
-    if (directory.isEmpty())
-        directory = QDir::tempPath();
-    QTemporaryFile file(QDir(directory).filePath(QStringLiteral("eshot-kwin-XXXXXX.js")));
-    file.setAutoRemove(false);
-    if (!file.open()) {
-        qWarning() << "[KWinActivation] could not write the script:" << file.errorString();
+    const QString path = LinuxKWinScript::writeScriptFile(activationScript(pid, caption));
+    if (path.isEmpty())
         return false;
-    }
-    file.write(activationScript(pid, caption).toUtf8());
-    const QString path = file.fileName();
-    file.close();
 
     const QString plugin = pluginName(pid);
     callScripting(QStringLiteral("unloadScript"), {plugin});

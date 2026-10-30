@@ -37,7 +37,13 @@ QRect windowSnapTargetForMode(CaptureSelectionMode mode,
 
 bool allowsManualSelection(CaptureSelectionMode mode)
 {
-    return mode == CaptureSelectionMode::FreeRegion;
+    return allowsManualSelection(mode, false);
+}
+
+bool allowsManualSelection(CaptureSelectionMode mode, bool windowModeAllowsDrag)
+{
+    return mode == CaptureSelectionMode::FreeRegion
+        || (mode == CaptureSelectionMode::Window && windowModeAllowsDrag);
 }
 
 int windowSnapAnimationDurationMs()

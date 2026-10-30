@@ -31,6 +31,9 @@ LinuxDesktopSupportLevel startupSupportLevel(LinuxDesktopEnvironment desktop,
 bool deferFirstRunHotkeyRegistration(LinuxDesktopEnvironment desktop);
 bool deferOverlayPrewarmUntilFirstRunCompletes(bool firstRunInProgress);
 bool useGnomeShortcutFallback(LinuxDesktopEnvironment desktop, bool portalAvailable);
+// Window selection needs KWin's window list (one-shot KWin script), so it is
+// offered on KDE Plasma only, on Wayland and X11.
+bool supportsWindowCapture(LinuxDesktopEnvironment desktop);
 bool shouldShowControlCenter(LinuxDesktopEnvironment desktop, bool trayAvailable, bool silent);
 QString displayName(LinuxDesktopEnvironment desktop);
 

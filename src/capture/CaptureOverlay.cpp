@@ -4,6 +4,10 @@
 #include "CaptureScreenViews.h"
 #include "WindowSnapPolicy.h"
 #include "WindowsWindowProvider.h"
+#if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
+#include "KWinWindowListClient.h"
+#include "core/WindowCaptureSupport.h"
+#endif
 #include "WindowsScreenGrab.h"
 #include "PinnedWindow.h"
 #include "annotation/AnnotationEngine.h"
@@ -2038,6 +2042,11 @@ void CaptureOverlay::startCaptureInternal(CaptureSelectionMode selectionMode, bo
     m_selectionEnd = QPoint();
     m_selectionAnchorScreenRect = QRect();
     m_windowSnapCandidates.clear();
+#if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
+    if (m_kwinWindowList)
+        m_kwinWindowList->cancel();
+    m_kdeWindowSnapshot = KWinWindowSnapshot();
+#endif
     setHoveredWindowRect(QRect());
     m_pressedWindowRect = QRect();
     m_windowSnapClickPending = false;
@@ -2133,6 +2142,11 @@ void CaptureOverlay::performCapture()
 {
     if (m_captureInFlight)
         return;
+#if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
+    // Ask KWin for the window list first; it is answered while the
+    // screenshot is being taken.
+    requestKdeWindowList();
+#endif
     m_captureInFlight = true;
     captureAllScreens();
     m_captureInFlight = false;
@@ -2179,6 +2193,8 @@ void CaptureOverlay::performCapture()
     }
     setHoveredWindowRect(windowSnapTargetForMode(
         m_selectionMode, m_windowSnapCandidates, mapFromGlobal(QCursor::pos()), rect()));
+#elif defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
+    applyKdeWindowList();
 #endif
     // Native views activate their own output window. All other platforms keep
     // the original focus order, including Win32's foreground-window handling.
@@ -3068,7 +3084,7 @@ void CaptureOverlay::mousePressEvent(QMouseEvent *event)
                 event->accept();
                 return;
             }
-            if (!allowsManualSelection(m_selectionMode)) {
+            if (!manualSelectionAllowed()) {
                 event->accept();
                 return;
             }
@@ -3200,7 +3216,7 @@ void CaptureOverlay::mouseDoubleClickEvent(QMouseEvent *event)
         mousePressEvent(event);
         return;
     }
-    if (!allowsManualSelection(m_selectionMode))
+    if (!manualSelectionAllowed())
         return;
     if (m_toolbar && m_toolbar->isVisible() && m_toolbar->geometry().contains(event->pos()))
         return;
@@ -3300,7 +3316,7 @@ void CaptureOverlay::mouseMoveEvent(QMouseEvent *event)
                                QApplication::startDragDistance())) {
             m_windowSnapClickPending = false;
             m_pressedWindowRect = QRect();
-            if (allowsManualSelection(m_selectionMode)) {
+            if (manualSelectionAllowed()) {
                 setHoveredWindowRect(QRect());
                 m_isSelecting = true;
                 m_selectionStart = m_windowSnapPressPosition;
@@ -4939,6 +4955,56 @@ QRect CaptureOverlay::monitorRectAt(const QPoint &pos) const
     return QRect();
 #endif
 }
+
+bool CaptureOverlay::manualSelectionAllowed() const
+{
+#if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
+    // KWin may not answer (scripting disabled, slow compositor); the window
+    // capture must still let the user drag a region.
+    return allowsManualSelection(m_selectionMode, true);
+#else
+    return allowsManualSelection(m_selectionMode);
+#endif
+}
+
+#if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
+void CaptureOverlay::requestKdeWindowList()
+{
+    if (m_selectionMode != CaptureSelectionMode::Window || !windowCaptureSupported())
+        return;
+    if (!m_kwinWindowList) {
+        m_kwinWindowList = new KWinWindowListClient(this);
+        connect(m_kwinWindowList, &KWinWindowListClient::windowListReceived,
+                this, [this](const KWinWindowSnapshot &snapshot) {
+                    m_kdeWindowSnapshot = snapshot;
+                    applyKdeWindowList();
+                });
+    }
+    if (!m_kwinWindowList->request(1000))
+        qWarning() << "[CaptureOverlay] could not ask KWin for the window list";
+}
+
+void CaptureOverlay::applyKdeWindowList()
+{
+    // The geometry is known once the screenshot was taken and presented.
+    if (!m_kdeWindowSnapshot.valid || m_captureInFlight || m_virtualDesktopRect.isEmpty()
+        || m_selectionMode != CaptureSelectionMode::Window) {
+        return;
+    }
+    QVector<KWinQtScreen> screens;
+    for (QScreen *screen : QGuiApplication::screens())
+        screens.append({screen->name(), screen->geometry()});
+    m_windowSnapCandidates = KWinWindowList::overlayRects(
+        m_kdeWindowSnapshot, QCoreApplication::applicationPid(), screens,
+        m_virtualDesktopRect.topLeft(), m_virtualDesktopRect.size());
+    qInfo() << "[CaptureOverlay] window selection candidates=" << m_windowSnapCandidates.size();
+    if (!m_isSelecting && !m_selectionComplete && !m_windowSnapClickPending) {
+        setHoveredWindowRect(windowSnapTargetForMode(
+            m_selectionMode, m_windowSnapCandidates,
+            capturePositionFromGlobal(QCursor::pos()), rect()));
+    }
+}
+#endif
 
 void CaptureOverlay::setHoveredWindowRect(const QRect &targetRect)
 {
