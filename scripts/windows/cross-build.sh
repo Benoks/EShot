@@ -29,8 +29,10 @@ for path in "${llvm_mingw}/bin/x86_64-w64-mingw32-clang++" "${qt_win}/bin/Qt6Cor
   [[ -e "${path}" ]] || { echo "missing: ${path} (see the header of this script)" >&2; exit 1; }
 done
 
-toolchain="$(mktemp)"
-trap 'rm -f "${toolchain}"' EXIT
+# Kept inside the build directory: CMake records the toolchain path in its
+# cache and re-reads it on later configures (also after a CMake upgrade).
+mkdir -p "${build_dir}"
+toolchain="$PWD/${build_dir}/llvm-mingw-toolchain.cmake"
 cat >"${toolchain}" <<EOF
 set(CMAKE_SYSTEM_NAME Windows)
 set(CMAKE_SYSTEM_PROCESSOR x86_64)
