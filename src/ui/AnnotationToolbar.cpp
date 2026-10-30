@@ -1,5 +1,6 @@
 #include "AnnotationToolbar.h"
 #include "OnboardingTips.h"
+#include "OverlayPanelStyle.h"
 #include "recording/RecordingDrawerPolicy.h"
 #include "annotation/AnnotationEngine.h"
 #include "../core/TranslationManager.h"
@@ -106,9 +107,11 @@ AnnotationToolbar::AnnotationToolbar(QWidget *parent)
     QSettings s("EShot", "EShot");
     m_visibleTools = normalizedAnnotationTools(s);
     m_visibleControls = normalizedToolbarControls(s);
+    m_highContrast = overlayHighContrastEnabled();
 
     setupUI();
     applyStyles();
+    applyContrastStyles();
     refreshToolTips();
 }
 
@@ -246,12 +249,8 @@ void AnnotationToolbar::setRedoEnabled(bool enabled)
 void AnnotationToolbar::setColor(const QColor &color)
 {
     m_currentColor = color;
-    if (m_colorButton) {
-        m_colorButton->setStyleSheet(QString(R"(
-            QPushButton { background-color: %1; border: 2px solid #505050; border-radius: 8px; }
-            QPushButton:hover { border-color: #707070; }
-        )").arg(color.name()));
-    }
+    if (m_colorButton)
+        m_colorButton->setStyleSheet(colorButtonStyle(color));
 }
 
 QWidget* AnnotationToolbar::createSeparator()
@@ -260,7 +259,8 @@ QWidget* AnnotationToolbar::createSeparator()
     sep->setFrameShape(QFrame::VLine);
     sep->setFixedWidth(13);
     sep->setFixedHeight(26);
-    sep->setStyleSheet("color: #505050; margin-left: 6px; margin-right: 6px;");
+    sep->setProperty("eshotSeparator", true);
+    sep->setStyleSheet(separatorStyle());
     return sep;
 }
 
@@ -479,27 +479,117 @@ void AnnotationToolbar::setupUI()
 
 void AnnotationToolbar::applyStyles()
 {
-    setStyleSheet(R"(
-        AnnotationToolbar {
-            background-color: #2d2d2d;
-            border: 1px solid #404040;
-            border-radius: 10px;
-        }
-        QToolTip {
-            color: #ffffff;
-            background-color: #3a3a3a;
-            border: 1px solid #555555;
-            padding: 4px 8px;
-            font-size: 12px;
-            border-radius: 4px;
-        }
-    )");
+    if (m_highContrast) {
+        setStyleSheet(R"(
+            AnnotationToolbar {
+                background-color: #000000;
+                border: 2px solid #ffffff;
+                border-radius: 10px;
+            }
+            QToolTip {
+                color: #ffffff;
+                background-color: #000000;
+                border: 2px solid #ffff00;
+                padding: 4px 8px;
+                font-size: 10pt;
+                border-radius: 4px;
+            }
+        )");
+    } else {
+        setStyleSheet(R"(
+            AnnotationToolbar {
+                background-color: #2d2d2d;
+                border: 1px solid #404040;
+                border-radius: 10px;
+            }
+            QToolTip {
+                color: #ffffff;
+                background-color: #3a3a3a;
+                border: 1px solid #555555;
+                padding: 4px 8px;
+                font-size: 12px;
+                border-radius: 4px;
+            }
+        )");
+    }
+    if (graphicsEffect())
+        return;
 
     QGraphicsDropShadowEffect *shadow = new QGraphicsDropShadowEffect(this);
     shadow->setBlurRadius(20);
     shadow->setColor(QColor(0,0,0,160));
     shadow->setOffset(0, 4);
     setGraphicsEffect(shadow);
+}
+
+QString AnnotationToolbar::colorButtonStyle(const QColor &color) const
+{
+    return QStringLiteral(R"(
+        QPushButton {
+            background-color: %1;
+            border: 2px solid %2;
+            border-radius: 8px;
+        }
+        QPushButton:hover, QPushButton:focus {
+            border-color: %3;
+        }
+    )").arg(color.name(),
+            m_highContrast ? QStringLiteral("#ffffff") : QStringLiteral("#505050"),
+            m_highContrast ? QStringLiteral("#ffff00") : QStringLiteral("#707070"));
+}
+
+QString AnnotationToolbar::separatorStyle() const
+{
+    return QStringLiteral("color: %1; margin-left: 6px; margin-right: 6px;")
+        .arg(m_highContrast ? QStringLiteral("#ffffff") : QStringLiteral("#505050"));
+}
+
+// High contrast reaches every toolbar button by appending these rules to its
+// own style sheet (a widget's own rules beat the toolbar's). The block is
+// complete on its own, because undo/redo only receive their regular style
+// when their style sheet is still empty.
+void AnnotationToolbar::applyContrastStyles()
+{
+    static const QString overrides = QStringLiteral(R"(
+        QPushButton {
+            background-color: #000000;
+            border: 2px solid #ffffff;
+            border-radius: 8px;
+        }
+        QPushButton:hover, QPushButton:focus {
+            background-color: #000000;
+            border-color: #ffff00;
+        }
+        QPushButton:pressed {
+            background-color: #333333;
+        }
+        QPushButton:checked, QPushButton[selected="true"] {
+            background-color: #0050c8;
+            border: 3px solid #ffff00;
+        }
+        QPushButton:disabled {
+            background-color: #000000;
+            border: 2px dashed #969696;
+        }
+    )");
+    const auto buttons = findChildren<QPushButton *>();
+    for (QPushButton *button : buttons) {
+        if (button->property("eshotColorButton").toBool())
+            continue;
+        QVariant base = button->property("eshotBaseStyle");
+        if (!base.isValid()) {
+            base = button->styleSheet();
+            button->setProperty("eshotBaseStyle", base);
+        }
+        button->setStyleSheet(m_highContrast ? base.toString() + overrides : base.toString());
+    }
+    if (m_colorButton)
+        m_colorButton->setStyleSheet(colorButtonStyle(m_currentColor));
+    const auto frames = findChildren<QFrame *>();
+    for (QFrame *frame : frames) {
+        if (frame->property("eshotSeparator").toBool())
+            frame->setStyleSheet(separatorStyle());
+    }
 }
 
 QPushButton* AnnotationToolbar::createToolButton(const QString &iconPath, const QString &tooltip,
@@ -573,16 +663,8 @@ QPushButton* AnnotationToolbar::createColorButton(const QColor &color)
     btn->setToolTip(TranslationManager::toolColor());
     btn->setCursor(Qt::PointingHandCursor);
     btn->setFixedSize(34, 34);
-    btn->setStyleSheet(QString(R"(
-        QPushButton {
-            background-color: %1;
-            border: 2px solid #505050;
-            border-radius: 8px;
-        }
-        QPushButton:hover {
-            border-color: #707070;
-        }
-    )").arg(color.name()));
+    btn->setProperty("eshotColorButton", true);
+    btn->setStyleSheet(colorButtonStyle(color));
     connect(btn, &QPushButton::clicked, this, &AnnotationToolbar::onColorButtonClicked);
     return btn;
 }
@@ -650,10 +732,7 @@ void AnnotationToolbar::onColorButtonClicked()
         QColor c = dlg.selectedColor();
         if (c.isValid()) {
             m_currentColor = c;
-            m_colorButton->setStyleSheet(QString(R"(
-                QPushButton { background-color: %1; border: 2px solid #555; border-radius: 13px; }
-                QPushButton:hover { border-color: #fff; }
-            )").arg(c.name()));
+            m_colorButton->setStyleSheet(colorButtonStyle(c));
             emit colorChanged(c);
         }
     }
@@ -685,8 +764,10 @@ namespace {
 // "Name  Key" on the first line and what the control does below it. The key
 // is the one configured in Settings, so the tooltip never shows a stale key.
 QString richToolTip(const QString &label, const char *shortcutId, const char *fallback,
-                    const char *descriptionKey)
+                    const char *descriptionKey, bool highContrast)
 {
+    const QString keyColor = highContrast ? QStringLiteral("#ffff00") : QStringLiteral("#a8a8a8");
+    const QString descriptionColor = highContrast ? QStringLiteral("#ffffff") : QStringLiteral("#b8bec8");
     static const QRegularExpression keySuffix(QStringLiteral("\\s*\\([^)]*\\)\\s*$"));
     const QString name = QString(label).remove(keySuffix);
     const QString key = shortcutId
@@ -694,9 +775,9 @@ QString richToolTip(const QString &label, const char *shortcutId, const char *fa
         : QString();
     QString html = QStringLiteral("<b>%1</b>").arg(name.toHtmlEscaped());
     if (!key.isEmpty())
-        html += QStringLiteral("&nbsp;&nbsp;<span style='color:#a8a8a8'>%1</span>").arg(key.toHtmlEscaped());
-    html += QStringLiteral("<br><span style='color:#b8bec8'>%1</span>")
-                .arg(TranslationManager::tr(descriptionKey).toHtmlEscaped());
+        html += QStringLiteral("&nbsp;&nbsp;<span style='color:%1'>%2</span>").arg(keyColor, key.toHtmlEscaped());
+    html += QStringLiteral("<br><span style='color:%1'>%2</span>")
+                .arg(descriptionColor, TranslationManager::tr(descriptionKey).toHtmlEscaped());
     return html;
 }
 }
@@ -704,6 +785,17 @@ QString richToolTip(const QString &label, const char *shortcutId, const char *fa
 void AnnotationToolbar::refreshToolTips()
 {
     using TM = TranslationManager;
+    // Settings may have switched high contrast since the toolbar was built.
+    const bool highContrast = overlayHighContrastEnabled();
+    if (highContrast != m_highContrast) {
+        m_highContrast = highContrast;
+        applyStyles();
+        applyContrastStyles();
+    }
+    const auto richToolTip = [highContrast](const QString &label, const char *shortcutId,
+                                            const char *fallback, const char *descriptionKey) {
+        return ::richToolTip(label, shortcutId, fallback, descriptionKey, highContrast);
+    };
     for (auto it = m_toolButtons.begin(); it != m_toolButtons.end(); ++it) {
         switch (it.key()) {
             case AnnotationEngine::Pen:        it.value()->setToolTip(richToolTip(TM::toolPen(), "toolPen", "P", "descPen")); break;
@@ -752,11 +844,13 @@ void AnnotationToolbar::refreshToolTips()
             keys << QStringLiteral("%1 %2").arg(TM::tr("recSegmentVideo"), videoKey);
         QString html = QStringLiteral("<b>%1</b>").arg(TM::tr("toolRecord").toHtmlEscaped());
         if (!keys.isEmpty()) {
-            html += QStringLiteral("&nbsp;&nbsp;<span style='color:#a8a8a8'>%1</span>")
-                        .arg(keys.join(QStringLiteral(" · ")).toHtmlEscaped());
+            html += QStringLiteral("&nbsp;&nbsp;<span style='color:%1'>%2</span>")
+                        .arg(highContrast ? QStringLiteral("#ffff00") : QStringLiteral("#a8a8a8"),
+                             keys.join(QStringLiteral(" · ")).toHtmlEscaped());
         }
-        html += QStringLiteral("<br><span style='color:#b8bec8'>%1</span>")
-                    .arg(TM::tr("descRecord").toHtmlEscaped());
+        html += QStringLiteral("<br><span style='color:%1'>%2</span>")
+                    .arg(highContrast ? QStringLiteral("#ffffff") : QStringLiteral("#b8bec8"),
+                         TM::tr("descRecord").toHtmlEscaped());
         m_videoButton->setToolTip(html);
     }
 }

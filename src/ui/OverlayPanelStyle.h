@@ -17,7 +17,13 @@ struct OverlayPanelMetrics {
 };
 
 OverlayPanelMetrics overlayPanelMetrics();
+// The drawer style for the current "highContrast" setting.
 QString overlayPanelStyleSheet();
+// High contrast: black panels, white borders, yellow focus and hover, and
+// point-sized fonts of at least 9pt (12px at 96 DPI) that follow the system
+// font scaling.
+QString overlayPanelStyleSheet(bool highContrast);
+bool overlayHighContrastEnabled();
 void configureOverlaySpinBox(QSpinBox *spinBox);
 
 #endif

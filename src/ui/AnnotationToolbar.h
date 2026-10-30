@@ -55,6 +55,9 @@ private slots:
 private:
     void setupUI();
     void applyStyles();
+    void applyContrastStyles();
+    QString colorButtonStyle(const QColor &color) const;
+    QString separatorStyle() const;
     void updateDynamicOptionVisibility();
     QPushButton* createToolButton(const QString &iconPath, const QString &tooltip,
                                   int toolId, const QString &settingsKey);
@@ -97,6 +100,7 @@ private:
     QPushButton *m_ocrButton;
     QPushButton *m_uploadButton;
     QPushButton *m_lensButton;
+    bool m_highContrast = false;
     QPushButton *m_videoButton;
 };
 

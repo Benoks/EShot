@@ -11,6 +11,7 @@ private slots:
     void definesEveryInteractiveState();
     void drawersKeepTheirShortAnimation();
     void numberInputsMatchRecordingControls();
+    void highContrastUsesVisibleBordersFocusAndScalableFonts();
 };
 
 void OverlayPanelStyleTests::usesCompactSharedMetrics()
@@ -60,6 +61,32 @@ void OverlayPanelStyleTests::numberInputsMatchRecordingControls()
     QCOMPARE(spinBox.buttonSymbols(), QAbstractSpinBox::UpDownArrows);
     QCOMPARE(spinBox.alignment(), Qt::AlignCenter);
     QVERIFY(!spinBox.isReadOnly());
+}
+
+void OverlayPanelStyleTests::highContrastUsesVisibleBordersFocusAndScalableFonts()
+{
+    const QString regular = overlayPanelStyleSheet(false);
+    const QString highContrast = overlayPanelStyleSheet(true);
+
+    QVERIFY(!regular.contains(QStringLiteral("#ffff00")));
+    QVERIFY(highContrast.startsWith(regular));
+    const QString overrides = highContrast.mid(regular.size());
+    QVERIFY(overrides.contains(QStringLiteral("border: 2px solid #ffffff")));
+    QVERIFY(overrides.contains(QStringLiteral(":focus")));
+    QVERIFY(overrides.contains(QStringLiteral("border-color: #ffff00")));
+
+    // Every font in the overrides is in points (follows system scaling) and
+    // at least 9pt, i.e. 12px at 96 DPI.
+    static const QRegularExpression fontSize(QStringLiteral("font-size:\\s*(\\d+)(px|pt)"));
+    int fonts = 0;
+    auto it = fontSize.globalMatch(overrides);
+    while (it.hasNext()) {
+        const QRegularExpressionMatch match = it.next();
+        QCOMPARE(match.captured(2), QStringLiteral("pt"));
+        QVERIFY(match.captured(1).toInt() >= 9);
+        ++fonts;
+    }
+    QVERIFY(fonts > 0);
 }
 
 QTEST_MAIN(OverlayPanelStyleTests)
