@@ -48,6 +48,7 @@
 #include "core/LinuxDesktopIntegration.h"
 #include "core/NotificationFolderOpener.h"
 #include "core/ApplicationInstanceCommand.h"
+#include "core/AppLifecyclePolicy.h"
 #if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
 #include "core/LinuxDesktopNotification.h"
 #include "core/LinuxPortalHostRegistry.h"
@@ -333,6 +334,8 @@ public slots:
 
     void onCaptureRequested()
     {
+        if (captureBlockedByDialog())
+            return;
         if (closeBlockingDialogs()) {
             QTimer::singleShot(80, this, &EShotApp::onCaptureRequested);
             return;
@@ -345,6 +348,8 @@ public slots:
     void onWindowCaptureRequested()
     {
 #ifdef Q_OS_WIN
+        if (captureBlockedByDialog())
+            return;
         if (closeBlockingDialogs()) {
             QTimer::singleShot(80, this, &EShotApp::onWindowCaptureRequested);
             return;
@@ -611,6 +616,9 @@ public slots:
         if (m_settingsDialog) {
             if (recordingTab)
                 m_settingsDialog->showRecordingTab();
+            // Hidden for a capture: bring it back now (with its edits).
+            if (m_settingsHiddenForCapture)
+                m_resumeSettingsNow = true;
             m_settingsDialog->raise();
             m_settingsDialog->activateWindow();
             return;
@@ -653,7 +661,17 @@ public slots:
             ny = qMax(avail.top() + 40, ny); // GUARANTEE title bar is grabbable
             dlg.move(nx, ny); // Resync ARM64 drag margins
         }
-        if (dlg.exec() == QDialog::Accepted) {
+        int result = dlg.exec();
+        // The capture hotkey hides Settings instead of discarding unsaved
+        // edits; show the same dialog again once the capture is over.
+        while (m_settingsHiddenForCapture) {
+            if (!waitForCaptureToFinish())
+                break;
+            m_settingsHiddenForCapture = false;
+            result = dlg.exec();
+        }
+        m_settingsHiddenForCapture = false;
+        if (result == QDialog::Accepted) {
             loadSettings();
             // Applies a changed black-icon setting to either icon variant.
             if (m_updateAvailable)
@@ -801,6 +819,8 @@ public slots:
 
     void onInstantCaptureRequested()
     {
+        if (captureBlockedByDialog())
+            return;
         if (closeBlockingDialogs()) {
             QTimer::singleShot(80, this, &EShotApp::onInstantCaptureRequested);
             return;
@@ -1777,26 +1797,120 @@ private:
         }
     }
 
-    bool closeBlockingDialogs()
+    AppLifecyclePolicy::CaptureDialogKind captureDialogKind(const QDialog *dialog) const
     {
-        bool closed = false;
+        using Kind = AppLifecyclePolicy::CaptureDialogKind;
+        if (m_settingsDialog && dialog == m_settingsDialog.data())
+            return Kind::Settings;
+        if (qobject_cast<const FirstRunWizard *>(dialog))
+            return Kind::Wizard;
+        if (dialog->objectName() == QLatin1String("linuxDependencyDialog"))
+            return Kind::Installer;
+        if (dialog->inherits("OcrDialog") || dialog->inherits("UploadDialog"))
+            return Kind::CaptureSession;
+        for (const QWidget *parent = dialog->parentWidget(); parent; parent = parent->parentWidget()) {
+            if (m_settingsDialog && parent == m_settingsDialog.data())
+                return Kind::SettingsChild;
+        }
+        return Kind::Other;
+    }
+
+    QList<QDialog *> visibleDialogs() const
+    {
+        QList<QDialog *> dialogs;
         const auto widgets = QApplication::topLevelWidgets();
         for (QWidget *widget : widgets) {
             if (!widget || widget == m_overlay || !widget->isVisible())
                 continue;
-            // Rejecting the wizard deletes it and kills a running Linux
-            // dependency installer; let the capture open over it instead.
-            if (qobject_cast<FirstRunWizard *>(widget))
-                continue;
-            auto *dialog = qobject_cast<QDialog *>(widget);
-            if (!dialog)
-                continue;
-            dialog->reject();
-            closed = true;
+            if (auto *dialog = qobject_cast<QDialog *>(widget))
+                dialogs.append(dialog);
         }
-        if (closed)
+        return dialogs;
+    }
+
+    // An OCR or upload dialog of the open capture, a running installer or a
+    // dialog opened from Settings must not be thrown away by the capture
+    // hotkey. Raise it instead and drop this capture request.
+    bool captureBlockedByDialog()
+    {
+        for (QDialog *dialog : visibleDialogs()) {
+            if (AppLifecyclePolicy::captureDialogAction(captureDialogKind(dialog))
+                != AppLifecyclePolicy::CaptureDialogAction::KeepAndSkipCapture) {
+                continue;
+            }
+            dialog->raise();
+            dialog->activateWindow();
+            return true;
+        }
+        return false;
+    }
+
+    // Clears the screen for a capture. Settings is only hidden and comes back
+    // with its unsaved edits when the capture is over (see openSettings);
+    // dialogs with nothing to lose are closed. Returns true when something
+    // changed, so the caller retries once the windows are gone.
+    bool closeBlockingDialogs()
+    {
+        bool changed = false;
+        for (QDialog *dialog : visibleDialogs()) {
+            switch (AppLifecyclePolicy::captureDialogAction(captureDialogKind(dialog))) {
+            case AppLifecyclePolicy::CaptureDialogAction::HideUntilCaptureEnds:
+                m_settingsHiddenForCapture = true;
+                dialog->hide();
+                changed = true;
+                break;
+            case AppLifecyclePolicy::CaptureDialogAction::Close:
+                dialog->reject();
+                changed = true;
+                break;
+            case AppLifecyclePolicy::CaptureDialogAction::Ignore:
+            case AppLifecyclePolicy::CaptureDialogAction::KeepAndSkipCapture:
+                break;
+            }
+        }
+        if (changed)
             QApplication::processEvents();
-        return closed;
+        return changed;
+    }
+
+    bool captureSessionDialogVisible() const
+    {
+        for (QDialog *dialog : visibleDialogs()) {
+            if (captureDialogKind(dialog) == AppLifecyclePolicy::CaptureDialogKind::CaptureSession)
+                return true;
+        }
+        return false;
+    }
+
+    // Runs while Settings is hidden for a capture. Returns false when the
+    // application is quitting instead.
+    bool waitForCaptureToFinish()
+    {
+        QEventLoop loop;
+        QTimer poll;
+        QElapsedTimer waited;
+        waited.start();
+        bool overlaySeen = false;
+        bool finished = false;
+        poll.setInterval(250);
+        connect(&poll, &QTimer::timeout, &loop, [&]() {
+            const bool overlayVisible = m_overlay && m_overlay->isVisible();
+            overlaySeen = overlaySeen || overlayVisible;
+            // Instant captures and failed starts never show the overlay.
+            const bool captureStartedOrGaveUp = overlaySeen || waited.elapsed() > 3000;
+            if (!m_resumeSettingsNow
+                && (!captureStartedOrGaveUp
+                    || !AppLifecyclePolicy::settingsMayReturnAfterCapture(
+                        overlayVisible, recordingBusy(), captureSessionDialogVisible()))) {
+                return;
+            }
+            finished = true;
+            loop.quit();
+        });
+        poll.start();
+        loop.exec();
+        m_resumeSettingsNow = false;
+        return finished;
     }
 
     bool hasPrintScreenConflict() const
@@ -1907,6 +2021,8 @@ private:
     bool m_recordingStartPending = false;
     bool m_quitAfterRecording = false;
     QPointer<SettingsDialog> m_settingsDialog;
+    bool m_settingsHiddenForCapture = false;
+    bool m_resumeSettingsNow = false;
     QElapsedTimer m_recordingStartTimer;
     RecordingIndicator *m_recordingIndicator = nullptr;
     QPointer<RecordingStartCountdown> m_recordingStartCountdown;

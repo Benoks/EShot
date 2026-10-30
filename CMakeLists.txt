@@ -58,6 +58,7 @@ set(SOURCES
     src/ui/HintBubble.cpp
     src/capture/ShortcutSheet.cpp
     src/core/LinuxUpdateScript.cpp
+    src/core/AppLifecyclePolicy.cpp
     src/core/LinuxDependencySelection.cpp
     src/core/CatboxUploader.cpp
     src/core/UguuUploader.cpp
@@ -142,6 +143,7 @@ set(HEADERS
     src/ui/HintBubble.h
     src/capture/ShortcutSheet.h
     src/core/LinuxUpdateScript.h
+    src/core/AppLifecyclePolicy.h
     src/core/LinuxDependencySelection.h
     src/core/CatboxUploader.h
     src/core/UguuUploader.h
@@ -921,6 +923,14 @@ if(BUILD_TESTING)
         target_link_libraries(eshot_recording_cancellation_tests PRIVATE
             user32 gdi32 shell32 dwmapi advapi32 ole32 oleaut32 dxgi)
     endif()
+
+    eshot_add_test(eshot_app_lifecycle_policy_tests app_lifecycle_policy
+        SOURCES
+            tests/AppLifecyclePolicyTests.cpp
+            src/core/AppLifecyclePolicy.cpp
+            src/core/AppLifecyclePolicy.h
+        LIBS Qt6::Core
+    )
 
     eshot_add_test(eshot_notification_folder_opener_tests notification_folder_opener
         SOURCES
