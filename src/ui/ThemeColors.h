@@ -4,7 +4,9 @@
 #include <QColor>
 #include <QString>
 
+class QIcon;
 class QPalette;
+class QSize;
 class QWidget;
 
 // Text and surface colours that are not plain palette roles (hint text,
@@ -56,6 +58,10 @@ QString resolve(const QString &styleSheetTemplate, Theme theme);
 // whenever the application palette changes (the live theme preview in
 // Settings), so the widget follows dark/light/high-contrast switches.
 void setStyleSheet(QWidget *widget, const QString &styleSheetTemplate);
+
+// The app's icons are white line art for dark backgrounds; on the light
+// theme this returns a dark-tinted copy, otherwise the icon unchanged.
+QIcon iconForTheme(const QIcon &icon, const QSize &size);
 
 } // namespace ThemeColors
 

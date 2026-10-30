@@ -3,6 +3,9 @@
 #include <QApplication>
 #include <QEvent>
 #include <QHash>
+#include <QIcon>
+#include <QPainter>
+#include <QPixmap>
 #include <QPalette>
 #include <QPointer>
 #include <QSet>
@@ -203,6 +206,18 @@ void setStyleSheet(QWidget *widget, const QString &styleSheetTemplate)
     widget->setStyleSheet(resolve(styleSheetTemplate, currentTheme()));
     if (PaletteFollower *follower = paletteFollower())
         follower->track(widget);
+}
+
+QIcon iconForTheme(const QIcon &icon, const QSize &size)
+{
+    if (icon.isNull() || currentTheme() != Theme::Light)
+        return icon;
+    QPixmap pixmap = icon.pixmap(size);
+    QPainter painter(&pixmap);
+    painter.setCompositionMode(QPainter::CompositionMode_SourceIn);
+    painter.fillRect(pixmap.rect(), QColor(0x20, 0x20, 0x20));
+    painter.end();
+    return QIcon(pixmap);
 }
 
 } // namespace ThemeColors

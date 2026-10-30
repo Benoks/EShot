@@ -46,7 +46,7 @@ void AboutDialog::setupUI()
     QLabel *iconLabel = new QLabel();
     QIcon appIcon(":/icons/pen.svg");
     if (!appIcon.isNull()) {
-        QPixmap pix = appIcon.pixmap(96, 96);
+        QPixmap pix = ThemeColors::iconForTheme(appIcon, QSize(96, 96)).pixmap(96, 96);
         iconLabel->setPixmap(pix);
     }
     iconLabel->setAlignment(Qt::AlignCenter);

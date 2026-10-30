@@ -1417,7 +1417,7 @@ QWidget* SettingsDialog::createInterfaceTab()
     auto addOption = [](QListWidget *list, const QString &category, const QString &key, const QString &label, const QString &iconPath) {
         QListWidgetItem *item = new QListWidgetItem(cleanToolLabel(label));
         if (!iconPath.isEmpty())
-            item->setIcon(QIcon(iconPath));
+            item->setIcon(ThemeColors::iconForTheme(QIcon(iconPath), QSize(18, 18)));
         item->setData(Qt::UserRole, key);
         item->setData(Qt::UserRole + 1, category);
         item->setFlags(item->flags() | Qt::ItemIsUserCheckable);

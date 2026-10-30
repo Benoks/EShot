@@ -5,30 +5,15 @@
 
 #include <QIcon>
 #include <QLabel>
-#include <QPainter>
-#include <QPixmap>
 #include <QPushButton>
 #include <QVBoxLayout>
 
 namespace {
 
-// The action icons are white line art; draw them dark on the light theme.
-QIcon themedIcon(const QIcon &icon)
-{
-    if (ThemeColors::currentTheme() != ThemeColors::Theme::Light || icon.isNull())
-        return icon;
-    QPixmap pixmap = icon.pixmap(QSize(36, 36));
-    QPainter painter(&pixmap);
-    painter.setCompositionMode(QPainter::CompositionMode_SourceIn);
-    painter.fillRect(pixmap.rect(), QColor(0x20, 0x20, 0x20));
-    painter.end();
-    return QIcon(pixmap);
-}
-
 QPushButton *createActionButton(const QIcon &icon, const QString &text, QWidget *parent,
                                 bool followTheme = true)
 {
-    auto *button = new QPushButton(followTheme ? themedIcon(icon) : icon, text, parent);
+    auto *button = new QPushButton(followTheme ? ThemeColors::iconForTheme(icon, QSize(36, 36)) : icon, text, parent);
     button->setCursor(Qt::PointingHandCursor);
     button->setIconSize(QSize(18, 18));
     button->setFixedHeight(38);
