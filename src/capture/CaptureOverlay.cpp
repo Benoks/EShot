@@ -1872,6 +1872,8 @@ void CaptureOverlay::startCaptureInternal(CaptureSelectionMode selectionMode, bo
         return;
     }
     releaseCaptureBuffers();
+    ++m_captureGeneration;
+    m_showHighlighterStraightHint = false;
     m_captureLatencyTimer.start();
     m_logNextCapturePaint = true;
     if (m_captureDelayTimer) m_captureDelayTimer->stop();
@@ -4796,7 +4798,10 @@ void CaptureOverlay::onToolSelected(int toolId)
             settings.setValue(QStringLiteral("highlighterStraightHintShown"), shownCount + 1);
             m_showHighlighterStraightHint = true;
             update();
-            QTimer::singleShot(2200, this, [this]() {
+            const quint64 generation = m_captureGeneration;
+            QTimer::singleShot(2200, this, [this, generation]() {
+                if (generation != m_captureGeneration)
+                    return;
                 m_showHighlighterStraightHint = false;
                 update();
             });
@@ -4908,8 +4913,9 @@ void CaptureOverlay::showSelectionOnboarding()
         OnboardingTips::increment(OnboardingTips::SelectionHintCount);
         m_showSelectionHint = true;
         QPointer<CaptureOverlay> self(this);
-        QTimer::singleShot(4500, this, [self]() {
-            if (!self)
+        const quint64 generation = m_captureGeneration;
+        QTimer::singleShot(4500, this, [self, generation]() {
+            if (!self || generation != self->m_captureGeneration)
                 return;
             self->m_showSelectionHint = false;
             self->update();
@@ -4938,8 +4944,9 @@ void CaptureOverlay::showSelectionOnboarding()
     }
     if (!OnboardingTips::isSeen(OnboardingTips::QuickSettingsTip)) {
         QPointer<CaptureOverlay> self(this);
-        QTimer::singleShot(700, this, [self]() {
-            if (!self || !self->m_selectionComplete || !self->m_toolSettingsButton
+        const quint64 generation = m_captureGeneration;
+        QTimer::singleShot(700, this, [self, generation]() {
+            if (!self || generation != self->m_captureGeneration || !self->m_selectionComplete || !self->m_toolSettingsButton
                 || !self->m_toolSettingsButton->isVisible()) {
                 return;
             }
@@ -4979,8 +4986,9 @@ void CaptureOverlay::showToolOnboarding(int toolId)
             m_hintBubble->dismiss();
         setToolSettingsDrawerVisible(true);
         QPointer<CaptureOverlay> self(this);
-        QTimer::singleShot(2600, this, [self]() {
-            if (self && self->m_toolSettingsDrawer && self->m_toolSettingsDrawer->isVisible()
+        const quint64 generation = m_captureGeneration;
+        QTimer::singleShot(2600, this, [self, generation]() {
+            if (self && generation == self->m_captureGeneration && self->m_toolSettingsDrawer && self->m_toolSettingsDrawer->isVisible()
                 && !self->m_toolSettingsDrawer->underMouse()) {
                 self->setToolSettingsDrawerVisible(false);
             }

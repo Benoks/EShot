@@ -326,6 +326,9 @@ private:
     // Set while captureAllScreens() runs: portal and KWin grabs spin nested
     // event loops that also deliver hotkeys.
     bool m_captureInFlight = false;
+    // Incremented by every capture; delayed hint timers check it so a timer
+    // from an earlier capture cannot change the current one.
+    quint64 m_captureGeneration = 0;
     QElapsedTimer m_captureLatencyTimer;
     bool m_logNextCapturePaint = false;
 
