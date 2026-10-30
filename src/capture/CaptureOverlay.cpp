@@ -1846,8 +1846,31 @@ void CaptureOverlay::startWindowCapture()
     startCaptureInternal(CaptureSelectionMode::Window, false);
 }
 
+bool CaptureOverlay::isCaptureActive() const
+{
+    return m_captureInFlight || isVisible()
+        || (m_captureDelayTimer && m_captureDelayTimer->isActive());
+}
+
+void CaptureOverlay::cancelActiveCapture()
+{
+    if (m_captureInFlight)
+        return;
+    if (m_captureDelayTimer && m_captureDelayTimer->isActive()) {
+        m_captureDelayTimer->stop();
+        emit captureCancelled();
+        return;
+    }
+    if (isVisible())
+        cancelCapture();
+}
+
 void CaptureOverlay::startCaptureInternal(CaptureSelectionMode selectionMode, bool recordingMode)
 {
+    if (m_captureInFlight) {
+        qInfo() << "[CaptureOverlay] capture request ignored: a screenshot is already being taken";
+        return;
+    }
     releaseCaptureBuffers();
     m_captureLatencyTimer.start();
     m_logNextCapturePaint = true;
@@ -1958,7 +1981,11 @@ void CaptureOverlay::startCaptureForRecording()
 
 void CaptureOverlay::performCapture()
 {
+    if (m_captureInFlight)
+        return;
+    m_captureInFlight = true;
     captureAllScreens();
+    m_captureInFlight = false;
     if (!LinuxScreenshotPolicy::canPresentCapture(!m_screenSnapshot.isNull())) {
         qCritical() << "[CaptureOverlay] capture aborted: no usable cursor-free snapshot";
         cancelCapture();

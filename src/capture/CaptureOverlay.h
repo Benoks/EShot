@@ -65,6 +65,11 @@ public:
     void startCaptureForRecording();
     void refreshUI();
     void prewarm();
+    // True while a capture is delayed, grabbing the screen or on screen.
+    bool isCaptureActive() const;
+    // A capture hotkey pressed again while the overlay is open: close it.
+    // Ignored while the screenshot is still being taken.
+    void cancelActiveCapture();
 
 signals:
     void captureCompleted(const QPixmap &pixmap);
@@ -318,6 +323,9 @@ private:
     EShotNativeWindowHandle m_foregroundHwnd = nullptr;
 
     QTimer *m_captureDelayTimer;
+    // Set while captureAllScreens() runs: portal and KWin grabs spin nested
+    // event loops that also deliver hotkeys.
+    bool m_captureInFlight = false;
     QElapsedTimer m_captureLatencyTimer;
     bool m_logNextCapturePaint = false;
 
