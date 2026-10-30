@@ -6,6 +6,8 @@
 #if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
 #include <QDBusConnection>
 #include <QDBusMessage>
+#include <QDBusPendingCallWatcher>
+#include <QDBusPendingReply>
 #include <QDebug>
 #include <QDir>
 #include <QStandardPaths>
@@ -65,8 +67,37 @@ bool loadAndStartAsync(const QString &path, const QString &plugin)
     if (!bus.isConnected() || path.isEmpty())
         return false;
     bus.send(scriptingCall(QStringLiteral("unloadScript"), {plugin}));
-    bus.send(scriptingCall(QStringLiteral("loadScript"), {path, plugin}));
-    bus.send(scriptingCall(QStringLiteral("start"), {}));
+    // Run only our script: Scripting.start() would also start any other
+    // loaded-but-idle KWin script of the user. loadScript returns its id.
+    auto *watcher = new QDBusPendingCallWatcher(
+        bus.asyncCall(scriptingCall(QStringLiteral("loadScript"), {path, plugin})));
+    QObject::connect(watcher, &QDBusPendingCallWatcher::finished, watcher,
+                     [](QDBusPendingCallWatcher *call) {
+        call->deleteLater();
+        const QDBusPendingReply<int> reply = *call;
+        QDBusConnection connection = QDBusConnection::sessionBus();
+        if (reply.isError() || reply.value() < 0) {
+            connection.send(scriptingCall(QStringLiteral("start"), {}));
+            return;
+        }
+        const int id = reply.value();
+        // KWin 6 exports /Scripting/Script<id>; KWin 5 used /<id>.
+        auto *runWatcher = new QDBusPendingCallWatcher(connection.asyncCall(
+            QDBusMessage::createMethodCall(QStringLiteral("org.kde.KWin"),
+                                           QStringLiteral("/Scripting/Script%1").arg(id),
+                                           QStringLiteral("org.kde.kwin.Script"),
+                                           QStringLiteral("run"))));
+        QObject::connect(runWatcher, &QDBusPendingCallWatcher::finished, runWatcher,
+                         [id](QDBusPendingCallWatcher *run) {
+            run->deleteLater();
+            if (!run->isError())
+                return;
+            QDBusConnection fallback = QDBusConnection::sessionBus();
+            fallback.send(QDBusMessage::createMethodCall(
+                QStringLiteral("org.kde.KWin"), QStringLiteral("/%1").arg(id),
+                QStringLiteral("org.kde.kwin.Script"), QStringLiteral("run")));
+        });
+    });
     return true;
 #else
     Q_UNUSED(path);
