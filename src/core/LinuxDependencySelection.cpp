@@ -111,3 +111,8 @@ bool shouldOfferAppImageIntegration(const QString &appImagePath)
         && path != QStringLiteral("/usr")
         && !path.startsWith(QStringLiteral("/usr/"));
 }
+
+bool linuxDependencyDialogMayClose(bool processRunning)
+{
+    return !processRunning;
+}

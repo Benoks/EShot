@@ -4,6 +4,10 @@
 class LinuxDependencySelectionTests : public QObject {
     Q_OBJECT
 private slots:
+    void installerDialogStaysOpenWhileInstalling() {
+        QVERIFY(!linuxDependencyDialogMayClose(true));
+        QVERIFY(linuxDependencyDialogMayClose(false));
+    }
     void defaultsIncludeEnglishAndSupportedSystemLanguage() {
         QCOMPARE(defaultOcrLanguageCodes("tr_TR"), QStringList({"eng", "tur"}));
         QCOMPARE(defaultOcrLanguageCodes("en_US"), QStringList({"eng"}));

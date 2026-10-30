@@ -18,3 +18,7 @@ bool shouldOfferAppImageIntegration(const QString &appImagePath);
 // Gear Lever (~/AppImages) or AppImageLauncher (~/Applications). EShot sets
 // itself up, so those copies add a second menu entry and miss its updates.
 bool isAppImageManagedExternally(const QString &appImagePath, const QString &homePath);
+// The dependency installer dialog must stay open while its install process
+// runs: closing it would kill bash half way and orphan pkexec or the package
+// manager. `processRunning` is true from start() until finished().
+bool linuxDependencyDialogMayClose(bool processRunning);

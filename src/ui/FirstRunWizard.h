@@ -25,6 +25,11 @@ public:
     static void showLinuxDependencySetup(QWidget *parent = nullptr);
 #endif
 
+public slots:
+    // Ignored while the Linux dependency installer runs (Esc, the window
+    // close button or another caller); closing would kill the install.
+    void reject() override;
+
 private slots:
     void onBrowse();
     void onFinish();

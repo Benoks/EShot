@@ -435,6 +435,7 @@ public:
 
     // ─── 4.7.2 lifecycle and platform fixes (accessors) ───
     static QString updateStatusWaitingToInstall() { return tr("updateStatusWaitingToInstall"); }
+    static QString installRunningWaitToClose() { return tr("installRunningWaitToClose"); }
     // ─── end of 4.7.2 lifecycle and platform fixes (accessors) ───
 
 private:
@@ -1128,6 +1129,7 @@ private:
         {"updateStatusRestartingInPlace", {"%2 kuruluyor ve EShot yeniden başlatılıyor. %1 dosyasının adı değişmez, ancak artık %2 sürümünü içerir.", "Installing %2 and restarting. %1 keeps its file name but now contains version %2.", "%2 wird installiert und EShot neu gestartet. %1 behält seinen Dateinamen, enthält aber jetzt Version %2.", "Installation de %2 et redémarrage. %1 garde son nom de fichier mais contient désormais la version %2.", "Instalando %2 y reiniciando. %1 conserva su nombre de archivo, pero ahora contiene la versión %2.", "%2 をインストールして再起動します。%1 のファイル名は変わりませんが、中身はバージョン %2 になります。", "正在安装 %2 并重新启动。%1 的文件名保持不变，但其内容现在是 %2 版本。", "Устанавливается версия %2, EShot перезапускается. Файл %1 сохранит своё имя, но теперь будет содержать версию %2."}},
         // ─── 4.7.2 lifecycle and platform fixes ───
         {"updateStatusWaitingToInstall", {"Güncelleme indirildi; kayıt veya yakalama bitince kurulacak.", "Update downloaded; it will install when the recording or capture ends.", "Update heruntergeladen; es wird installiert, sobald die Aufnahme oder Bildschirmaufnahme endet.", "Mise à jour téléchargée ; elle sera installée à la fin de l'enregistrement ou de la capture.", "Actualización descargada; se instalará cuando termine la grabación o la captura.", "アップデートをダウンロードしました。録画またはキャプチャが終わるとインストールされます。", "更新已下载，将在录制或截图结束后安装。", "Обновление загружено; оно будет установлено после окончания записи или снимка."}},
+        {"installRunningWaitToClose", {"Kurulum sürüyor. Pencereyi kapatmadan önce bitmesini bekleyin.", "Installation is running. Wait for it to finish before closing this window.", "Die Installation läuft. Warten Sie, bis sie abgeschlossen ist, bevor Sie dieses Fenster schließen.", "L'installation est en cours. Attendez qu'elle se termine avant de fermer cette fenêtre.", "La instalación está en curso. Espere a que termine antes de cerrar esta ventana.", "インストール中です。このウィンドウを閉じる前に完了するまでお待ちください。", "正在安装。请等待安装完成后再关闭此窗口。", "Идёт установка. Дождитесь её завершения, прежде чем закрывать это окно."}},
         // ─── end of 4.7.2 lifecycle and platform fixes ───
     };
 

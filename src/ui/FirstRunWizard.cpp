@@ -582,6 +582,20 @@ void FirstRunWizard::onFinish()
 #endif
 }
 
+void FirstRunWizard::reject()
+{
+#ifdef Q_OS_LINUX
+    const bool running = m_linuxInstallerProcess
+        && m_linuxInstallerProcess->state() != QProcess::NotRunning;
+    if (!linuxDependencyDialogMayClose(running)) {
+        if (m_linuxInstallStatus)
+            m_linuxInstallStatus->setText(TranslationManager::installRunningWaitToClose());
+        return;
+    }
+#endif
+    QDialog::reject();
+}
+
 #ifdef Q_OS_LINUX
 static QString linuxInstallerPath()
 {
@@ -702,9 +716,33 @@ void FirstRunWizard::startLinuxDependencyInstaller()
     m_linuxInstallerProcess->start(program, processArgs);
 }
 
+namespace {
+// Refuses Esc, the close button and reject() from elsewhere while the
+// installer process runs, and says why in the status label.
+class LinuxDependencyDialog : public QDialog {
+public:
+    using QDialog::QDialog;
+    QProcess *installer = nullptr;
+    QLabel *status = nullptr;
+    void reject() override
+    {
+        const bool running = installer && installer->state() != QProcess::NotRunning;
+        if (!linuxDependencyDialogMayClose(running)) {
+            if (status)
+                status->setText(TranslationManager::installRunningWaitToClose());
+            return;
+        }
+        QDialog::reject();
+    }
+};
+}
+
 void FirstRunWizard::showLinuxDependencySetup(QWidget *parent)
 {
-    QDialog dialog(parent); dialog.setWindowTitle(TranslationManager::tr("linuxDependencySetupTitle"));
+    LinuxDependencyDialog dialog(parent);
+    // The capture hotkey looks for this name and leaves the dialog alone.
+    dialog.setObjectName(QStringLiteral("linuxDependencyDialog"));
+    dialog.setWindowTitle(TranslationManager::tr("linuxDependencySetupTitle"));
     QVBoxLayout layout(&dialog);
     auto *ffmpeg = new QCheckBox(TranslationManager::tr("linuxFeatureFfmpeg")); ffmpeg->setChecked(true);
     auto *ocr = new QCheckBox(QStringLiteral("Tesseract OCR")); ocr->setChecked(true);
@@ -725,6 +763,8 @@ void FirstRunWizard::showLinuxDependencySetup(QWidget *parent)
     QHBoxLayout buttons; auto *cancel = new QPushButton(TranslationManager::cancel()); auto *install = new QPushButton(TranslationManager::tr("installSelected")); buttons.addStretch(); buttons.addWidget(cancel); buttons.addWidget(install); layout.addLayout(&buttons);
     QLabel statusLabel; statusLabel.setWordWrap(true); layout.addWidget(&statusLabel);
     QProcess installer(&dialog);
+    dialog.installer = &installer;
+    dialog.status = &statusLabel;
     QProcessEnvironment installerEnvironment = QProcessEnvironment::systemEnvironment();
     installerEnvironment.insert(QStringLiteral("ESHOT_LANGUAGE"), TranslationManager::langCode());
     installer.setProcessEnvironment(installerEnvironment);
