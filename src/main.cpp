@@ -233,6 +233,8 @@ public:
         if (initializeHotkeys)
             initializeHotkeyConnections();
         checkForUpdates();
+        // Off the startup path: may rewrite the autostart entry or query schtasks.
+        QTimer::singleShot(3000, this, []() { SettingsDialog::refreshAutoStartEntryAtStartup(); });
         if (prewarmOverlayAtStartup)
             QTimer::singleShot(100, this, [this]() { ensureOverlay(); });
 #ifdef Q_OS_WIN

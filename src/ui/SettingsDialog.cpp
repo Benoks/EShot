@@ -1,5 +1,6 @@
 #include "SettingsDialog.h"
 #include "../core/ComponentPaths.h"
+#include "../core/AppLifecyclePolicy.h"
 #include "../core/ComponentDownloadPolicy.h"
 #include "OnboardingTips.h"
 #include "../core/WindowsElevatedStartup.h"
@@ -57,6 +58,7 @@
 #include <QNetworkRequest>
 #include <QSysInfo>
 #include <QTimer>
+#include <QPointer>
 #include <QUrl>
 #include <QTabBar>
 #include <QStyle>
@@ -324,14 +326,89 @@ QString SettingsDialog::resolvePatternPreview(const QString &pattern) const
 }
 
 #ifdef Q_OS_WIN
+namespace {
+constexpr const wchar_t *StartupApprovedKey =
+    L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\StartupApproved\\Run";
+
 // Versions before 4.4.0 started EShot through an elevated scheduled task.
-static bool legacyAutoStartTaskExists()
+// schtasks takes up to seconds, so it runs once in the background and the
+// result is cached: -1 unknown, 0 absent, 1 present.
+int s_legacyAutoStartTask = -1;
+QPointer<QProcess> s_legacyAutoStartQuery;
+
+bool legacyAutoStartTaskExists()
 {
     QProcess query;
     query.start(QStringLiteral("schtasks"),
                 {QStringLiteral("/Query"), QStringLiteral("/TN"), QStringLiteral("EShot")});
-    return query.waitForFinished(3000) && query.exitStatus() == QProcess::NormalExit
+    const bool exists = query.waitForFinished(3000) && query.exitStatus() == QProcess::NormalExit
         && query.exitCode() == 0;
+    s_legacyAutoStartTask = exists ? 1 : 0;
+    return exists;
+}
+
+bool startupApprovedDisabled()
+{
+    BYTE data[64] = {};
+    DWORD size = sizeof(data);
+    const LSTATUS status = RegGetValueW(HKEY_CURRENT_USER, StartupApprovedKey, L"EShot",
+                                        RRF_RT_REG_BINARY, nullptr, data, &size);
+    if (status != ERROR_SUCCESS)
+        return false;
+    return AppLifecyclePolicy::windowsStartupApprovedDisabled(
+        QByteArray(reinterpret_cast<const char *>(data), int(size)));
+}
+
+// Turning autostart on in EShot also undoes "Disable" in Task Manager.
+void clearStartupApprovedDisabled()
+{
+    RegDeleteKeyValueW(HKEY_CURRENT_USER, StartupApprovedKey, L"EShot");
+}
+}
+
+void SettingsDialog::prefetchLegacyAutoStartTask()
+{
+    if (s_legacyAutoStartTask >= 0 || s_legacyAutoStartQuery)
+        return;
+    auto *query = new QProcess(qApp);
+    s_legacyAutoStartQuery = query;
+    QObject::connect(query, &QProcess::finished, query,
+                     [query](int exitCode, QProcess::ExitStatus status) {
+        s_legacyAutoStartTask = status == QProcess::NormalExit && exitCode == 0 ? 1 : 0;
+        query->deleteLater();
+    });
+    QObject::connect(query, &QProcess::errorOccurred, query, [query](QProcess::ProcessError error) {
+        if (error != QProcess::FailedToStart)
+            return;
+        s_legacyAutoStartTask = 0;
+        query->deleteLater();
+    });
+    query->start(QStringLiteral("schtasks"),
+                 {QStringLiteral("/Query"), QStringLiteral("/TN"), QStringLiteral("EShot")});
+}
+#else
+void SettingsDialog::prefetchLegacyAutoStartTask() {}
+#endif
+
+#if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
+static QString linuxAutoStartEntryPath()
+{
+    return QDir(QStandardPaths::writableLocation(QStandardPaths::ConfigLocation))
+        .filePath(QStringLiteral("autostart/io.github.benoks.EShot.desktop"));
+}
+
+static QString linuxAutoStartEntryText()
+{
+    QFile file(linuxAutoStartEntryPath());
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
+        return {};
+    return QString::fromUtf8(file.readAll());
+}
+
+static QString linuxCurrentAutoStartExecutable()
+{
+    return LinuxAutoStartPolicy::executablePath(
+        qEnvironmentVariable("APPIMAGE"), QCoreApplication::applicationFilePath());
 }
 #endif
 
@@ -344,19 +421,27 @@ bool SettingsDialog::isAutoStartEnabled()
     const QString runEntry = runKey.value(QStringLiteral("EShot")).toString();
     QString appPath = QCoreApplication::applicationFilePath().replace('/', '\\');
     if (runEntry.compare(QStringLiteral("\"%1\" --silent").arg(appPath), Qt::CaseInsensitive) == 0)
-        return true;
+        return !startupApprovedDisabled();
     // Show a leftover legacy task as enabled so it can be switched off here.
-    return legacyAutoStartTaskExists();
+    // Never wait for schtasks while Settings opens; see legacyAutoStartResolved.
+    return s_legacyAutoStartTask == 1;
 #else
-    const QString path = QDir(QStandardPaths::writableLocation(QStandardPaths::ConfigLocation))
-        .filePath(QStringLiteral("autostart/io.github.benoks.EShot.desktop"));
-    QFile file(path);
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
-        return false;
-    const QString text = QString::fromUtf8(file.readAll());
-    const QString appPath = LinuxAutoStartPolicy::executablePath(
-        qEnvironmentVariable("APPIMAGE"), QCoreApplication::applicationFilePath());
-    return text.contains(appPath);
+    // Any EShot entry counts, even one that starts another copy, so that it
+    // can be switched off here; saving points it at this copy.
+    return LinuxAutoStartPolicy::entryEnabled(linuxAutoStartEntryText());
+#endif
+}
+
+// True when the autostart entry exists but starts a different executable
+// (Linux) and should be rewritten on save even though the box did not change.
+static bool autoStartEntryTargetsOtherCopy()
+{
+#if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
+    const QString text = linuxAutoStartEntryText();
+    return LinuxAutoStartPolicy::entryEnabled(text)
+        && LinuxAutoStartPolicy::entryExecutable(text) != linuxCurrentAutoStartExecutable();
+#else
+    return false;
 #endif
 }
 
@@ -364,11 +449,16 @@ static bool setAutoStartEnabled(bool enabled)
 {
 #ifdef Q_OS_WIN
     // Remove the old elevated task. It may belong to a different administrator
-    // account on corporate machines, in which case deleting it fails.
-    QProcess::execute(QStringLiteral("schtasks"),
-                      {QStringLiteral("/Delete"), QStringLiteral("/TN"), QStringLiteral("EShot"), QStringLiteral("/F")});
-    if (!enabled && legacyAutoStartTaskExists())
-        return false;
+    // account on corporate machines, in which case deleting it fails. Skip
+    // schtasks entirely once it is known that there is no such task.
+    if (s_legacyAutoStartTask != 0) {
+        QProcess::execute(QStringLiteral("schtasks"),
+                          {QStringLiteral("/Delete"), QStringLiteral("/TN"), QStringLiteral("EShot"), QStringLiteral("/F")});
+        if (legacyAutoStartTaskExists() && !enabled)
+            return false;
+    }
+    if (enabled)
+        clearStartupApprovedDisabled();
 
     QSettings reg(QStringLiteral("HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run"),
                   QSettings::NativeFormat);
@@ -2168,6 +2258,26 @@ void SettingsDialog::loadSettings()
         ? m_settings->value("runElevatedAtLogon", true).toBool()
         : isAutoStartEnabled());
     m_loadedAutoStart = m_autoStartCheck->isChecked();
+#ifdef Q_OS_WIN
+    // The legacy-task lookup runs in the background; reflect its answer once
+    // it arrives unless the user already changed the box.
+    if (!m_loadedRunElevated && !m_loadedAutoStart && s_legacyAutoStartTask < 0) {
+        prefetchLegacyAutoStartTask();
+        auto *poll = new QTimer(this);
+        poll->setInterval(200);
+        connect(poll, &QTimer::timeout, this, [this, poll]() {
+            if (s_legacyAutoStartTask < 0 && s_legacyAutoStartQuery)
+                return;
+            poll->deleteLater();
+            if (s_legacyAutoStartTask == 1 && !m_autoStartCheck->isChecked()
+                && m_loadedAutoStart == false) {
+                m_autoStartCheck->setChecked(true);
+                m_loadedAutoStart = true;
+            }
+        });
+        poll->start();
+    }
+#endif
     m_showNotificationsCheck->setChecked(m_settings->value("showNotifications", true).toBool());
     if (m_notifyCopyCheck) m_notifyCopyCheck->setChecked(m_settings->value("notifyCopy", false).toBool());
     if (m_notifySaveCheck) m_notifySaveCheck->setChecked(m_settings->value("notifySave", true).toBool());
@@ -2676,7 +2786,8 @@ void SettingsDialog::onSave()
     // The Run key starts EShot only when the elevated task does not.
     const bool wantRunKey = wantAutoStart && !wantElevated;
     const bool hadRunKey = m_loadedAutoStart && !m_loadedRunElevated;
-    if (wantRunKey != hadRunKey && !setAutoStartEnabled(wantRunKey)) {
+    if ((wantRunKey != hadRunKey || (wantRunKey && autoStartEntryTargetsOtherCopy()))
+        && !setAutoStartEnabled(wantRunKey)) {
         QMessageBox::warning(this, TranslationManager::errTitle(),
                              TranslationManager::autoStartSaveFailed());
         return;
@@ -3343,4 +3454,25 @@ void SettingsDialog::onThemeChanged()
 {
     applyEShotApplicationTheme(*qApp, m_darkModeCheck->isChecked(),
                                m_highContrastCheck->isChecked());
+}
+
+void SettingsDialog::refreshAutoStartEntryAtStartup()
+{
+#if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
+    const QString text = linuxAutoStartEntryText();
+    if (!LinuxAutoStartPolicy::entryEnabled(text))
+        return;
+    const QString target = LinuxAutoStartPolicy::entryExecutable(text);
+    const QString current = linuxCurrentAutoStartExecutable();
+    const QString integrated = QDir::home().filePath(QStringLiteral(".local/opt/EShot/EShot.AppImage"));
+    if (!LinuxAutoStartPolicy::shouldRepointAtStartup(
+            target, !target.isEmpty() && QFileInfo(target).isFile(), current, integrated)) {
+        return;
+    }
+    qInfo() << "[AutoStart] pointing the autostart entry at" << current << "instead of" << target;
+    if (!setAutoStartEnabled(true))
+        qWarning() << "[AutoStart] could not update the autostart entry";
+#else
+    prefetchLegacyAutoStartTask();
+#endif
 }

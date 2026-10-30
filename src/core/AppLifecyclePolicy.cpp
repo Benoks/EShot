@@ -25,4 +25,9 @@ bool settingsMayReturnAfterCapture(bool overlayVisible, bool recordingBusy,
     return !overlayVisible && !recordingBusy && !captureSessionDialogVisible;
 }
 
+bool windowsStartupApprovedDisabled(const QByteArray &value)
+{
+    return !value.isEmpty() && (static_cast<unsigned char>(value.at(0)) & 0x01) != 0;
+}
+
 }

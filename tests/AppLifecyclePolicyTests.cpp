@@ -61,6 +61,15 @@ private slots:
             QStringLiteral("C:/Program Files Evil/EShot"), roots));
         QVERIFY(!WindowsElevatedStartup::installLocationIsAdminProtected(QString(), roots));
     }
+
+    void readsTaskManagerStartupSwitch()
+    {
+        QVERIFY(!windowsStartupApprovedDisabled(QByteArray()));
+        QVERIFY(!windowsStartupApprovedDisabled(QByteArray::fromHex("020000000000000000000000")));
+        QVERIFY(!windowsStartupApprovedDisabled(QByteArray::fromHex("060000000000000000000000")));
+        QVERIFY(windowsStartupApprovedDisabled(QByteArray::fromHex("03000000d0c1f2c3a4b5d601")));
+        QVERIFY(windowsStartupApprovedDisabled(QByteArray::fromHex("07")));
+    }
 };
 
 QTEST_APPLESS_MAIN(AppLifecyclePolicyTests)

@@ -33,6 +33,11 @@ public:
     void setUpdateInfo(bool available, const QString &version, bool busy, const QString &status);
     bool remembersWindowSize() const { return m_rememberSettingsWindowSizeEnabled; }
     void showRecordingTab();
+    // Called once at startup: on Linux re-points a stale autostart entry at
+    // this copy; on Windows looks up the legacy startup task in the
+    // background so opening Settings never waits for schtasks.
+    static void refreshAutoStartEntryAtStartup();
+    static void prefetchLegacyAutoStartTask();
 
 signals:
     void updateRequested();

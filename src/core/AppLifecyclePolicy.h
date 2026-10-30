@@ -2,6 +2,8 @@
 
 // Pure decisions for app lifecycle edge cases (open dialogs during a capture,
 // pending work at quit). Kept free of widgets so they can be unit tested.
+#include <QByteArray>
+
 namespace AppLifecyclePolicy {
 
 enum class CaptureDialogKind {
@@ -28,5 +30,10 @@ CaptureDialogAction captureDialogAction(CaptureDialogKind kind);
 // started from it) is over and no OCR/upload dialog of that capture is open.
 bool settingsMayReturnAfterCapture(bool overlayVisible, bool recordingBusy,
                                    bool captureSessionDialogVisible);
+
+// Task Manager's Startup tab stores its switch for a Run entry as a binary
+// value under Explorer\StartupApproved\Run: an odd first byte means the
+// user disabled it there. A missing value means enabled.
+bool windowsStartupApprovedDisabled(const QByteArray &value);
 
 }

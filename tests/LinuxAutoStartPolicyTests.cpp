@@ -14,7 +14,50 @@ private slots:
     void fallsBackWhenAppImageIsEmpty();
     void fallsBackWhenAppImageDoesNotExist();
     void usesXWaylandForKdeAndGnomeWithOptInNativeKde();
+    void treatsAnyEshotEntryAsEnabled();
+    void readsExecutableFromEntry();
+    void repointsOnlyStaleOrIntegratedEntries();
 };
+
+void LinuxAutoStartPolicyTests::treatsAnyEshotEntryAsEnabled()
+{
+    const QString other = QStringLiteral("[Desktop Entry]\nType=Application\nExec=\"/opt/eshot/EShot.AppImage\" --silent\n");
+    QVERIFY(LinuxAutoStartPolicy::entryEnabled(other));
+    QVERIFY(!LinuxAutoStartPolicy::entryEnabled(QString()));
+    QVERIFY(!LinuxAutoStartPolicy::entryEnabled(other + QStringLiteral("Hidden=true\n")));
+    QVERIFY(!LinuxAutoStartPolicy::entryEnabled(other + QStringLiteral("X-GNOME-Autostart-enabled=false\n")));
+    QVERIFY(LinuxAutoStartPolicy::entryEnabled(other + QStringLiteral("X-GNOME-Autostart-enabled=true\n")));
+}
+
+void LinuxAutoStartPolicyTests::readsExecutableFromEntry()
+{
+    const QString path = QStringLiteral("/home/u/My Apps/EShot \"x\".AppImage");
+    const QString exec = LinuxAutoStartPolicy::commandLine(
+        path, QStringLiteral("KDE"), QString(), QStringLiteral("wayland"));
+    QVERIFY(exec.startsWith(QStringLiteral("/usr/bin/env")));
+    const QString entry = QStringLiteral("[Desktop Entry]\nExec=%1\n").arg(exec);
+    QCOMPARE(LinuxAutoStartPolicy::entryExecutable(entry), path);
+    QCOMPARE(LinuxAutoStartPolicy::entryExecutable(
+                 QStringLiteral("[Desktop Entry]\nExec=/usr/bin/eshot --silent\n")),
+             QStringLiteral("/usr/bin/eshot"));
+    QVERIFY(LinuxAutoStartPolicy::entryExecutable(QStringLiteral("[Desktop Entry]\n")).isEmpty());
+}
+
+void LinuxAutoStartPolicyTests::repointsOnlyStaleOrIntegratedEntries()
+{
+    const QString integrated = QStringLiteral("/home/u/.local/opt/EShot/EShot.AppImage");
+    const QString download = QStringLiteral("/home/u/Downloads/EShot.AppImage");
+    const QString aur = QStringLiteral("/opt/eshot/EShot.AppImage");
+    // Same target: nothing to do.
+    QVERIFY(!LinuxAutoStartPolicy::shouldRepointAtStartup(integrated, true, integrated, integrated));
+    // The entry's copy is gone: point it at this one.
+    QVERIFY(LinuxAutoStartPolicy::shouldRepointAtStartup(aur, false, download, integrated));
+    // The integrated copy takes over a working entry of another copy.
+    QVERIFY(LinuxAutoStartPolicy::shouldRepointAtStartup(aur, true, integrated, integrated));
+    // A copy being tried out does not steal a working entry.
+    QVERIFY(!LinuxAutoStartPolicy::shouldRepointAtStartup(integrated, true, download, integrated));
+}
+
 
 void LinuxAutoStartPolicyTests::prefersExistingOuterAppImage()
 {
