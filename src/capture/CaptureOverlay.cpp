@@ -5373,7 +5373,7 @@ bool CaptureOverlay::saveScreenshotFile(const QPixmap &result, bool useCliPath, 
         qWarning() << "[CaptureOverlay] Save failed:" << filename;
         m_lastFailedSavePath = filename;
         if (error)
-            *error = QStringLiteral("Save failed:\n") + QDir::toNativeSeparators(filename);
+            *error = TranslationManager::tr("errSaveFile") + QDir::toNativeSeparators(filename);
         return false;
     }
     return true;

@@ -1722,13 +1722,14 @@ private:
         connect(windowCaptureAction, &QAction::triggered,
                 this, &EShotApp::onWindowCaptureRequested);
 #endif
+        const QString screenNowHotkey = m_hotkeysInitialized
+            ? HotkeyManager::instance().activeShortcutText(HotkeyManager::HOTKEY_SCREEN_CAPTURE)
+            : QString();
         QAction *screenNowAction = m_trayMenu->addAction(
-            trayIcon(":/icons/save.svg"), TranslationManager::tr("trayCaptureScreenNow"));
+            trayIcon(":/icons/save.svg"),
+            withShortcutColumn(TranslationManager::tr("trayCaptureScreenNow"), screenNowHotkey));
         screenNowAction->setToolTip(withShortcut(
-            TranslationManager::tr("trayCaptureScreenNow"),
-            m_hotkeysInitialized
-                ? HotkeyManager::instance().activeShortcutText(HotkeyManager::HOTKEY_SCREEN_CAPTURE)
-                : QString()));
+            TranslationManager::tr("trayCaptureScreenNow"), screenNowHotkey));
         connect(screenNowAction, &QAction::triggered, this, [this]() {
             // Let the tray menu close before the screen is captured.
             QTimer::singleShot(250, this, &EShotApp::onScreenCaptureRequested);

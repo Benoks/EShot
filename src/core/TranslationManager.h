@@ -681,6 +681,7 @@ private:
         {"pinnedClose",    {"Kapat", "Close", "Schließen", "Fermer", "Cerrar", "閉じる", "关闭", "Закрыть"}},
 
         // ─── Hatalar ───
+        {"errSaveFile",    {"Dosya kaydedilemedi:\n", "Save failed:\n", "Speichern fehlgeschlagen:\n", "Échec de l’enregistrement :\n", "No se pudo guardar:\n", "保存に失敗しました:\n", "保存失败：\n", "Не удалось сохранить:\n"}},
         {"errSaveDir",     {"Kayıt dizini oluşturulamadı: ", "Failed to create directory: ", "Ordner erstellen fehlgeschlagen: ", "Échec création dossier : ", "Error al crear directorio: ", "ディレクトリ作成失敗: ", "创建目录失败: ", "Не удалось создать папку: "}},
         {"errInvalidHotkey",{"Geçersiz kısayol. Varsayılanı kullanın.", "Invalid hotkey. Use default.", "Ungültiges Kürzel.", "Raccourci invalide.", "Atajo no válido.", "無効なホットキー。", "无效快捷键。", "Неверная клавиша. Используйте по умолчанию."}},
         {"errTitle",       {"Hata", "Error", "Fehler", "Erreur", "Error", "エラー", "错误", "Ошибка"}},
