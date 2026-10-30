@@ -42,6 +42,7 @@
 
 #include <functional>
 
+#include "core/BugReport.h"
 #include "core/HotkeyManager.h"
 #include "core/WindowCaptureSupport.h"
 #include "core/TranslationManager.h"
@@ -746,6 +747,9 @@ public slots:
             break;
         case ControlCenterDialog::Action::About:
             onAboutRequested();
+            break;
+        case ControlCenterDialog::Action::ReportProblem:
+            QDesktopServices::openUrl(bugReportUrl(currentBugReportInfo()));
             break;
         case ControlCenterDialog::Action::Quit:
             onQuitAction();
@@ -1710,7 +1714,10 @@ private:
             withShortcutColumn(TranslationManager::trayCapture(), captureHotkey));
         captureAction->setToolTip(QStringLiteral("%1 (%2)").arg(
             TranslationManager::trayCapture(), hotkeyText(captureHotkey)));
-        connect(captureAction, &QAction::triggered, this, &EShotApp::onCaptureRequested);
+        // Wait for the tray menu to close, or it ends up in the screenshot.
+        connect(captureAction, &QAction::triggered, this, [this]() {
+            QTimer::singleShot(250, this, &EShotApp::onCaptureRequested);
+        });
         if (windowCaptureSupported()) {
 #ifdef Q_OS_WIN
             const UINT defaultWindowModifiers = MOD_SHIFT;
@@ -1728,8 +1735,9 @@ private:
                 withShortcutColumn(TranslationManager::trayWindowCapture(), windowCaptureHotkey));
             windowCaptureAction->setToolTip(QStringLiteral("%1 (%2)").arg(
                 TranslationManager::trayWindowCapture(), hotkeyText(windowCaptureHotkey)));
-            connect(windowCaptureAction, &QAction::triggered,
-                    this, &EShotApp::onWindowCaptureRequested);
+            connect(windowCaptureAction, &QAction::triggered, this, [this]() {
+                QTimer::singleShot(250, this, &EShotApp::onWindowCaptureRequested);
+            });
         }
         const QString screenNowHotkey = m_hotkeysInitialized
             ? HotkeyManager::instance().activeShortcutText(HotkeyManager::HOTKEY_SCREEN_CAPTURE)
@@ -1869,6 +1877,10 @@ private:
         connect(settingsAction, &QAction::triggered, this, &EShotApp::onSettingsRequested);
         QAction *aboutAction = m_trayMenu->addAction(trayIcon(":/icons/pen.svg"), TranslationManager::trayAbout());
         connect(aboutAction, &QAction::triggered, this, &EShotApp::onAboutRequested);
+        QAction *reportAction = m_trayMenu->addAction(trayIcon(":/icons/bug.svg"), TranslationManager::reportProblem());
+        connect(reportAction, &QAction::triggered, this, []() {
+            QDesktopServices::openUrl(bugReportUrl(currentBugReportInfo()));
+        });
         QAction *quitAction = m_trayMenu->addAction(trayIcon(":/icons/close.svg"), TranslationManager::trayQuit());
         connect(quitAction, &QAction::triggered, this, &EShotApp::onQuitAction);
 

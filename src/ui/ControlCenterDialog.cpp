@@ -59,6 +59,8 @@ ControlCenterDialog::ControlCenterDialog(QWidget *parent)
                                         TranslationManager::traySettings(), this);
     auto *about = createActionButton(QIcon(QStringLiteral(":/icons/pen.svg")),
                                      TranslationManager::trayAbout(), this);
+    auto *reportProblem = createActionButton(QIcon(QStringLiteral(":/icons/bug.svg")),
+                                             TranslationManager::reportProblem(), this);
     auto *quit = createActionButton(QIcon(QStringLiteral(":/icons/close.svg")),
                                     TranslationManager::trayQuit(), this);
 
@@ -68,15 +70,16 @@ ControlCenterDialog::ControlCenterDialog(QWidget *parent)
     connect(openFolder, &QPushButton::clicked, this, [this]() { choose(Action::OpenFolder); });
     connect(settings, &QPushButton::clicked, this, [this]() { choose(Action::Settings); });
     connect(about, &QPushButton::clicked, this, [this]() { choose(Action::About); });
+    connect(reportProblem, &QPushButton::clicked, this, [this]() { choose(Action::ReportProblem); });
     connect(quit, &QPushButton::clicked, this, [this]() { choose(Action::Quit); });
 
     layout->addWidget(capture);
     layout->addWidget(recordGif);
     layout->addWidget(recordVideo);
     layout->addWidget(openFolder);
-    layout->addSpacing(4);
     layout->addWidget(settings);
     layout->addWidget(about);
+    layout->addWidget(reportProblem);
     layout->addWidget(quit);
 }
 

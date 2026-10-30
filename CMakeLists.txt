@@ -62,6 +62,7 @@ set(SOURCES
     src/capture/ShortcutSheet.cpp
     src/core/LinuxUpdateScript.cpp
     src/core/AppLifecyclePolicy.cpp
+    src/core/BugReport.cpp
     src/core/ProtectedFolderHint.cpp
     src/core/LinuxDependencySelection.cpp
     src/core/CatboxUploader.cpp
@@ -154,6 +155,7 @@ set(HEADERS
     src/capture/ShortcutSheet.h
     src/core/LinuxUpdateScript.h
     src/core/AppLifecyclePolicy.h
+    src/core/BugReport.h
     src/core/ProtectedFolderHint.h
     src/core/LinuxDependencySelection.h
     src/core/CatboxUploader.h
@@ -584,6 +586,7 @@ if(BUILD_TESTING)
         SOURCES
             ${CMAKE_CURRENT_SOURCE_DIR}/tests/AboutDialogTests.cpp
             ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/AboutDialog.cpp
+            ${CMAKE_CURRENT_SOURCE_DIR}/src/core/BugReport.cpp
             ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/AboutDialog.h
             ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/ThemeColors.cpp
             ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/ThemeColors.h
@@ -987,6 +990,14 @@ if(BUILD_TESTING)
         target_link_libraries(eshot_recording_cancellation_tests PRIVATE
             user32 gdi32 shell32 dwmapi advapi32 ole32 oleaut32 dxgi)
     endif()
+
+    eshot_add_test(eshot_bug_report_tests bug_report
+        SOURCES
+            tests/BugReportTests.cpp
+            src/core/BugReport.cpp
+            src/core/BugReport.h
+        LIBS Qt6::Core Qt6::Gui
+    )
 
     eshot_add_test(eshot_app_lifecycle_policy_tests app_lifecycle_policy
         SOURCES

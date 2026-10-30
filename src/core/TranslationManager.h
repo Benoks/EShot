@@ -194,6 +194,7 @@ public:
     static QString trayCancelRecording() { return tr("trayCancelRecording"); }
     static QString traySettings()     { return tr("traySettings"); }
     static QString trayAbout()        { return tr("trayAbout"); }
+    static QString reportProblem()    { return tr("reportProblem"); }
     static QString trayQuit()         { return tr("trayQuit"); }
 
     // ─── Erişilebilirlik ───
@@ -554,6 +555,7 @@ private:
         {"trayCancelRecording",{"Kaydı İptal Et", "Cancel Recording", "Aufnahme abbrechen", "Annuler l'enregistrement", "Cancelar grabación", "録画をキャンセル", "取消录制", "Отменить запись"}},
         {"traySettings",   {"Ayarlar", "Settings", "Einstellungen", "Paramètres", "Configuración", "設定", "设置", "Настройки"}},
         {"trayAbout",      {"Hakkında", "About", "Über", "À propos", "Acerca de", "概要", "关于", "О программе"}},
+        {"reportProblem",  {"Sorun Bildir", "Report a Problem", "Problem melden", "Signaler un problème", "Informar de un problema", "問題を報告", "报告问题", "Сообщить о проблеме"}},
         {"trayQuit",       {"Çıkış", "Quit", "Beenden", "Quitter", "Salir", "終了", "退出", "Выход"}},
 
         // ─── Erişilebilirlik ───

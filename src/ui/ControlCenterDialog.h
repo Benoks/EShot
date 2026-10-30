@@ -6,7 +6,7 @@ class ControlCenterDialog final : public QDialog {
     Q_OBJECT
 
 public:
-    enum class Action { None, Capture, RecordGif, RecordVideo, OpenFolder, Settings, About, Quit };
+    enum class Action { None, Capture, RecordGif, RecordVideo, OpenFolder, Settings, About, ReportProblem, Quit };
 
     explicit ControlCenterDialog(QWidget *parent = nullptr);
     Action selectedAction() const;

@@ -21,7 +21,7 @@ private slots:
     {
         ControlCenterDialog dialog;
         const auto buttons = dialog.findChildren<QPushButton *>();
-        QCOMPARE(buttons.size(), 7);
+        QCOMPARE(buttons.size(), 8);
         for (QPushButton *button : buttons)
             QVERIFY(button->styleSheet().isEmpty());
     }
@@ -32,7 +32,7 @@ private slots:
         dialog.adjustSize();
 
         QCOMPARE(dialog.minimumHeight(), dialog.maximumHeight());
-        QVERIFY(dialog.height() < 420);
+        QVERIFY(dialog.height() < 460);
         QCOMPARE(dialog.width(), 300);
     }
 };

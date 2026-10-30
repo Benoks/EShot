@@ -1,5 +1,6 @@
 #include "AboutDialog.h"
 #include "../core/TranslationManager.h"
+#include "../core/BugReport.h"
 #include "ThemeColors.h"
 #include <QVBoxLayout>
 #include <QLabel>
@@ -8,6 +9,7 @@
 #include <QApplication>
 #include <QPainter>
 #include <QIcon>
+#include <QDesktopServices>
 
 AboutDialog::AboutDialog(QWidget *parent) : QDialog(parent)
 {
@@ -113,6 +115,14 @@ void AboutDialog::setupUI()
     )");
     connect(m_checkUpdateBtn, &QPushButton::clicked, this, &AboutDialog::onCheckForUpdates);
     layout->addWidget(m_checkUpdateBtn);
+
+    QPushButton *reportBtn = new QPushButton(TranslationManager::reportProblem());
+    reportBtn->setCursor(Qt::PointingHandCursor);
+    reportBtn->setMinimumHeight(32);
+    connect(reportBtn, &QPushButton::clicked, this, []() {
+        QDesktopServices::openUrl(bugReportUrl(currentBugReportInfo()));
+    });
+    layout->addWidget(reportBtn);
 
     // Close: a plain dialog button, so it follows the dark/light/high-contrast palette.
     QPushButton *closeBtn = new QPushButton(TranslationManager::ocrClose());
