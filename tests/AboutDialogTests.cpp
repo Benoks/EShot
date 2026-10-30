@@ -1,4 +1,5 @@
 #include <QtTest>
+#include <QScreen>
 #include <QSignalSpy>
 #include "ui/AboutDialog.h"
 #include "core/TranslationManager.h"
@@ -33,7 +34,9 @@ private slots:
         // A long status must not be clipped: the dialog grows to fit it.
         dialog.setUpdateInfo(false, QString(), false, QStringLiteral("status ").repeated(60));
         dialog.adjustSize();
-        QVERIFY(dialog.height() >= dialog.sizeHint().height());
+        // adjustSize() stops at two thirds of the screen (800x600 offscreen in CI).
+        const int screenLimit = dialog.screen()->availableGeometry().height() * 2 / 3;
+        QVERIFY(dialog.height() >= qMin(dialog.sizeHint().height(), screenLimit));
     }
 };
 
