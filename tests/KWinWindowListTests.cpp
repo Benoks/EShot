@@ -420,6 +420,27 @@ private slots:
         QVERIFY(!snapshot.outputs.isEmpty());
         QVERIFY(!client.isPending());
     }
+
+    // A screenshot can block the GUI thread past the timeout; the reply that
+    // is already queued must still be used.
+    void liveKWinReplySurvivesABlockedGuiThread()
+    {
+        if (qEnvironmentVariableIntValue("ESHOT_TEST_LIVE_KWIN") != 1)
+            QSKIP("set ESHOT_TEST_LIVE_KWIN=1 to query the running KWin");
+        QDBusConnection bus = QDBusConnection::sessionBus();
+        if (!bus.isConnected() || !bus.interface()
+            || !bus.interface()->isServiceRegistered(QStringLiteral("org.kde.KWin")).value()) {
+            QSKIP("KWin is not on the session bus");
+        }
+        KWinWindowListClient client;
+        QSignalSpy received(&client, &KWinWindowListClient::windowListReceived);
+        QSignalSpy unavailable(&client, &KWinWindowListClient::windowListUnavailable);
+        QVERIFY(client.request(300));
+        QThread::msleep(600);
+        QTRY_VERIFY_WITH_TIMEOUT(!received.isEmpty() || !unavailable.isEmpty(), 3000);
+        QCOMPARE(unavailable.count(), 0);
+        QCOMPARE(received.count(), 1);
+    }
 };
 
 QTEST_GUILESS_MAIN(KWinWindowListTests)

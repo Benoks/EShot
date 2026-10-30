@@ -27,6 +27,14 @@ KWinWindowListClient::KWinWindowListClient(QObject *parent)
     connect(m_timeout, &QTimer::timeout, this, [this]() {
         if (m_token.isEmpty())
             return;
+        // A screenshot that blocked the GUI thread past the deadline makes
+        // the timer fire late; give a reply already queued on the bus one
+        // more pass of the event loop before giving up.
+        if (!m_lateTimeoutRetried && m_elapsed.elapsed() > m_timeoutMs + 100) {
+            m_lateTimeoutRetried = true;
+            m_timeout->start(50);
+            return;
+        }
         qWarning() << "[KWinWindowList] no window list from KWin within"
                    << m_elapsed.elapsed() << "ms; window selection is unavailable for this capture";
         finishRequest();
@@ -76,6 +84,8 @@ bool KWinWindowListClient::request(int timeoutMs)
     m_token = token;
     m_scriptPath = path;
     m_elapsed.start();
+    m_timeoutMs = timeoutMs;
+    m_lateTimeoutRetried = false;
     m_timeout->start(timeoutMs);
     return true;
 }

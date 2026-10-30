@@ -46,6 +46,8 @@ private:
 
     QTimer *m_timeout = nullptr;
     QElapsedTimer m_elapsed;
+    int m_timeoutMs = 0;
+    bool m_lateTimeoutRetried = false;
     QString m_token;
     QString m_scriptPath;
     bool m_registered = false;
