@@ -43,6 +43,7 @@
 #include <functional>
 
 #include "core/HotkeyManager.h"
+#include "core/WindowCaptureSupport.h"
 #include "core/TranslationManager.h"
 #include "core/UpdateManager.h"
 #include "core/LinuxScreenshotPolicy.h"
@@ -373,7 +374,8 @@ public slots:
 
     void onWindowCaptureRequested()
     {
-#ifdef Q_OS_WIN
+        if (!windowCaptureSupported())
+            return;
         if (captureBlockedByDialog())
             return;
         if (closeBlockingDialogs()) {
@@ -383,7 +385,6 @@ public slots:
         if (cancelOpenCapture()) return;
         ensureOverlay();
         m_overlay->startWindowCapture();
-#endif
     }
 
     void showSuccessNotification(const QString &message, const QString &path, int timeoutMs)
@@ -1710,19 +1711,26 @@ private:
         captureAction->setToolTip(QStringLiteral("%1 (%2)").arg(
             TranslationManager::trayCapture(), hotkeyText(captureHotkey)));
         connect(captureAction, &QAction::triggered, this, &EShotApp::onCaptureRequested);
+        if (windowCaptureSupported()) {
 #ifdef Q_OS_WIN
-        const QString windowCaptureHotkey = registeredHotkey(
-            HotkeyManager::HOTKEY_WINDOW_CAPTURE,
-            static_cast<UINT>(hotkeySettings.value("windowCaptureHotkeyModifiers", MOD_SHIFT).toUInt()),
-            static_cast<UINT>(hotkeySettings.value("windowCaptureHotkeyVKey", VK_SNAPSHOT).toUInt()));
-        QAction *windowCaptureAction = m_trayMenu->addAction(
-            trayIcon(":/icons/rectangle.svg"),
-            withShortcutColumn(TranslationManager::trayWindowCapture(), windowCaptureHotkey));
-        windowCaptureAction->setToolTip(QStringLiteral("%1 (%2)").arg(
-            TranslationManager::trayWindowCapture(), hotkeyText(windowCaptureHotkey)));
-        connect(windowCaptureAction, &QAction::triggered,
-                this, &EShotApp::onWindowCaptureRequested);
+            const UINT defaultWindowModifiers = MOD_SHIFT;
+            const UINT defaultWindowVirtualKey = VK_SNAPSHOT;
+#else
+            const UINT defaultWindowModifiers = 0;
+            const UINT defaultWindowVirtualKey = 0;
 #endif
+            const QString windowCaptureHotkey = registeredHotkey(
+                HotkeyManager::HOTKEY_WINDOW_CAPTURE,
+                static_cast<UINT>(hotkeySettings.value("windowCaptureHotkeyModifiers", defaultWindowModifiers).toUInt()),
+                static_cast<UINT>(hotkeySettings.value("windowCaptureHotkeyVKey", defaultWindowVirtualKey).toUInt()));
+            QAction *windowCaptureAction = m_trayMenu->addAction(
+                trayIcon(":/icons/rectangle.svg"),
+                withShortcutColumn(TranslationManager::trayWindowCapture(), windowCaptureHotkey));
+            windowCaptureAction->setToolTip(QStringLiteral("%1 (%2)").arg(
+                TranslationManager::trayWindowCapture(), hotkeyText(windowCaptureHotkey)));
+            connect(windowCaptureAction, &QAction::triggered,
+                    this, &EShotApp::onWindowCaptureRequested);
+        }
         const QString screenNowHotkey = m_hotkeysInitialized
             ? HotkeyManager::instance().activeShortcutText(HotkeyManager::HOTKEY_SCREEN_CAPTURE)
             : QString();

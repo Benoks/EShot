@@ -114,4 +114,5 @@ To create the user-facing AppImage:
 - On KDE Plasma 6 and GNOME, the first shortcut approval binds PrintScreen to EShot.
 - On Wayland, GIF/video recording prompts through the ScreenCast portal, accepts the selected screen/window, and writes a non-empty output file.
 - Selection, annotation, copy, save, OCR, upload, pin, GIF, and video flows each run once.
+- On KDE Plasma (Wayland and X11), tray **Capture Window** (or its hotkey) highlights the window under the mouse, a click selects it, a drag still selects a region; the log shows `[KWinWindowList] received N windows ... in X ms`. `ESHOT_TEST_LIVE_KWIN=1 ctest -R kwin_window_list` checks the KWin round trip. GNOME shows no Capture Window entry.
 - A newer test release downloads, verifies, replaces the AppImage, and relaunches with the new version.

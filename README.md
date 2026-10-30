@@ -35,7 +35,7 @@ EShot keeps the complete screenshot workflow in one compact tray application: se
 
 ## Features
 
-- Region and monitor capture with multi-monitor and high-DPI handling, plus window selection capture on Windows
+- Region and monitor capture with multi-monitor and high-DPI handling, plus window selection capture on Windows and KDE Plasma
 - Compact selection overlay with configurable actions and shortcuts
 - Pen, arrow, line, rectangle, ellipse, text, highlighter, smooth blur, pixelate, counter, eraser, and eyedropper tools
 - Resize and rotate selected text and shapes directly on the canvas
@@ -58,6 +58,8 @@ EShot keeps the complete screenshot workflow in one compact tray application: se
 Start a capture from the tray icon, `Print Screen`, a custom global shortcut, a direct-action shortcut, or the command line. Select a region and use the overlay toolbar to annotate, OCR, search, upload, pin, copy, save, or begin recording.
 
 Double-clicking a screen during selection captures that complete monitor. The overlay adapts to tight spaces and scaled multi-monitor layouts.
+
+**Capture Window** (tray menu or its own hotkey) highlights the window under the mouse; click to select it, then annotate and save as usual. It is available on Windows and on KDE Plasma (Wayland and X11). On KDE, EShot asks KWin for the window list with a short KWin script while the screenshot is taken; dragging still selects a free region, and if KWin does not answer within a second the capture continues with free selection only. Other Linux desktops do not offer window capture.
 
 ## Install
 
@@ -150,7 +152,7 @@ For the AUR package and the `.tar.gz` archive, files owned by the package manage
 ### Linux runtime notes
 
 - Wayland screenshots and recordings use XDG Desktop Portal and PipeWire.
-- KDE global shortcuts use KGlobalAccel. GNOME uses the Global Shortcuts portal where available and can install an EShot-only GNOME custom shortcut as a compatibility fallback.
+- KDE global shortcuts use KGlobalAccel. The window-capture shortcut has no default key on KDE because Spectacle already uses `Shift+Print` and `Meta+Print`; set one in **Settings → Hotkey**. GNOME uses the Global Shortcuts portal where available and can install an EShot-only GNOME custom shortcut as a compatibility fallback.
 - Stock GNOME does not expose legacy tray icons. When no tray integration is available, launching EShot from the application list opens a compact control window with Capture, Record GIF, Record Video, Open Screenshots Folder, Settings, About, and Quit. Autostart remains silent. `Print Screen` and custom shortcuts continue to work independently of the tray.
 - GNOME screenshots are delivered through its secure Screenshot portal. EShot warms that service at startup, but the portal still adds a short delay before the selection panel appears. This varies by GNOME and portal version and is expected on Wayland.
 - GNOME and KDE Wayland use an XWayland selection overlay so text entry, focus, one-canvas multi-monitor selection and the placement of pinned images and recording controls behave consistently. On KDE, `ESHOT_CAPTURE_BACKEND=wayland` opts into experimental per-output native surfaces, which give sharper previews on mixed-DPI setups but cannot place pinned images or the recording frame.
@@ -199,7 +201,7 @@ Most shortcuts can be changed in Settings. Press `?` (or `F1`) during a capture 
 | Shortcut | Action |
 | --- | --- |
 | `Print Screen` | Start region capture |
-| `Shift+Print Screen` | Capture a window (Windows) |
+| `Shift+Print Screen` | Capture a window (Windows; on KDE Plasma, set a key in Settings) |
 
 Instant capture, GIF and video recording, and the recording controls (pause, stop, cancel) have their own global shortcuts in **Settings → Hotkey**.
 
@@ -208,6 +210,7 @@ Instant capture, GIF and video recording, and the recording controls (pause, sto
 | Shortcut | Action |
 | --- | --- |
 | Drag | Select an area |
+| Click a window | Select that window (window capture) |
 | Double-click a screen | Capture the complete monitor |
 | `Enter` / `Ctrl+C` | Copy selection |
 | `Ctrl+S` | Save selection |

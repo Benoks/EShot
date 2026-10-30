@@ -13,8 +13,9 @@ class ShortcutSheetLayer : public QWidget
 
 public:
     explicit ShortcutSheetLayer(QWidget *parent);
-    // Covers the parent and centres the card on monitorRect.
-    void open(const QRect &monitorRect);
+    // Covers the parent and centres the card on monitorRect. windowSelection
+    // adds the window-capture gesture (click a window).
+    void open(const QRect &monitorRect, bool windowSelection = false);
 
 signals:
     void closed();
@@ -25,8 +26,10 @@ protected:
 
 private:
     QRect m_monitorRect;
+    bool m_windowSelection = false;
 };
 
 // The "?" overlay card listing every capture shortcut and mouse gesture.
 // Paints a card centred on monitorRect using the user's configured keys.
-void drawShortcutSheet(QPainter &painter, const QRect &monitorRect);
+void drawShortcutSheet(QPainter &painter, const QRect &monitorRect,
+                       bool windowSelection = false);

@@ -119,6 +119,13 @@ private slots:
         QCOMPARE(id.value(3), QStringLiteral("Capture"));
     }
 
+    void namesTheKdeWindowCaptureAction()
+    {
+        const QStringList id = LinuxKGlobalAccelShortcuts::actionId(8);
+        QCOMPARE(id.value(1), QStringLiteral("eshot_window_capture"));
+        QCOMPARE(id.value(3), QStringLiteral("Capture window"));
+    }
+
     void marksKdeShortcutsAsPresent()
     {
         QCOMPARE(LinuxKGlobalAccelShortcuts::registrationFlags(), uint(6));

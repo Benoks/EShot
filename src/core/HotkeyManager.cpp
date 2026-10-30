@@ -3,6 +3,7 @@
 #include "LinuxGnomeShortcutInstaller.h"
 #include "LinuxPortalGlobalShortcuts.h"
 #include "LinuxKGlobalAccelShortcuts.h"
+#include "WindowCaptureSupport.h"
 #include "ui/SettingsHotkeyPolicy.h"
 #include <QApplication>
 #include <QCoreApplication>
@@ -268,6 +269,13 @@ HotkeyManager::HotkeyManager(QObject *parent) : QObject(parent)
 #ifdef Q_OS_WIN
     m_windowCaptureModifiers = static_cast<UINT>(s.value("windowCaptureHotkeyModifiers", MOD_SHIFT).toUInt());
     m_windowCaptureVirtualKey = static_cast<UINT>(s.value("windowCaptureHotkeyVKey", VK_SNAPSHOT).toUInt());
+#else
+    // KDE Plasma: no default key, Spectacle already owns Shift+Print and
+    // Meta+Print. Other desktops have no window capture.
+    if (windowCaptureSupported()) {
+        m_windowCaptureModifiers = static_cast<UINT>(s.value("windowCaptureHotkeyModifiers", 0).toUInt());
+        m_windowCaptureVirtualKey = static_cast<UINT>(s.value("windowCaptureHotkeyVKey", 0).toUInt());
+    }
 #endif
     if (!registerHotkey(HOTKEY_INSTANT_CAPTURE, m_instantCaptureModifiers, m_instantCaptureVirtualKey))
         recordFailure(HOTKEY_INSTANT_CAPTURE, m_instantCaptureModifiers, m_instantCaptureVirtualKey);
@@ -777,6 +785,10 @@ bool HotkeyManager::reRegisterActionHotkeys(UINT instantModifiers, UINT instantV
                                             UINT videoModifiers, UINT videoVirtualKey,
                                             UINT windowModifiers, UINT windowVirtualKey)
 {
+    if (!windowCaptureSupported()) {
+        windowModifiers = 0;
+        windowVirtualKey = 0;
+    }
     const UINT oldInstantModifiers = m_instantCaptureModifiers;
     const UINT oldInstantVirtualKey = m_instantCaptureVirtualKey;
     const UINT oldGifModifiers = m_gifCaptureModifiers;

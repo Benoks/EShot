@@ -5238,7 +5238,7 @@ void CaptureOverlay::toggleShortcutSheet()
         const QRect monitor = m_selectionComplete
             ? monitorRectAt(normalizedSelectionRect().center())
             : monitorRectAt(capturePositionFromGlobal(QCursor::pos()));
-        m_shortcutSheet->open(monitor);
+        m_shortcutSheet->open(monitor, m_selectionMode == CaptureSelectionMode::Window);
     }
     update();
     // The panel button took focus; keep keys (Esc, ?) on the canvas.

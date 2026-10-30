@@ -119,6 +119,15 @@ private slots:
             LinuxDesktopEnvironment::Kde, false));
     }
 
+    void offersWindowCaptureOnKdeOnly()
+    {
+        QVERIFY(LinuxDesktopIntegration::supportsWindowCapture(LinuxDesktopEnvironment::Kde));
+        QVERIFY(!LinuxDesktopIntegration::supportsWindowCapture(LinuxDesktopEnvironment::Gnome));
+        QVERIFY(!LinuxDesktopIntegration::supportsWindowCapture(LinuxDesktopEnvironment::Other));
+        QVERIFY(LinuxDesktopIntegration::supportsWindowCapture(LinuxDesktopIntegration::detect(
+            QStringLiteral("KDE"), QString())));
+    }
+
     void showsControlCenterOnlyForTraylessInteractiveGnome()
     {
         QVERIFY(LinuxDesktopIntegration::shouldShowControlCenter(

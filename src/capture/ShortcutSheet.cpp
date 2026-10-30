@@ -165,9 +165,10 @@ ShortcutSheetLayer::ShortcutSheetLayer(QWidget *parent)
     hide();
 }
 
-void ShortcutSheetLayer::open(const QRect &monitorRect)
+void ShortcutSheetLayer::open(const QRect &monitorRect, bool windowSelection)
 {
     m_monitorRect = monitorRect;
+    m_windowSelection = windowSelection;
     if (parentWidget())
         setGeometry(parentWidget()->rect());
     show();
@@ -179,7 +180,8 @@ void ShortcutSheetLayer::paintEvent(QPaintEvent *)
 {
     QPainter painter(this);
     painter.fillRect(rect(), QColor(0, 0, 0, 110));
-    drawShortcutSheet(painter, m_monitorRect.isValid() ? m_monitorRect : rect());
+    drawShortcutSheet(painter, m_monitorRect.isValid() ? m_monitorRect : rect(),
+                      m_windowSelection);
 }
 
 void ShortcutSheetLayer::mousePressEvent(QMouseEvent *event)
@@ -189,7 +191,7 @@ void ShortcutSheetLayer::mousePressEvent(QMouseEvent *event)
     emit closed();
 }
 
-void drawShortcutSheet(QPainter &painter, const QRect &monitorRect)
+void drawShortcutSheet(QPainter &painter, const QRect &monitorRect, bool windowSelection)
 {
     using TM = TranslationManager;
 
@@ -197,6 +199,8 @@ void drawShortcutSheet(QPainter &painter, const QRect &monitorRect)
         {{TM::tr("keyDrag")}, TM::tr("sheetSelectArea")},
         {{TM::tr("keyDoubleClick")}, TM::tr("sheetSelectScreen")},
     }};
+    if (windowSelection)
+        selection.rows.prepend({{TM::tr("keyClick")}, TM::tr("sheetSelectWindow")});
     const QString copyKey = shortcut("actionCopy", "Ctrl+C");
     selection.rows.append({copyKey.isEmpty() ? QStringList{QStringLiteral("Enter")}
                                              : QStringList{QStringLiteral("Enter"), copyKey},

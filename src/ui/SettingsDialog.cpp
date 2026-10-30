@@ -9,6 +9,7 @@
 #include "SettingsLayoutPolicy.h"
 #include "ApplicationTheme.h"
 #include "../core/HotkeyManager.h"
+#include "../core/WindowCaptureSupport.h"
 #include "../core/HotkeySequence.h"
 #include "../core/LinuxAutoStartPolicy.h"
 #include "../core/LinuxDesktopIntegration.h"
@@ -1634,9 +1635,8 @@ QWidget* SettingsDialog::createHotkeyTab()
     m_videoCaptureHotkeyEdit = makeRecordingHotkeyEdit();
     m_screenCaptureHotkeyEdit = makeRecordingHotkeyEdit();
     m_screenCaptureHotkeyEdit->setToolTip(TranslationManager::tr("tipScreenNowHotkey"));
-#ifdef Q_OS_WIN
-    m_windowCaptureHotkeyEdit = makeRecordingHotkeyEdit();
-#endif
+    if (windowCaptureSupported())
+        m_windowCaptureHotkeyEdit = makeRecordingHotkeyEdit();
     m_instantCaptureHotkeyEdit->setToolTip(TranslationManager::tr("tipInstantCaptureHotkey"));
     m_gifCaptureHotkeyEdit->setToolTip(TranslationManager::tr("tipGifCaptureHotkey"));
     m_videoCaptureHotkeyEdit->setToolTip(TranslationManager::tr("tipVideoCaptureHotkey"));
@@ -1646,11 +1646,11 @@ QWidget* SettingsDialog::createHotkeyTab()
         actionHotkeyLayout->addRow(label, withConflictLabel(edit, conflictLabel));
         addGlobalHotkeyField(id, edit, name, conflictLabel);
     };
-#ifdef Q_OS_WIN
-    m_windowCaptureHotkeyEdit->setToolTip(TranslationManager::tr("tipWindowCaptureHotkey"));
-    addActionHotkeyRow(HotkeyManager::HOTKEY_WINDOW_CAPTURE, TranslationManager::tr("hotkeyWindowLabel"),
-                       TranslationManager::trayWindowCapture(), m_windowCaptureHotkeyEdit);
-#endif
+    if (m_windowCaptureHotkeyEdit) {
+        m_windowCaptureHotkeyEdit->setToolTip(TranslationManager::tr("tipWindowCaptureHotkey"));
+        addActionHotkeyRow(HotkeyManager::HOTKEY_WINDOW_CAPTURE, TranslationManager::tr("hotkeyWindowLabel"),
+                           TranslationManager::trayWindowCapture(), m_windowCaptureHotkeyEdit);
+    }
     addActionHotkeyRow(HotkeyManager::HOTKEY_SCREEN_CAPTURE, TranslationManager::tr("hotkeyScreenNowLabel"),
                        labelName(TranslationManager::tr("hotkeyScreenNowLabel")), m_screenCaptureHotkeyEdit);
     addActionHotkeyRow(HotkeyManager::HOTKEY_INSTANT_CAPTURE, TranslationManager::tr("hotkeyInstantRegionLabel"),
