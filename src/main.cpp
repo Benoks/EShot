@@ -674,8 +674,18 @@ public slots:
 
     void onControlRequested()
     {
+        // Another launch while it is open brings the open one forward instead
+        // of stacking a second modal dialog on top.
+        if (m_controlCenterDialog) {
+            m_controlCenterDialog->raise();
+            m_controlCenterDialog->activateWindow();
+            return;
+        }
         ControlCenterDialog dialog;
-        if (dialog.exec() != QDialog::Accepted)
+        m_controlCenterDialog = &dialog;
+        const int controlResult = dialog.exec();
+        m_controlCenterDialog = nullptr;
+        if (controlResult != QDialog::Accepted)
             return;
 
         switch (dialog.selectedAction()) {
@@ -2010,6 +2020,7 @@ private:
     bool m_recordingStartPending = false;
     bool m_quitAfterRecording = false;
     QPointer<SettingsDialog> m_settingsDialog;
+    QPointer<ControlCenterDialog> m_controlCenterDialog;
     bool m_settingsHiddenForCapture = false;
     bool m_resumeSettingsNow = false;
     QElapsedTimer m_recordingStartTimer;
