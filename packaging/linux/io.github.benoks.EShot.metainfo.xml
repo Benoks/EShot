@@ -31,6 +31,16 @@
     <category>Graphics</category>
     <category>Photography</category>
   </categories>
+  <screenshots>
+    <screenshot type="default">
+      <caption>Region selection with the annotation toolbar and Quick Settings on Linux</caption>
+      <image>https://raw.githubusercontent.com/Benoks/EShot/main/docs/images/eshot-linux.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>The same capture overlay on Windows</caption>
+      <image>https://raw.githubusercontent.com/Benoks/EShot/main/docs/images/eshot-windows.png</image>
+    </screenshot>
+  </screenshots>
   <url type="homepage">https://github.com/Benoks/EShot</url>
   <url type="bugtracker">https://github.com/Benoks/EShot/issues</url>
   <releases>
@@ -42,6 +52,56 @@
     <release version="4.7.0" date="2026-10-15">
       <description>
         <p>Overhauls Windows and Wayland recording, adds tray recording controls and frame visibility, simplifies quality settings, improves first-run layout, and supports a portable marker for disabling automatic updates.</p>
+      </description>
+    </release>
+    <release version="4.6.1" date="2026-10-11">
+      <description>
+        <p>Lets the Counter tool add a pointer by dragging, start at a chosen number and change its size, moves or resizes the selection with the arrow keys, adds an option to lock the selection automatically, and resizes pinned images with Shift and the mouse wheel.</p>
+      </description>
+    </release>
+    <release version="4.6.0" date="2026-10-02">
+      <description>
+        <p>Removes paused time from recordings instead of leaving a frozen frame, adds a cancelable start countdown, saves a running recording when EShot quits, makes long Wayland GIF conversion more reliable, and explains hotkeys that another application already holds.</p>
+      </description>
+    </release>
+    <release version="4.5.1" date="2026-09-30">
+      <description>
+        <p>Adds an optional Start as administrator setting on Windows for capturing applications that run as administrator.</p>
+      </description>
+    </release>
+    <release version="4.5.0" date="2026-09-28">
+      <description>
+        <p>Adds a smooth blur and a separate pixelate tool, bold and background styles for text, editing of existing labels, direct moving, recoloring and deleting of selected objects, and an in-capture shortcut sheet.</p>
+      </description>
+    </release>
+    <release version="4.4.0" date="2026-09-27">
+      <description>
+        <p>Runs EShot as the signed-in user on Windows with a per-user installer by default, stores downloaded components in the user profile, and fixes leftover crosshair lines and blur strength changes in captures.</p>
+      </description>
+    </release>
+    <release version="4.3.2" date="2026-09-24">
+      <description>
+        <p>Removes the extra image that the GNOME screenshot portal left in the Pictures folder after a capture was canceled or copied.</p>
+      </description>
+    </release>
+    <release version="4.3.1" date="2026-09-07">
+      <description>
+        <p>Fixes the KDE Print Screen setup so only Spectacle's plain Print Screen shortcut is replaced and restored on failure, and warns on unsupported Linux desktops and non-Wayland sessions.</p>
+      </description>
+    </release>
+    <release version="4.3.0" date="2026-09-06">
+      <description>
+        <p>Fixes the capture overlay staying visible behind the first-run Welcome window and clarifies that the AppImage is portable until it is added to the application menu.</p>
+      </description>
+    </release>
+    <release version="4.2.9" date="2026-09-02">
+      <description>
+        <p>Makes overlay number fields select their value on a single click, keeps overlay inputs responsive while editing text on XWayland, and keeps the selection border out of full-screen recordings.</p>
+      </description>
+    </release>
+    <release version="4.2.8" date="2026-08-23">
+      <description>
+        <p>Fixes a native Wayland multi-monitor regression, removes selection repaint traces, improves annotation editing and undo, and makes GIF timing, audio encoder discovery and long scrolling captures more reliable.</p>
       </description>
     </release>
     <release version="4.2.7" date="2026-08-10">
