@@ -590,6 +590,16 @@ static QString linuxInstallerPath()
     return QDir(QCoreApplication::applicationDirPath()).filePath("../lib/eshot/install-runtime-deps.sh");
 }
 
+// install-runtime-deps.sh prints this marker when GNOME Shell needs a new
+// login to load the AppIndicator extension it just installed (tray icon).
+static void showLinuxReloginHintIfNeeded(QProcess *process, QWidget *parent)
+{
+    if (!process || !process->readAllStandardOutput().contains("ESHOT_SETUP_RELOGIN_REQUIRED"))
+        return;
+    QMessageBox::information(parent, QStringLiteral("EShot"),
+                             TranslationManager::tr("gnomeTrayReloginHint"));
+}
+
 static bool selectedLinuxCapabilitiesAvailable(bool ffmpeg, bool ocr, bool integration)
 {
     if (ffmpeg && QStandardPaths::findExecutable(QStringLiteral("ffmpeg")).isEmpty()) return false;
@@ -678,6 +688,7 @@ void FirstRunWizard::startLinuxDependencyInstaller()
             }
             markLinuxSetupCompleted();
             m_linuxInstallStatus->setText(TranslationManager::tr("optionalSetupSucceeded"));
+            showLinuxReloginHintIfNeeded(m_linuxInstallerProcess, this);
             const bool restartFromDesktop = integration && scheduleIntegratedAppRestart();
             accept();
             if (restartFromDesktop)
@@ -728,7 +739,7 @@ void FirstRunWizard::showLinuxDependencySetup(QWidget *parent)
     });
     QObject::connect(&installer, &QProcess::finished, &dialog, [&](int exitCode, QProcess::ExitStatus exitStatus) {
         install->setEnabled(true); cancel->setEnabled(true);
-        if (exitStatus == QProcess::NormalExit && exitCode == 0) { statusLabel.setText(TranslationManager::tr("dependenciesInstalled")); dialog.accept(); return; }
+        if (exitStatus == QProcess::NormalExit && exitCode == 0) { statusLabel.setText(TranslationManager::tr("dependenciesInstalled")); showLinuxReloginHintIfNeeded(&installer, &dialog); dialog.accept(); return; }
         const QString detail = QString::fromUtf8(installer.readAllStandardError()).trimmed();
         statusLabel.setText(TranslationManager::tr("dependencyInstallFailed").arg(detail));
     });

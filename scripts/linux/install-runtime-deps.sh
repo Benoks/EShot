@@ -95,7 +95,33 @@ fi
 
 if (( desktop )) && [[ "$(eshot_desktop_backend)" == "gnome" ]] \
    && command -v gnome-extensions >/dev/null 2>&1; then
-  gnome-extensions enable appindicatorsupport@rgcjonas.gmail.com >/dev/null 2>&1 || true
+  appindicator_uuid="appindicatorsupport@rgcjonas.gmail.com"
+  if ! gnome-extensions enable "${appindicator_uuid}" >/dev/null 2>&1 \
+     && command -v gsettings >/dev/null 2>&1; then
+    # A running GNOME Shell does not know an extension installed after it
+    # started, so "enable" fails. Add it to the enabled list for next login.
+    enabled_extensions="$(gsettings get org.gnome.shell enabled-extensions 2>/dev/null || true)"
+    if [[ -n "${enabled_extensions}" && "${enabled_extensions}" != *"'${appindicator_uuid}'"* ]]; then
+      if [[ "${enabled_extensions}" == "@as []" || "${enabled_extensions}" == "[]" ]]; then
+        enabled_extensions="['${appindicator_uuid}']"
+      else
+        enabled_extensions="${enabled_extensions%]}, '${appindicator_uuid}']"
+      fi
+      gsettings set org.gnome.shell enabled-extensions "${enabled_extensions}" >/dev/null 2>&1 || true
+    fi
+  fi
+  # GNOME Shell on Wayland loads a newly installed extension only at the next
+  # login. Tell EShot so it can ask the user to log out and back in.
+  appindicator_installed=0
+  for extension_dir in "${XDG_DATA_HOME:-${HOME}/.local/share}/gnome-shell/extensions" \
+                       /usr/share/gnome-shell/extensions /usr/local/share/gnome-shell/extensions; do
+    [[ -d "${extension_dir}/${appindicator_uuid}" ]] && appindicator_installed=1
+  done
+  appindicator_info="$(gnome-extensions info "${appindicator_uuid}" 2>/dev/null || true)"
+  if (( appindicator_installed )) \
+     && ! grep -Eq 'State: (ACTIVE|ENABLED)' <<<"${appindicator_info}"; then
+    printf 'ESHOT_SETUP_RELOGIN_REQUIRED\n'
+  fi
 fi
 
 exit "${integration_failed}"
