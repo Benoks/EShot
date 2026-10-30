@@ -489,6 +489,8 @@ public slots:
     void onCaptureSaved(const QString &path)
     {
         m_lastNotificationPath = path;
+        m_lastScreenshotPath = QFileInfo(path).absoluteFilePath();
+        rebuildTrayMenu();
         m_skipNextCaptureNotificationMs = QDateTime::currentMSecsSinceEpoch();
         if (m_trayIcon && m_showNotifications && m_notifySave) {
             QTimer::singleShot(250, this, [this, path]() {
@@ -728,6 +730,15 @@ public slots:
         switch (dialog.selectedAction()) {
         case ControlCenterDialog::Action::Capture:
             onCaptureRequested();
+            break;
+        case ControlCenterDialog::Action::RecordGif:
+            QTimer::singleShot(0, this, &EShotApp::onRecordGifRequested);
+            break;
+        case ControlCenterDialog::Action::RecordVideo:
+            QTimer::singleShot(0, this, &EShotApp::onRecordVideoRequested);
+            break;
+        case ControlCenterDialog::Action::OpenFolder:
+            openScreenshotsFolder();
             break;
         case ControlCenterDialog::Action::Settings:
             onSettingsRequested();
@@ -1530,25 +1541,89 @@ private:
         });
     }
 
-    static QIcon trayIcon(const QString &path, const QSize &size = QSize(16, 16))
+    QIcon trayIcon(const QString &path, const QSize &size = QSize(16, 16)) const
     {
         QIcon src(path);
         if (src.isNull()) return src;
         QPixmap pm = src.pixmap(size, QIcon::Normal, QIcon::On);
+        // The menu icons are white line art for the dark menu; draw them dark
+        // on the light menu. The GIF badge has its own dark background.
+        if (m_trayMenuLight && !path.endsWith(QLatin1String("gif.svg"))) {
+            QPainter painter(&pm);
+            painter.setCompositionMode(QPainter::CompositionMode_SourceIn);
+            painter.fillRect(pm.rect(), QColor(0x20, 0x20, 0x20));
+        }
         QIcon out;
         out.addPixmap(pm);
         return out;
     }
 
+    // Follows the Dark mode / High contrast settings like the dialogs do.
+    void applyTrayMenuTheme()
+    {
+        if (!m_trayMenu)
+            return;
+        QSettings settings("EShot", "EShot");
+        const bool dark = settings.value("darkMode", true).toBool();
+        const bool highContrast = settings.value("highContrast", false).toBool();
+        m_trayMenuLight = !dark && !highContrast;
+        const QString style = eshotTrayMenuStyleSheet(dark, highContrast);
+        if (m_trayMenu->styleSheet() != style)
+            m_trayMenu->setStyleSheet(style);
+    }
+
+    // The folder Save writes screenshots to (same rules as CaptureOverlay::onSave).
+    static QString screenshotsFolder()
+    {
+        QSettings s("EShot", "EShot");
+        QString path = s.contains("screenshotSavePath")
+            ? s.value("screenshotSavePath").toString().trimmed()
+            : QDir(ComponentPaths::defaultSaveDirectory()).filePath(QStringLiteral("Screenshots"));
+        if (path.isEmpty())
+            path = s.value("savePath", ComponentPaths::defaultSaveDirectory()).toString();
+        if (path.trimmed().isEmpty())
+            path = ComponentPaths::defaultSaveDirectory();
+        return path;
+    }
+
+    void openScreenshotsFolder()
+    {
+        const QString folder = screenshotsFolder();
+        QDir().mkpath(folder);
+        const bool opened = QDesktopServices::openUrl(QUrl::fromLocalFile(folder));
+        qInfo() << "[Tray] open screenshots folder requested=" << opened;
+    }
+
+    void copyScreenshotFile(const QString &path)
+    {
+        if (!QFileInfo::exists(path))
+            return;
+        // The file reference for file managers plus the pixels for editors and chats.
+        QMimeData *data = recordingFileMimeData(path);
+        const QImage image(path);
+        if (!image.isNull())
+            data->setImageData(image);
+        QGuiApplication::clipboard()->setMimeData(data);
+        qInfo() << "[Tray] copied last screenshot";
+    }
+
     void rebuildTrayMenu()
     {
         if (!m_trayMenu) return;
+        applyTrayMenuTheme();
         m_trayRecordingStatusAction = nullptr;
         m_trayMenu->clear();
 
         auto withShortcut = [](const QString &label, const QString &shortcut) {
             return shortcut.trimmed().isEmpty()
                 ? label : QStringLiteral("%1 (%2)").arg(label, shortcut);
+        };
+        // DBusMenu trays (KDE, GNOME) do not show tooltips, so the key also
+        // goes into the item text; QMenu draws the part after a tab as the
+        // shortcut column.
+        auto withShortcutColumn = [](const QString &label, const QString &shortcut) {
+            return shortcut.trimmed().isEmpty()
+                ? label : QStringLiteral("%1\t%2").arg(label, shortcut.trimmed());
         };
         const bool videoRecording = m_videoRecorder && m_videoRecorder->isRecording();
         const bool gifRecording = m_screenRecorder && m_screenRecorder->isRecording();
@@ -1613,30 +1688,37 @@ private:
             m_trayMenu->addSeparator();
         }
 
-        QAction *captureAction = m_trayMenu->addAction(trayIcon(":/icons/copy.svg"), TranslationManager::trayCapture());
         QSettings hotkeySettings("EShot", "EShot");
         // Show the key that is actually registered. Before hotkeys are set up
         // (first-run wizard) only the saved key is known.
-        auto hotkeyText = [this](int id, UINT savedModifiers, UINT savedVirtualKey) {
+        auto registeredHotkey = [this](int id, UINT savedModifiers, UINT savedVirtualKey) {
             if (!m_hotkeysInitialized)
                 return HotkeyManager::shortcutText(savedModifiers, savedVirtualKey);
-            const QString active = HotkeyManager::instance().activeShortcutText(id);
-            return active.isEmpty() ? TranslationManager::hotkeyNoneActive() : active;
+            return HotkeyManager::instance().activeShortcutText(id);
         };
+        auto hotkeyText = [](const QString &registered) {
+            return registered.isEmpty() ? TranslationManager::hotkeyNoneActive() : registered;
+        };
+        const QString captureHotkey = registeredHotkey(
+            HotkeyManager::HOTKEY_CAPTURE,
+            static_cast<UINT>(hotkeySettings.value("hotkeyModifiers", 0).toUInt()),
+            static_cast<UINT>(hotkeySettings.value("hotkeyVKey", VK_SNAPSHOT).toUInt()));
+        QAction *captureAction = m_trayMenu->addAction(
+            trayIcon(":/icons/copy.svg"),
+            withShortcutColumn(TranslationManager::trayCapture(), captureHotkey));
         captureAction->setToolTip(QStringLiteral("%1 (%2)").arg(
-            TranslationManager::trayCapture(),
-            hotkeyText(HotkeyManager::HOTKEY_CAPTURE,
-                       static_cast<UINT>(hotkeySettings.value("hotkeyModifiers", 0).toUInt()),
-                       static_cast<UINT>(hotkeySettings.value("hotkeyVKey", VK_SNAPSHOT).toUInt()))));
+            TranslationManager::trayCapture(), hotkeyText(captureHotkey)));
         connect(captureAction, &QAction::triggered, this, &EShotApp::onCaptureRequested);
 #ifdef Q_OS_WIN
+        const QString windowCaptureHotkey = registeredHotkey(
+            HotkeyManager::HOTKEY_WINDOW_CAPTURE,
+            static_cast<UINT>(hotkeySettings.value("windowCaptureHotkeyModifiers", MOD_SHIFT).toUInt()),
+            static_cast<UINT>(hotkeySettings.value("windowCaptureHotkeyVKey", VK_SNAPSHOT).toUInt()));
         QAction *windowCaptureAction = m_trayMenu->addAction(
-            trayIcon(":/icons/rectangle.svg"), TranslationManager::trayWindowCapture());
+            trayIcon(":/icons/rectangle.svg"),
+            withShortcutColumn(TranslationManager::trayWindowCapture(), windowCaptureHotkey));
         windowCaptureAction->setToolTip(QStringLiteral("%1 (%2)").arg(
-            TranslationManager::trayWindowCapture(),
-            hotkeyText(HotkeyManager::HOTKEY_WINDOW_CAPTURE,
-                       static_cast<UINT>(hotkeySettings.value("windowCaptureHotkeyModifiers", MOD_SHIFT).toUInt()),
-                       static_cast<UINT>(hotkeySettings.value("windowCaptureHotkeyVKey", VK_SNAPSHOT).toUInt()))));
+            TranslationManager::trayWindowCapture(), hotkeyText(windowCaptureHotkey)));
         connect(windowCaptureAction, &QAction::triggered,
                 this, &EShotApp::onWindowCaptureRequested);
 #endif
@@ -1667,7 +1749,9 @@ private:
                                             : QString();
             };
             QAction *recordGifAction = m_trayMenu->addAction(
-                trayIcon(":/icons/gif.svg"), TranslationManager::tr("trayRecordGif"));
+                trayIcon(":/icons/gif.svg"),
+                withShortcutColumn(TranslationManager::tr("trayRecordGif"),
+                                   recordingHotkey(HotkeyManager::HOTKEY_GIF_CAPTURE)));
             recordGifAction->setToolTip(withShortcut(
                 TranslationManager::tr("trayRecordGif"),
                 recordingHotkey(HotkeyManager::HOTKEY_GIF_CAPTURE)));
@@ -1675,7 +1759,9 @@ private:
                 QTimer::singleShot(0, this, &EShotApp::onRecordGifRequested);
             });
             QAction *recordVideoAction = m_trayMenu->addAction(
-                trayIcon(":/icons/video.svg"), TranslationManager::tr("trayRecordVideo"));
+                trayIcon(":/icons/video.svg"),
+                withShortcutColumn(TranslationManager::tr("trayRecordVideo"),
+                                   recordingHotkey(HotkeyManager::HOTKEY_VIDEO_CAPTURE)));
             recordVideoAction->setToolTip(withShortcut(
                 TranslationManager::tr("trayRecordVideo"),
                 recordingHotkey(HotkeyManager::HOTKEY_VIDEO_CAPTURE)));
@@ -1683,6 +1769,39 @@ private:
                 QTimer::singleShot(0, this, &EShotApp::onRecordVideoRequested);
             });
             m_trayMenu->addSeparator();
+        }
+
+        QAction *openScreenshotsAction = m_trayMenu->addAction(
+            trayIcon(":/icons/save.svg"), TranslationManager::tr("trayOpenScreenshotsFolder"));
+        openScreenshotsAction->setToolTip(QDir::toNativeSeparators(screenshotsFolder()));
+        connect(openScreenshotsAction, &QAction::triggered, this, [this]() {
+            QTimer::singleShot(0, this, &EShotApp::openScreenshotsFolder);
+        });
+
+        if (m_lastScreenshotMenu)
+            m_lastScreenshotMenu->deleteLater();
+        if (!m_lastScreenshotPath.isEmpty() && QFileInfo::exists(m_lastScreenshotPath)) {
+            m_lastScreenshotMenu = new QMenu(TranslationManager::tr("trayLastScreenshot"), m_trayMenu);
+            m_lastScreenshotMenu->setToolTipsVisible(true);
+            const QString path = m_lastScreenshotPath;
+            const QString nativePath = QDir::toNativeSeparators(path);
+            m_lastScreenshotMenu->menuAction()->setToolTip(nativePath);
+            QAction *openAction = m_lastScreenshotMenu->addAction(TranslationManager::tr("recOpenFile"));
+            openAction->setToolTip(nativePath);
+            connect(openAction, &QAction::triggered, this, [this, path]() {
+                QTimer::singleShot(0, this, [this, path]() { openRecordingFile(path); });
+            });
+            QAction *folderAction = m_lastScreenshotMenu->addAction(
+                TranslationManager::tr("recShowInFolder"));
+            connect(folderAction, &QAction::triggered, this, [this, path]() {
+                QTimer::singleShot(0, this, [this, path]() { showPathInFolder(path); });
+            });
+            QAction *copyAction = m_lastScreenshotMenu->addAction(
+                trayIcon(":/icons/copy.svg"), TranslationManager::tr("trayCopyImage"));
+            connect(copyAction, &QAction::triggered, this, [this, path]() {
+                QTimer::singleShot(0, this, [this, path]() { copyScreenshotFile(path); });
+            });
+            m_trayMenu->addMenu(m_lastScreenshotMenu);
         }
 
         if (m_lastRecordingMenu)
@@ -1710,8 +1829,8 @@ private:
                 QTimer::singleShot(0, this, [this, path]() { copyRecordingFile(path); });
             });
             m_trayMenu->addMenu(m_lastRecordingMenu);
-            m_trayMenu->addSeparator();
         }
+        m_trayMenu->addSeparator();
 
         if (hasPrintScreenConflict()) {
             QAction *fixPrintScreenAction = m_trayMenu->addAction(
@@ -1758,23 +1877,6 @@ private:
 
         m_trayMenu = new QMenu();
         m_trayMenu->setToolTipsVisible(true);
-        m_trayMenu->setStyleSheet(QStringLiteral(
-            "QMenu {"
-            "  background: #2b2b2b;"
-            "  color: #ffffff;"
-            "  border: 1px solid #4a4a4a;"
-            "  border-radius: 3px;"
-            "  padding: 3px;"
-            "}"
-            "QMenu::item {"
-            "  min-height: 22px;"
-            "  padding: 3px 18px 3px 24px;"
-            "  border-radius: 2px;"
-            "}"
-            "QMenu::item:selected { background: #3a3a3a; }"
-            "QMenu::item:disabled { color: #8a8a8a; }"
-            "QMenu::icon { width: 16px; height: 16px; left: 5px; }"
-            "QMenu::separator { height: 1px; background: #424242; margin: 4px 5px; }"));
         rebuildTrayMenu();
 
         m_trayIcon->setContextMenu(m_trayMenu);
@@ -2096,6 +2198,9 @@ private:
     int m_recordingTimeLimitSeconds = 0;
     QString m_lastRecordingPath;
     QPointer<QMenu> m_lastRecordingMenu;
+    QString m_lastScreenshotPath;
+    bool m_trayMenuLight = false;
+    QPointer<QMenu> m_lastScreenshotMenu;
     QPointer<QAction> m_trayRecordingStatusAction;
     QStringList m_recordingDetails;
     bool m_recordingTrayTipShown = false;
@@ -2593,9 +2698,10 @@ int main(int argc, char *argv[])
     // until the wizard closes so GNOME's permission dialog cannot race it.
     if (firstRunRequired) {
         QTimer::singleShot(100, &app, [&eshotApp, controlRequested]() {
-            // Start onboarding in English on every platform. Completing it
-            // saves the selected language; closing it keeps saved preferences.
-            TranslationManager::setLanguage(TranslationManager::English, false);
+            // Start onboarding in the system language; the wizard retranslates
+            // live when another one is picked. Completing it saves the choice;
+            // closing it keeps saved preferences.
+            TranslationManager::setLanguage(TranslationManager::systemLanguage(), false);
             auto *wizard = new FirstRunWizard();
             wizard->setAttribute(Qt::WA_DeleteOnClose);
             QObject::connect(wizard, &QObject::destroyed, []() { TranslationManager::init(); });
