@@ -17,6 +17,20 @@ grep -F "xdg-desktop-portal-gnome: GNOME screenshot and recording integration" "
 grep -F "Exec=eshot\\1" "${aur_dir}/PKGBUILD" >/dev/null
 grep -F 'io.github.benoks.EShot-v4.svg' "${aur_dir}/PKGBUILD" >/dev/null
 grep -F 'io.github.benoks.EShot.metainfo.xml' "${aur_dir}/PKGBUILD" >/dev/null
+# Run the extracted AppImage from a stable path (no FUSE, no /tmp/.mount_*).
+grep -Fx 'exec /opt/eshot/AppRun "$@"' "${aur_dir}/eshot" >/dev/null
+grep -F 'cp -a "${srcdir}/squashfs-root" "${pkgdir}/opt/eshot"' "${aur_dir}/PKGBUILD" >/dev/null
+grep -F 'ln -s AppRun "${pkgdir}/opt/eshot/EShot.AppImage"' "${aur_dir}/PKGBUILD" >/dev/null
+if grep -E "^depends=.*fuse" "${aur_dir}/PKGBUILD" >/dev/null; then
+  echo 'the extracted AUR package must not depend on FUSE' >&2
+  exit 1
+fi
+for plugin in gst-plugins-good gst-plugins-bad gst-plugins-ugly gst-libav gst-plugin-pipewire; do
+  grep -F "'${plugin}: " "${aur_dir}/PKGBUILD" >/dev/null || {
+    echo "PKGBUILD must list ${plugin} as an optional recording dependency" >&2
+    exit 1
+  }
+done
 grep -F 'AUR_SSH_PRIVATE_KEY' "${workflow}" >/dev/null
 grep -F 'aur.archlinux.org/eshot-bin.git' "${workflow}" >/dev/null
 grep -F 'runuser -u builder' "${workflow}" >/dev/null

@@ -12,8 +12,10 @@ bool shouldCheckForUpdates(bool manual, const QString &appDirectory,
                            const QString &appImagePath = {});
 
 // How a Linux build receives updates. Only an AppImage the user can write
-// can replace itself; the AUR package (eshot-bin) installs a root-owned
-// AppImage in /opt/eshot, and .deb or archive builds have no AppImage.
+// can replace itself; the AUR package (eshot-bin) installs EShot under
+// /opt/eshot (older packages as a root-owned AppImage, newer ones extracted,
+// so APPIMAGE is unset and only the executable path identifies it), and
+// .deb or archive builds have no AppImage.
 enum class LinuxUpdateChannel {
     SelfUpdate,
     Aur,
@@ -21,4 +23,5 @@ enum class LinuxUpdateChannel {
 };
 
 LinuxUpdateChannel linuxUpdateChannel(const QString &appImagePath,
-                                      bool appImageIsFile, bool appImageIsWritable);
+                                      bool appImageIsFile, bool appImageIsWritable,
+                                      const QString &applicationFilePath = {});

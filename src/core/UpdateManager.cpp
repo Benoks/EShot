@@ -275,7 +275,8 @@ QString UpdateManager::externalUpdateStatus(const QString &version) const
 #if defined(Q_OS_LINUX)
     const QString appImagePath = qEnvironmentVariable("APPIMAGE");
     const QFileInfo appImage(appImagePath);
-    switch (linuxUpdateChannel(appImagePath, appImage.isFile(), appImage.isWritable())) {
+    switch (linuxUpdateChannel(appImagePath, appImage.isFile(), appImage.isWritable(),
+                               QCoreApplication::applicationFilePath())) {
     case LinuxUpdateChannel::Aur:
         return TranslationManager::updateStatusAur(version);
     case LinuxUpdateChannel::PackageManager:

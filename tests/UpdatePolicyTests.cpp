@@ -27,6 +27,20 @@ private slots:
                  LinuxUpdateChannel::Aur);
         QCOMPARE(linuxUpdateChannel(QString(), false, false),
                  LinuxUpdateChannel::PackageManager);
+        // The AUR package now runs the extracted AppImage from /opt/eshot.
+        QCOMPARE(linuxUpdateChannel(QString(), false, false,
+                                    QStringLiteral("/opt/eshot/usr/bin/EShot")),
+                 LinuxUpdateChannel::Aur);
+        QCOMPARE(linuxUpdateChannel(QString(), false, false,
+                                    QStringLiteral("/usr/bin/EShot")),
+                 LinuxUpdateChannel::PackageManager);
+        QCOMPARE(linuxUpdateChannel(QString(), false, false,
+                                    QStringLiteral("/opt/eshot-other/usr/bin/EShot")),
+                 LinuxUpdateChannel::PackageManager);
+        // A user AppImage run while an AUR copy is also installed self-updates.
+        QCOMPARE(linuxUpdateChannel(QStringLiteral("/home/user/Apps/EShot.AppImage"), true, true,
+                                    QStringLiteral("/tmp/.mount_EShotX/usr/bin/EShot")),
+                 LinuxUpdateChannel::SelfUpdate);
         QCOMPARE(linuxUpdateChannel(QStringLiteral("/usr/local/bin/EShot.AppImage"), true, false),
                  LinuxUpdateChannel::PackageManager);
     }

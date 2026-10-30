@@ -46,6 +46,10 @@ void LinuxUninstallPolicyTests::classifiesInstallKinds()
     QCOMPARE(LinuxUninstallPolicy::installKind(
                  QString(), QStringLiteral("/usr/bin/EShot"), Home),
              InstallKind::Package);
+    // Newer AUR packages run the extracted AppImage, without APPIMAGE.
+    QCOMPARE(LinuxUninstallPolicy::installKind(
+                 QString(), QStringLiteral("/opt/eshot/usr/bin/EShot"), Home),
+             InstallKind::Package);
     QCOMPARE(LinuxUninstallPolicy::installKind(
                  QString(), QStringLiteral("/home/user/.local/opt/EShot/bin/EShot"), Home),
              InstallKind::UserDirectory);

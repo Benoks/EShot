@@ -56,11 +56,18 @@ bool shouldCheckForUpdates(bool manual, const QString &appDirectory,
 }
 
 LinuxUpdateChannel linuxUpdateChannel(const QString &appImagePath,
-                                      bool appImageIsFile, bool appImageIsWritable)
+                                      bool appImageIsFile, bool appImageIsWritable,
+                                      const QString &applicationFilePath)
 {
+    const QString aurDirectory = QStringLiteral("/opt/eshot/");
     const QString path = QDir::cleanPath(appImagePath.trimmed());
-    if (path == QLatin1String("/opt/eshot/EShot.AppImage"))
+    if (path.startsWith(aurDirectory))
         return LinuxUpdateChannel::Aur;
+    // The extracted AUR package runs /opt/eshot/usr/bin/EShot without APPIMAGE.
+    if (appImagePath.trimmed().isEmpty()
+        && QDir::cleanPath(applicationFilePath.trimmed()).startsWith(aurDirectory)) {
+        return LinuxUpdateChannel::Aur;
+    }
     if (appImagePath.trimmed().isEmpty() || !appImageIsFile || !appImageIsWritable)
         return LinuxUpdateChannel::PackageManager;
     return LinuxUpdateChannel::SelfUpdate;
