@@ -567,9 +567,17 @@ void UpdateManager::launchInstaller(const QString &installerPath)
         return;
     }
 
-    setStatus(TranslationManager::updateStatusRestarting());
+    // An AppImage kept outside ~/.local/opt/EShot is replaced in place, so a
+    // name such as EShot-v4.7.1-x86_64.AppImage now holds the new version.
+    // Say so, and leave the message up long enough to read.
+    const bool integratedAppImage = QDir::cleanPath(currentPath)
+        == QDir::cleanPath(QDir::home().filePath(QStringLiteral(".local/opt/EShot/EShot.AppImage")));
+    setStatus(integratedAppImage
+                  ? TranslationManager::updateStatusRestarting()
+                  : TranslationManager::tr("updateStatusRestartingInPlace")
+                        .arg(currentInfo.fileName(), m_latestVersion));
     emit installerLaunched();
-    QTimer::singleShot(500, qApp, &QCoreApplication::quit);
+    QTimer::singleShot(integratedAppImage ? 500 : 4000, qApp, &QCoreApplication::quit);
 #else
     Q_UNUSED(installerPath);
     m_installing = false;
