@@ -46,34 +46,6 @@
 #endif
 
 namespace {
-#ifndef Q_OS_WIN
-bool containsDevice(const QStringList &devices, const QString &name)
-{
-    for (const QString &device : devices) {
-        if (device.compare(name, Qt::CaseInsensitive) == 0)
-            return true;
-    }
-    return false;
-}
-
-QStringList platformAudioDevices()
-{
-    // The first entry is what "default" records. It is left out when pactl
-    // lists no microphone at all, so the missing-microphone warning fires;
-    // without pactl the default source is used unverified.
-    bool discoveryOk = false;
-    const QList<QPair<QString, QString>> microphones = discoverLinuxMicrophoneDevices(&discoveryOk);
-    const LinuxMicrophoneResolution resolved = resolveLinuxMicrophoneDevice(
-        QStringLiteral("default"), microphones, discoveryOk);
-    if (resolved.missing)
-        return {};
-    QStringList devices{resolved.device};
-    for (const auto &device : microphones) devices << device.second;
-    devices.removeDuplicates();
-    return devices;
-}
-#endif
-
 QString ffmpegMissingReason()
 {
 #ifdef Q_OS_WIN
@@ -395,13 +367,6 @@ void VideoRecorder::start(const QRect &captureRect, int fps, int maxSeconds, int
         return;
     }
 #endif
-#ifndef Q_OS_WIN
-    const bool discoverAudioDevices = shouldDiscoverAudioDevices(
-        microphoneEnabled, microphoneDevice);
-    const QStringList audioDevices = discoverAudioDevices
-        ? platformAudioDevices() : QStringList();
-#endif
-
     m_warnings.clear();
     m_captureRect = captureRect;
     m_displayRect = displayRect;
@@ -426,15 +391,25 @@ void VideoRecorder::start(const QRect &captureRect, int fps, int maxSeconds, int
 #ifdef Q_OS_WIN
     resolveWindowsAudioInputs();
 #else
-    if (m_microphoneDevice.isEmpty() || m_microphoneDevice == QStringLiteral("default")) {
-        m_microphoneDevice = audioDevices.isEmpty() ? QString() : audioDevices.first();
-    }
-    if (m_microphoneEnabled && discoverAudioDevices
-        && (m_microphoneDevice.isEmpty() || !containsDevice(audioDevices, m_microphoneDevice))) {
-        m_microphoneEnabled = false;
-        if (m_microphoneVolume > 0) {
-            m_warnings << TranslationManager::tr("recWarnMicMissing");
-            qWarning() << "VideoRecorder: default microphone could not be resolved; recording without it";
+    {
+        // Both "default" and an explicitly picked microphone are checked: a
+        // named source that is gone (unplugged USB headset) would make
+        // pulsesrc fail the whole recording, so it is left out with a
+        // warning instead. Without pactl the device is used unverified.
+        bool discoveryOk = false;
+        const QList<QPair<QString, QString>> microphones =
+            shouldDiscoverAudioDevices(m_microphoneEnabled, m_microphoneDevice)
+            ? discoverLinuxMicrophoneDevices(&discoveryOk) : QList<QPair<QString, QString>>();
+        const LinuxMicrophoneResolution resolved = resolveLinuxMicrophoneDevice(
+            m_microphoneDevice, microphones, discoveryOk);
+        m_microphoneDevice = resolved.device;
+        if (m_microphoneEnabled && resolved.missing) {
+            m_microphoneEnabled = false;
+            if (m_microphoneVolume > 0) {
+                m_warnings << TranslationManager::tr("recWarnMicMissing");
+                qWarning() << "VideoRecorder: microphone" << microphoneDevice
+                           << "is not available; recording without it";
+            }
         }
     }
 #endif

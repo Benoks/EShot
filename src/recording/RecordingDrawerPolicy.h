@@ -5,6 +5,8 @@
 #include <QRect>
 #include <QSize>
 #include <QList>
+#include <QPair>
+#include <QString>
 #include <QStringList>
 
 enum class RecordingDrawerMode {
@@ -45,6 +47,12 @@ RecordingDrawerMode recordingDrawerModeFromKey(const QString &key);
 // visible "Gif" becomes the record button at the same place, without a
 // duplicate, so nobody loses the way to start a recording.
 QStringList toolbarControlsWithSingleRecordButton(const QStringList &controls);
+
+// The saved microphone is a named device that is not in the current list
+// (unplugged, renamed). The drawer then lists it as "not connected" instead
+// of silently showing "Default"; the recorder leaves it out with a warning.
+bool recordingMicrophoneDeviceMissing(const QString &savedDevice,
+                                      const QList<QPair<QString, QString>> &devices);
 
 // Enter/Return starts the recording while the drawer is open.
 bool recordingDrawerStartsOnKey(int key, bool drawerOpen);

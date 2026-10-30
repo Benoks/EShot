@@ -98,3 +98,18 @@ QStringList toolbarControlsWithSingleRecordButton(const QStringList &controls)
     }
     return result;
 }
+
+bool recordingMicrophoneDeviceMissing(const QString &savedDevice,
+                                      const QList<QPair<QString, QString>> &devices)
+{
+    const QString device = savedDevice.trimmed();
+    if (device.isEmpty()
+        || device.compare(QStringLiteral("default"), Qt::CaseInsensitive) == 0
+        || device == QStringLiteral("@DEFAULT_SOURCE@"))
+        return false;
+    for (const auto &entry : devices) {
+        if (entry.second.compare(device, Qt::CaseInsensitive) == 0)
+            return false;
+    }
+    return true;
+}

@@ -231,12 +231,14 @@ private slots:
         QCOMPARE(videoCrfFromQualitySlider(videoQualitySliderValue(0)), MinVideoCrf);
     }
 
-    void discoversDevicesOnlyForAnUnresolvedEnabledMicrophone()
+    void discoversDevicesForEveryEnabledMicrophone()
     {
         QVERIFY(shouldDiscoverAudioDevices(true, QStringLiteral("default")));
         QVERIFY(shouldDiscoverAudioDevices(true, QString()));
         QVERIFY(!shouldDiscoverAudioDevices(false, QStringLiteral("default")));
-        QVERIFY(!shouldDiscoverAudioDevices(true, QStringLiteral("Easy Effects Source")));
+        // A named microphone may have been unplugged since it was picked.
+        QVERIFY(shouldDiscoverAudioDevices(true, QStringLiteral("Easy Effects Source")));
+        QVERIFY(!shouldDiscoverAudioDevices(false, QStringLiteral("Easy Effects Source")));
     }
 };
 

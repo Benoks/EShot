@@ -1559,8 +1559,18 @@ void CaptureOverlay::populateAudioDeviceCombos()
     else
         combo->setItemData(0, QStringLiteral("default"));
     for (const auto &device : m_cachedMicrophoneAudioDevices) {
-        if (combo->findData(device.second) < 0)
+        const int existing = combo->findData(device.second);
+        if (existing < 0)
             combo->addItem(device.first, device.second);
+        else if (existing > 0)
+            combo->setItemText(existing, device.first);  // was listed as not connected
+    }
+    // A saved microphone that is gone stays visible as "not connected"
+    // instead of the combo silently showing "Default".
+    if (recordingMicrophoneDeviceMissing(savedMicrophone, m_cachedMicrophoneAudioDevices)
+        && combo->findData(savedMicrophone) < 0) {
+        combo->addItem(TranslationManager::tr("recMicDeviceNotConnected").arg(savedMicrophone),
+                       savedMicrophone);
     }
     // The saved device may only have arrived with this list.
     if (combo->currentIndex() <= 0) {

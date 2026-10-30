@@ -53,11 +53,10 @@ bool loadRecordingAudioEnabled(QSettings &settings, RecordingAudioSource source)
 bool shouldDiscoverAudioDevices(bool microphoneEnabled,
                                 const QString &microphoneDevice)
 {
-    if (!microphoneEnabled)
-        return false;
-    const QString normalized = microphoneDevice.trimmed();
-    return normalized.isEmpty()
-        || normalized.compare(QStringLiteral("default"), Qt::CaseInsensitive) == 0;
+    // A named microphone is checked as well: it may have been unplugged
+    // since it was picked, and recording from a missing source fails.
+    Q_UNUSED(microphoneDevice);
+    return microphoneEnabled;
 }
 
 namespace {

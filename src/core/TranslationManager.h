@@ -1162,6 +1162,9 @@ private:
         {"gnomeShortcutCommandEmpty", {"EShot yakalama komutu boş.", "The EShot capture command is empty.", "Der EShot-Aufnahmebefehl ist leer.", "La commande de capture d’EShot est vide.", "El comando de captura de EShot está vacío.", "EShot のキャプチャコマンドが空です。", "EShot 截图命令为空。", "Команда захвата EShot пуста."}},
         {"gnomeShortcutBindingUnsupported", {"GNOME kısayolu boş veya desteklenmiyor.", "The GNOME shortcut is empty or unsupported.", "Das GNOME-Tastenkürzel ist leer oder wird nicht unterstützt.", "Le raccourci GNOME est vide ou non pris en charge.", "El atajo de GNOME está vacío o no es compatible.", "GNOME のショートカットが空か、サポートされていません。", "GNOME 快捷键为空或不受支持。", "Сочетание клавиш GNOME пустое или не поддерживается."}},
         {"gsettingsNotInstalled", {"gsettings yüklü değil.", "gsettings is not installed.", "gsettings ist nicht installiert.", "gsettings n’est pas installé.", "gsettings no está instalado.", "gsettings がインストールされていません。", "未安装 gsettings。", "gsettings не установлен."}},
+        // ─── 4.7.2 recording reliability (devices, failure reasons, audio) ───
+        {"recMicDeviceNotConnected", {"%1 (bağlı değil)", "%1 (not connected)", "%1 (nicht verbunden)", "%1 (non connecté)", "%1 (no conectado)", "%1（未接続）", "%1（未连接）", "%1 (не подключено)"}},
+        //@@RECBLOCK@@
     };
 
     static constexpr int s_transCount = sizeof(s_trans) / sizeof(s_trans[0]);

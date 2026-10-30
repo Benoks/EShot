@@ -21,6 +21,7 @@ private slots:
     void enterStartsOnlyWhileTheDrawerIsOpen();
     void remembersTheLastDrawerMode();
     void gifToolbarButtonBecomesTheSingleRecordButton();
+    void reportsASavedMicrophoneThatIsNotConnected();
 };
 
 void RecordingDrawerPolicyTests::gifShowsOnlyGifEssentials()
@@ -142,6 +143,19 @@ void RecordingDrawerPolicyTests::gifToolbarButtonBecomesTheSingleRecordButton()
     // No duplicates.
     QCOMPARE(toolbarControlsWithSingleRecordButton({"Gif", "Video", "Gif", "Video"}),
              QStringList({"Video"}));
+}
+
+void RecordingDrawerPolicyTests::reportsASavedMicrophoneThatIsNotConnected()
+{
+    const QList<QPair<QString, QString>> devices = {
+        {QStringLiteral("USB Headset"), QStringLiteral("alsa_input.usb-headset")}};
+    QVERIFY(!recordingMicrophoneDeviceMissing(QStringLiteral("default"), devices));
+    QVERIFY(!recordingMicrophoneDeviceMissing(QString(), {}));
+    QVERIFY(!recordingMicrophoneDeviceMissing(QStringLiteral("@DEFAULT_SOURCE@"), {}));
+    QVERIFY(!recordingMicrophoneDeviceMissing(QStringLiteral("alsa_input.usb-headset"), devices));
+    QVERIFY(!recordingMicrophoneDeviceMissing(QStringLiteral("ALSA_INPUT.USB-HEADSET"), devices));
+    QVERIFY(recordingMicrophoneDeviceMissing(QStringLiteral("alsa_input.unplugged"), devices));
+    QVERIFY(recordingMicrophoneDeviceMissing(QStringLiteral("alsa_input.usb-headset"), {}));
 }
 
 QTEST_MAIN(RecordingDrawerPolicyTests)
