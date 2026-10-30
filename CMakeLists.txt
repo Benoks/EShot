@@ -37,6 +37,7 @@ set(SOURCES
     src/core/LinuxPortalGlobalShortcuts.cpp
     src/core/LinuxPortalScreenCast.cpp
     src/core/LinuxPortalScreenshot.cpp
+    src/core/LinuxKWinActivation.cpp
     src/core/LinuxDesktopIntegration.cpp
     src/core/LinuxGnomeShortcutInstaller.cpp
     src/core/LinuxPortalRequest.cpp
@@ -123,6 +124,7 @@ set(HEADERS
     src/core/LinuxPortalGlobalShortcuts.h
     src/core/LinuxPortalScreenCast.h
     src/core/LinuxPortalScreenshot.h
+    src/core/LinuxKWinActivation.h
     src/core/LinuxDesktopIntegration.h
     src/core/LinuxGnomeShortcutInstaller.h
     src/core/LinuxPortalRequest.h
@@ -719,6 +721,14 @@ if(BUILD_TESTING)
             LIBS Qt6::Core Qt6::Gui Qt6::Widgets Qt6::DBus
         )
         set_tests_properties(linux_screenshot_policy PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+        eshot_add_test(eshot_linux_kwin_activation_tests linux_kwin_activation
+            SOURCES
+                tests/LinuxKWinActivationTests.cpp
+                src/core/LinuxKWinActivation.cpp
+                src/core/LinuxKWinActivation.h
+            LIBS Qt6::Core Qt6::DBus
+        )
 
         eshot_add_test(eshot_linux_portal_shortcut_tests linux_portal_shortcut
             SOURCES

@@ -115,6 +115,28 @@ bool shouldGrabCaptureKeyboardFromManagedProxy(bool managedProxyAvailable,
                                              textEditorVisible);
 }
 
+bool shouldActivateManagedProxyOnPresent(bool managedProxyAvailable,
+                                         bool nativeScreenViewsActive)
+{
+    return managedProxyAvailable && !nativeScreenViewsActive;
+}
+
+CaptureActivationAction captureActivationAction(qint64 elapsedMs, bool proxyActive,
+                                                bool inputSeen,
+                                                bool compositorActivationRequested,
+                                                bool compositorActivationAvailable)
+{
+    if (proxyActive || inputSeen)
+        return CaptureActivationAction::None;
+    if (elapsedMs >= CaptureInputBannerMs)
+        return CaptureActivationAction::ShowInputBlockedBanner;
+    if (elapsedMs >= CaptureActivationCheckMs && !compositorActivationRequested
+        && compositorActivationAvailable) {
+        return CaptureActivationAction::RequestCompositorActivation;
+    }
+    return CaptureActivationAction::None;
+}
+
 bool shouldDetachModalFromOverlay(bool xwaylandOverlay)
 {
     return xwaylandOverlay;

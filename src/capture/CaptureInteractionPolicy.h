@@ -65,6 +65,29 @@ bool shouldRestoreCaptureKeyboardFocus(bool overlayVisible, bool selectionComple
 bool shouldGrabCaptureKeyboardFromManagedProxy(bool managedProxyAvailable,
                                                bool overlayVisible, bool selectionComplete,
                                                bool textEditorVisible);
+// XWayland overlay: the canvas is override-redirect and KWin never treats it
+// as active, so a fullscreen game keeps pointer locks and grabs. Activating
+// the managed focus proxy as soon as the overlay appears deactivates the
+// game. Native screen views activate their own windows instead.
+bool shouldActivateManagedProxyOnPresent(bool managedProxyAvailable,
+                                         bool nativeScreenViewsActive);
+
+constexpr int CaptureActivationCheckMs = 200;
+constexpr int CaptureInputBannerMs = 1000;
+
+enum class CaptureActivationAction {
+    None,
+    // The proxy is still not active: ask the compositor directly (KWin script).
+    RequestCompositorActivation,
+    // No input arrived and EShot is not active: tell the user how to get out.
+    ShowInputBlockedBanner
+};
+
+CaptureActivationAction captureActivationAction(qint64 elapsedMs, bool proxyActive,
+                                                bool inputSeen,
+                                                bool compositorActivationRequested,
+                                                bool compositorActivationAvailable);
+
 bool shouldDetachModalFromOverlay(bool xwaylandOverlay);
 // Top-left of a window resized from a corner so the opposite corner stays
 // where it was. dragLeft/dragTop say which edges the dragged corner moves.

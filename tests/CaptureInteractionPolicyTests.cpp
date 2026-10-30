@@ -105,6 +105,35 @@ private slots:
         QVERIFY(!shouldRestoreCaptureKeyboardFocus(true, true, true));
     }
 
+    void managedProxyActivatesWhenOverlayAppears()
+    {
+        QVERIFY(shouldActivateManagedProxyOnPresent(true, false));
+        QVERIFY(!shouldActivateManagedProxyOnPresent(false, false));
+        QVERIFY(!shouldActivateManagedProxyOnPresent(true, true));
+    }
+
+    void captureActivationFallsBackToCompositorThenBanner()
+    {
+        using A = CaptureActivationAction;
+        // Too early to judge.
+        QCOMPARE(captureActivationAction(50, false, false, false, true), A::None);
+        // Proxy refused: ask KWin once.
+        QCOMPARE(captureActivationAction(CaptureActivationCheckMs, false, false, false, true),
+                 A::RequestCompositorActivation);
+        QCOMPARE(captureActivationAction(CaptureActivationCheckMs, false, false, true, true), A::None);
+        // Not KDE: no compositor fallback.
+        QCOMPARE(captureActivationAction(CaptureActivationCheckMs, false, false, false, false), A::None);
+        // Still nothing after a second: show the banner.
+        QCOMPARE(captureActivationAction(CaptureInputBannerMs, false, false, true, true),
+                 A::ShowInputBlockedBanner);
+        QCOMPARE(captureActivationAction(CaptureInputBannerMs, false, false, false, false),
+                 A::ShowInputBlockedBanner);
+        // EShot active or input already arrived: nothing to do.
+        QCOMPARE(captureActivationAction(CaptureInputBannerMs, true, false, false, true), A::None);
+        QCOMPARE(captureActivationAction(CaptureInputBannerMs, false, true, false, true), A::None);
+        QCOMPARE(captureActivationAction(CaptureActivationCheckMs, true, false, false, true), A::None);
+    }
+
     void cornerResizeKeepsOppositeCornerFixed()
     {
         const QRect start(100, 200, 50, 40);

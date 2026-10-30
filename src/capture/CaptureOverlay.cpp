@@ -19,6 +19,7 @@
 #include "core/DebouncedSettingsWriter.h"
 #include "core/HotkeyManager.h"
 #include "core/LinuxDesktopIntegration.h"
+#include "core/LinuxKWinActivation.h"
 #include "core/LinuxPortalScreenshot.h"
 #include "core/LinuxScreenshotPolicy.h"
 #include "core/VisualSearch.h"
@@ -179,6 +180,33 @@ void drawCaptureHintShortcut(QPainter &painter, int &x, int y,
         painter.drawText(QRect(x + 7, y, labelWidth, 24), Qt::AlignVCenter, label);
         x += labelWidth + 7;
     }
+}
+
+// Shown when EShot could not become the active window and no input arrived,
+// typically because a fullscreen game still holds the mouse and keyboard.
+void drawInputBlockedBanner(QPainter &painter, const QRect &monitorRect, const QString &text)
+{
+    if (!monitorRect.isValid() || text.isEmpty())
+        return;
+    QFont font = painter.font();
+    font.setPointSize(11);
+    font.setWeight(QFont::DemiBold);
+    const QFontMetrics metrics(font);
+    const int maxTextWidth = qMax(200, qMin(760, monitorRect.width() - 80));
+    const QRect textBounds = metrics.boundingRect(QRect(0, 0, maxTextWidth, 1000),
+                                                  Qt::AlignCenter | Qt::TextWordWrap, text);
+    QRect banner(0, 0, textBounds.width() + 40, textBounds.height() + 24);
+    banner.moveCenter(QPoint(monitorRect.center().x(), 0));
+    banner.moveTop(monitorRect.top() + 32);
+    painter.save();
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setPen(QPen(QColor(255, 196, 0, 200), 1.5));
+    painter.setBrush(QColor(28, 24, 12, 235));
+    painter.drawRoundedRect(banner, 10, 10);
+    painter.setFont(font);
+    painter.setPen(QColor(255, 244, 214));
+    painter.drawText(banner.adjusted(20, 12, -20, -12), Qt::AlignCenter | Qt::TextWordWrap, text);
+    painter.restore();
 }
 
 void drawCaptureHints(QPainter &painter, const QRect &monitorRect, bool recordingMode)
@@ -2025,6 +2053,7 @@ void CaptureOverlay::performCapture()
         setFocus(Qt::ActiveWindowFocusReason);
         raise();
     }
+    beginCaptureActivation();
 }
 
 void CaptureOverlay::presentCapture()
@@ -2690,6 +2719,11 @@ void CaptureOverlay::paintEvent(QPaintEvent *event)
         }
     }
 
+    if (m_showInputBlockedBanner && !m_selectionComplete && !isShortcutSheetOpen()) {
+        drawInputBlockedBanner(painter, monitorRectAt(capturePositionFromGlobal(QCursor::pos())),
+                               inputBlockedBannerText());
+    }
+
     if (m_logNextCapturePaint) {
         m_logNextCapturePaint = false;
         qInfo() << "[CaptureOverlay] first frame painted after"
@@ -2699,6 +2733,7 @@ void CaptureOverlay::paintEvent(QPaintEvent *event)
 
 void CaptureOverlay::mousePressEvent(QMouseEvent *event)
 {
+    noteCaptureInput();
     if (event->button() == Qt::LeftButton) {
         const bool recordingOpen = m_recordingDrawer && m_recordingDrawer->isVisible();
         const bool quickSettingsOpen = m_toolSettingsDrawer
@@ -3097,6 +3132,7 @@ void CaptureOverlay::updateOverlayRegion(const QRegion &region)
 
 void CaptureOverlay::mouseMoveEvent(QMouseEvent *event)
 {
+    noteCaptureInput();
     // In Eyedropper mode — only repaint the preview circle + color label
     if (m_eyedropperActive) {
         constexpr int EyedropperRepaintMargin = 120;
@@ -3432,6 +3468,7 @@ void CaptureOverlay::mouseReleaseEvent(QMouseEvent *event)
 
 void CaptureOverlay::keyPressEvent(QKeyEvent *event)
 {
+    noteCaptureInput();
     // Any key closes the shortcut sheet; "?" or F1 opens it.
     if (isShortcutSheetOpen()) {
         if (event->key() != Qt::Key_Shift) {
@@ -4097,6 +4134,90 @@ void CaptureOverlay::acquireCaptureKeyboardFocus()
             << QApplication::activeWindow()
             << "focusWidget=" << QApplication::focusWidget()
             << "keyboardGrabber=" << QWidget::keyboardGrabber();
+}
+
+void CaptureOverlay::acquireCaptureActivation()
+{
+    if (!m_textFocusProxy)
+        return;
+    m_textFocusProxy->move(mapToGlobal(QPoint(4, 4)));
+    m_textFocusProxy->show();
+    m_textFocusProxy->raise();
+    if (QWindow *window = m_textFocusProxy->windowHandle())
+        window->requestActivate();
+    m_textFocusProxy->activateWindow();
+    m_textFocusProxy->setFocus(Qt::ActiveWindowFocusReason);
+}
+
+void CaptureOverlay::beginCaptureActivation()
+{
+    m_showInputBlockedBanner = false;
+    m_compositorActivationRequested = false;
+    m_captureInputSeen = true;
+    if (!shouldActivateManagedProxyOnPresent(
+            m_textFocusProxy != nullptr, m_screenViews && m_screenViews->isActive())) {
+        return;
+    }
+    m_captureInputSeen = false;
+    acquireCaptureActivation();
+    m_captureActivationTimer.start();
+    QPointer<CaptureOverlay> self(this);
+    const quint64 generation = m_captureGeneration;
+    for (const int delay : {CaptureActivationCheckMs, CaptureInputBannerMs}) {
+        QTimer::singleShot(delay, this, [self, generation]() {
+            if (self && generation == self->m_captureGeneration)
+                self->checkCaptureActivation();
+        });
+    }
+}
+
+void CaptureOverlay::checkCaptureActivation()
+{
+    if (!isVisible() || !m_textFocusProxy || !m_captureActivationTimer.isValid())
+        return;
+    QWindow *proxyWindow = m_textFocusProxy->windowHandle();
+    const bool proxyActive = proxyWindow && QGuiApplication::focusWindow() == proxyWindow;
+    bool kde = false;
+#if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
+    kde = LinuxDesktopIntegration::detect(qEnvironmentVariable("XDG_CURRENT_DESKTOP"),
+                                          qEnvironmentVariable("XDG_SESSION_DESKTOP"))
+        == LinuxDesktopEnvironment::Kde;
+#endif
+    const CaptureActivationAction action = captureActivationAction(
+        m_captureActivationTimer.elapsed(), proxyActive, m_captureInputSeen,
+        m_compositorActivationRequested, kde);
+    qInfo() << "[CaptureOverlay] activation check: proxyActive=" << proxyActive
+            << "inputSeen=" << m_captureInputSeen << "action=" << int(action);
+    if (action == CaptureActivationAction::RequestCompositorActivation) {
+        m_compositorActivationRequested = true;
+        // The proxy must be mapped for KWin to find it.
+        acquireCaptureActivation();
+        LinuxKWinActivation::requestActivation(QCoreApplication::applicationPid(),
+                                               m_textFocusProxy->windowTitle());
+    } else if (action == CaptureActivationAction::ShowInputBlockedBanner
+               && !m_showInputBlockedBanner) {
+        m_showInputBlockedBanner = true;
+        update();
+    }
+}
+
+void CaptureOverlay::noteCaptureInput()
+{
+    if (m_captureInputSeen)
+        return;
+    m_captureInputSeen = true;
+    if (m_showInputBlockedBanner) {
+        m_showInputBlockedBanner = false;
+        update();
+    }
+}
+
+QString CaptureOverlay::inputBlockedBannerText() const
+{
+    QString cancelKey = HotkeyManager::instance().activeShortcutText(HotkeyManager::HOTKEY_CAPTURE);
+    if (cancelKey.isEmpty())
+        cancelKey = QStringLiteral("Esc");
+    return TranslationManager::tr("inputBlockedBanner").arg(cancelKey);
 }
 
 void CaptureOverlay::releaseTextKeyboardFocus()

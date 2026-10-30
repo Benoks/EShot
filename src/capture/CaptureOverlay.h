@@ -214,6 +214,13 @@ private:
     void updateTextEditPanelPosition();
     void acquireTextKeyboardFocus();
     void acquireCaptureKeyboardFocus();
+    // Activates the managed proxy without grabbing the keyboard so the
+    // compositor deactivates a fullscreen app (releases its pointer lock).
+    void acquireCaptureActivation();
+    void beginCaptureActivation();
+    void checkCaptureActivation();
+    void noteCaptureInput();
+    QString inputBlockedBannerText() const;
     void releaseTextKeyboardFocus();
     QWidget *managedOverlayInputAt(const QPoint &globalPosition) const;
     void updateUndoRedoState();
@@ -330,6 +337,10 @@ private:
     // Incremented by every capture; delayed hint timers check it so a timer
     // from an earlier capture cannot change the current one.
     quint64 m_captureGeneration = 0;
+    QElapsedTimer m_captureActivationTimer;
+    bool m_captureInputSeen = true;
+    bool m_compositorActivationRequested = false;
+    bool m_showInputBlockedBanner = false;
     QElapsedTimer m_captureLatencyTimer;
     bool m_logNextCapturePaint = false;
 
