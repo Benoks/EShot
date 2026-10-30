@@ -2301,6 +2301,26 @@ int main(int argc, char *argv[])
     }
 #endif
 
+    // --save PATH: persist the one-shot target before forwarding, so a
+    // running instance (the usual case) saves the capture to PATH too. The
+    // relative path is resolved against this process's working directory.
+    QString cliSavePath;
+    if (parser.isSet(saveOption)) {
+        cliSavePath = parser.value(saveOption);
+        if (cliSavePath.isEmpty()) {
+            qWarning() << "[EShot] --save requires a path argument";
+        } else {
+            QFileInfo fi(cliSavePath);
+            QDir().mkpath(fi.absolutePath());
+            // Do not persist savePath here: a one-shot --save invocation must
+            // not permanently change the configured save directory.
+            QSettings s("EShot", "EShot");
+            s.setValue("cliSaveFullPath", fi.absoluteFilePath());
+            s.setValue("cliSaveRequestedAt", QDateTime::currentSecsSinceEpoch());
+            s.sync();
+        }
+    }
+
     if (forwardToRunningInstance())
         return 0;
     // Nothing to quit. Return before the elevated hand-over below, which would
@@ -2405,22 +2425,6 @@ int main(int argc, char *argv[])
         });
     }
 
-    // Command line processing
-    QString cliSavePath;
-    if (parser.isSet(saveOption)) {
-        cliSavePath = parser.value(saveOption);
-        if (cliSavePath.isEmpty()) {
-            qWarning() << "[EShot] --save requires a path argument";
-        } else {
-            QFileInfo fi(cliSavePath);
-            QDir().mkpath(fi.absolutePath());
-            // Do not persist savePath here: a one-shot --save invocation must
-            // not permanently change the configured save directory.
-            QSettings s("EShot", "EShot");
-            s.setValue("cliSaveFullPath", fi.absoluteFilePath());
-            s.setValue("cliSaveRequestedAt", QDateTime::currentSecsSinceEpoch());
-        }
-    }
     if (parser.isSet(captureOption) || !cliSavePath.isEmpty()) {
         QMetaObject::invokeMethod(&eshotApp, "onCaptureRequested", Qt::QueuedConnection);
     } else if (controlRequested && !firstRunRequired) {
