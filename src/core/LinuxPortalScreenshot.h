@@ -25,6 +25,10 @@ public:
     // capture that starts before the rebuild finished waits for it.
     static void startKWinPermissionRefresh(const QString &cacheBuilder);
     static void waitForKWinPermissionRefresh(int timeoutMs = 10000);
+    // Reads exactly size bytes from a pipe fd without blocking past the
+    // deadline. Returns the number of bytes read; less than size means EOF,
+    // a read error or the timeout. The fd is switched to non-blocking mode.
+    static qint64 readPipeWithDeadline(int fd, char *buffer, qint64 size, int timeoutMs);
 
 private:
     explicit LinuxPortalScreenshot(QObject *parent = nullptr);

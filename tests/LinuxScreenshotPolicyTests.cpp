@@ -3,6 +3,10 @@
 #include <QFile>
 #include <QImage>
 #include <QTemporaryDir>
+#include <QElapsedTimer>
+
+#include <fcntl.h>
+#include <unistd.h>
 
 #include "core/LinuxPortalScreenshot.h"
 #include "core/LinuxDesktopIntegration.h"
@@ -254,6 +258,40 @@ private slots:
     {
         QVERIFY(LinuxScreenshotPolicy::canPresentCapture(true));
         QVERIFY(!LinuxScreenshotPolicy::canPresentCapture(false));
+    }
+
+    void pipeReadStopsAtDeadlineWhenWriterStalls()
+    {
+        int fds[2] = {-1, -1};
+        QCOMPARE(pipe2(fds, O_CLOEXEC), 0);
+        const char data[4] = {1, 2, 3, 4};
+        QCOMPARE(::write(fds[1], data, 4), ssize_t(4));
+        char buffer[16] = {};
+        QElapsedTimer timer;
+        timer.start();
+        // The writer keeps its end open without sending the rest.
+        const qint64 read = LinuxPortalScreenshot::readPipeWithDeadline(fds[0], buffer, 16, 150);
+        QCOMPARE(read, qint64(4));
+        QVERIFY(timer.elapsed() < 2000);
+        QCOMPARE(buffer[3], char(4));
+        ::close(fds[0]);
+        ::close(fds[1]);
+    }
+
+    void pipeReadReturnsFullBufferAndStopsAtEof()
+    {
+        int fds[2] = {-1, -1};
+        QCOMPARE(pipe2(fds, O_CLOEXEC), 0);
+        const char data[8] = {1, 2, 3, 4, 5, 6, 7, 8};
+        QCOMPARE(::write(fds[1], data, 8), ssize_t(8));
+        char buffer[8] = {};
+        QCOMPARE(LinuxPortalScreenshot::readPipeWithDeadline(fds[0], buffer, 8, 1000), qint64(8));
+        QCOMPARE(buffer[7], char(8));
+        QCOMPARE(::write(fds[1], data, 2), ssize_t(2));
+        ::close(fds[1]);
+        char more[8] = {};
+        QCOMPARE(LinuxPortalScreenshot::readPipeWithDeadline(fds[0], more, 8, 1000), qint64(2));
+        ::close(fds[0]);
     }
 
     void loadsAndCleansUpSpectacleWorkspaceCapture()

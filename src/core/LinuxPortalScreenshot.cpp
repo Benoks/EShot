@@ -32,8 +32,10 @@
 #include <cerrno>
 #include <cstring>
 #include <fcntl.h>
+#include <poll.h>
 #include <unistd.h>
 #endif
+#include <QDeadlineTimer>
 
 namespace {
 
@@ -125,40 +127,17 @@ QPixmap grabKWinScreenshot(const QString &method, QList<QVariant> arguments, int
 
         QImage image(width, height, static_cast<QImage::Format>(format));
         image.setDevicePixelRatio(scale > 0.0 ? scale : 1.0);
-        QFile file;
-        if (!file.open(pipeFds[0], QIODevice::ReadOnly, QFileDevice::AutoCloseHandle)) {
-            qWarning() << "[LinuxScreenshot] KWin" << method
-                       << "could not open the screenshot pipe:" << file.errorString();
-            close(pipeFds[0]);
-            loop.quit();
-            return;
-        }
 
-        // The pipe delivers data asynchronously: keep reading until the image
-        // is fully populated, one row at a time, and distinguish EOF/error
-        // truncation from partial progress.
+        // KWin writes the frame after replying. Read with a deadline so a
+        // compositor that stalls before closing its end cannot hang the UI.
         const qint64 totalBytes = image.sizeInBytes();
-        const qint64 stride = image.bytesPerLine();
-        qint64 offset = 0;
-        bool truncated = false;
-        while (offset < totalBytes) {
-            const qint64 rowEnd = qMin((offset / stride + 1) * stride, totalBytes);
-            const qint64 bytesRead = file.read(
-                reinterpret_cast<char *>(image.bits()) + offset, rowEnd - offset);
-            if (bytesRead <= 0) {
-                if (bytesRead < 0)
-                    qWarning() << "[LinuxScreenshot] KWin" << method
-                               << "image pipe read error:" << file.errorString();
-                else
-                    qWarning() << "[LinuxScreenshot] KWin" << method
-                               << "short image read (EOF):"
-                               << offset << "of" << totalBytes;
-                truncated = true;
-                break;
-            }
-            offset += bytesRead;
-        }
-        if (truncated) {
+        const qint64 bytesRead = LinuxPortalScreenshot::readPipeWithDeadline(
+            pipeFds[0], reinterpret_cast<char *>(image.bits()), totalBytes,
+            qMax(timeoutMs, 1000));
+        close(pipeFds[0]);
+        if (bytesRead < totalBytes) {
+            qWarning() << "[LinuxScreenshot] KWin" << method
+                       << "short image read:" << bytesRead << "of" << totalBytes;
             loop.quit();
             return;
         }
@@ -204,6 +183,51 @@ void LinuxPortalScreenshot::warmup()
             qInfo() << "[LinuxScreenshot] portal warmup completed";
         finishedWatcher->deleteLater();
     });
+#endif
+}
+
+qint64 LinuxPortalScreenshot::readPipeWithDeadline(int fd, char *buffer, qint64 size,
+                                                   int timeoutMs)
+{
+#if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
+    if (fd < 0 || !buffer || size <= 0)
+        return 0;
+    const int flags = fcntl(fd, F_GETFL);
+    if (flags >= 0 && !(flags & O_NONBLOCK))
+        fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+    QDeadlineTimer deadline(timeoutMs);
+    qint64 offset = 0;
+    while (offset < size) {
+        const ssize_t count = ::read(fd, buffer + offset, static_cast<size_t>(size - offset));
+        if (count > 0) {
+            offset += count;
+            continue;
+        }
+        if (count == 0)
+            break; // EOF
+        if (errno == EINTR)
+            continue;
+        if (errno != EAGAIN && errno != EWOULDBLOCK) {
+            qWarning() << "[LinuxScreenshot] image pipe read error:" << std::strerror(errno);
+            break;
+        }
+        const qint64 remaining = deadline.remainingTime();
+        if (remaining == 0) {
+            qWarning() << "[LinuxScreenshot] image pipe read timed out after" << timeoutMs << "ms";
+            break;
+        }
+        pollfd descriptor{fd, POLLIN, 0};
+        const int ready = ::poll(&descriptor, 1, remaining < 0 ? -1 : static_cast<int>(remaining));
+        if (ready < 0 && errno != EINTR)
+            break;
+    }
+    return offset;
+#else
+    Q_UNUSED(fd);
+    Q_UNUSED(buffer);
+    Q_UNUSED(size);
+    Q_UNUSED(timeoutMs);
+    return 0;
 #endif
 }
 
