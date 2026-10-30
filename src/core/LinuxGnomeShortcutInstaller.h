@@ -10,6 +10,13 @@ struct Result {
 };
 
 QString captureCommand(const QString &executablePath);
+// One-line sh script that writes "capture" to the running EShot's
+// single-instance socket (python3, else socat) and starts the executable
+// given as $1 only when that fails. It spares an AppImage mount and a full
+// Qt start-up on every key press of the GNOME fallback shortcut.
+QString captureForwarderScript();
+// "/bin/sh -c '<forwarder>' eshot-capture '<executable>'"; empty without a path.
+QString forwardingCaptureCommand(const QString &executablePath);
 QString gsettingsStringValue(const QString &value);
 QString acceleratorFromPortableSequence(const QString &portableSequence);
 QString acceleratorFromPortalTrigger(const QString &trigger);

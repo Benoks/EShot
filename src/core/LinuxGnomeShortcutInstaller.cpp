@@ -84,6 +84,33 @@ QString captureCommand(const QString &executablePath)
     return path.isEmpty() ? QString() : shellQuote(path) + QStringLiteral(" --capture");
 }
 
+QString captureForwarderScript()
+{
+    // Speaks the single-instance protocol of main.cpp: one "capture\n" line on
+    // the QLocalServer socket in Qt's runtime directory. Without python3 or
+    // socat, or with a stale socket, it starts EShot ($1) as before. Kept free
+    // of single quotes so it fits in sh -c '...'.
+    return QStringLiteral(
+        "s=\"${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/EShot.SingleInstance\"; "
+        "if [ -S \"$s\" ]; then "
+        "python3 -I -S -c \"import socket,sys; c=socket.socket(socket.AF_UNIX); "
+        "c.settimeout(1); c.connect(sys.argv[1]); c.sendall(b\\\"capture\\\\n\\\")\" "
+        "\"$s\" 2>/dev/null && exit 0; "
+        "command -v socat >/dev/null 2>&1 "
+        "&& printf \"capture\\\\n\" | socat -t1 - \"UNIX-CONNECT:$s\" 2>/dev/null && exit 0; "
+        "fi; "
+        "exec \"$1\" --capture");
+}
+
+QString forwardingCaptureCommand(const QString &executablePath)
+{
+    const QString executable = executablePath.trimmed();
+    if (executable.isEmpty())
+        return {};
+    return QStringLiteral("/bin/sh -c ") + shellQuote(captureForwarderScript())
+        + QStringLiteral(" eshot-capture ") + shellQuote(executable);
+}
+
 QString gsettingsStringValue(const QString &value)
 {
     QString escaped = value;

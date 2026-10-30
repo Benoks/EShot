@@ -680,7 +680,7 @@ if(BUILD_TESTING)
                 tests/LinuxGnomeShortcutInstallerTests.cpp
                 src/core/LinuxGnomeShortcutInstaller.cpp
                 src/core/LinuxGnomeShortcutInstaller.h
-            LIBS Qt6::Core
+            LIBS Qt6::Core Qt6::Network
         )
 
         eshot_add_test(eshot_linux_uninstall_policy_tests linux_uninstall_policy

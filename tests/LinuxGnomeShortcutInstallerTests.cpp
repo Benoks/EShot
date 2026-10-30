@@ -1,6 +1,11 @@
 #include <QtTest>
 
+#include <QElapsedTimer>
 #include <QFile>
+#include <QLocalServer>
+#include <QLocalSocket>
+#include <QProcess>
+#include <QStandardPaths>
 #include <QSettings>
 #include <QTemporaryDir>
 
@@ -19,6 +24,65 @@ private slots:
                      QStringLiteral("/tmp/user's/EShot")),
                  QStringLiteral("'/tmp/user'\\''s/EShot' --capture"));
         QVERIFY(LinuxGnomeShortcutInstaller::captureCommand({}).isEmpty());
+    }
+
+    void quotesForwardingCaptureCommand()
+    {
+        const QString command = LinuxGnomeShortcutInstaller::forwardingCaptureCommand(
+            QStringLiteral("/home/user/My Apps/EShot.AppImage"));
+        QVERIFY(command.startsWith(QStringLiteral("/bin/sh -c '")));
+        QVERIFY(command.endsWith(QStringLiteral("' eshot-capture '/home/user/My Apps/EShot.AppImage'")));
+        // The script is embedded in single quotes, so it must not contain any.
+        QVERIFY(!LinuxGnomeShortcutInstaller::captureForwarderScript().contains(QLatin1Char('\'')));
+        QVERIFY(LinuxGnomeShortcutInstaller::forwardingCaptureCommand({}).isEmpty());
+    }
+
+    void forwarderSendsCaptureToTheRunningInstance()
+    {
+        if (QStandardPaths::findExecutable(QStringLiteral("python3")).isEmpty()
+            && QStandardPaths::findExecutable(QStringLiteral("socat")).isEmpty()) {
+            QSKIP("Neither python3 nor socat is available");
+        }
+        QTemporaryDir runtime;
+        QVERIFY(runtime.isValid());
+        QLocalServer server;
+        QVERIFY(server.listen(runtime.filePath(QStringLiteral("EShot.SingleInstance"))));
+        const QString marker = runtime.filePath(QStringLiteral("started"));
+
+        QProcess forwarder;
+        startForwarder(forwarder, runtime, fallbackExecutable(runtime, marker));
+
+        QByteArray received;
+        QElapsedTimer timer;
+        timer.start();
+        QLocalSocket *socket = nullptr;
+        while (timer.elapsed() < 10000 && !received.contains('\n')) {
+            if (!socket && server.waitForNewConnection(50))
+                socket = server.nextPendingConnection();
+            if (socket) {
+                socket->waitForReadyRead(50);
+                received += socket->readAll();
+            }
+        }
+        QVERIFY(forwarder.waitForFinished(10000));
+        QCOMPARE(forwarder.exitCode(), 0);
+        QCOMPARE(received, QByteArrayLiteral("capture\n"));
+        QVERIFY(!QFileInfo::exists(marker));
+    }
+
+    void forwarderStartsEShotWhenNoInstanceListens()
+    {
+        QTemporaryDir runtime;
+        QVERIFY(runtime.isValid());
+        const QString marker = runtime.filePath(QStringLiteral("started"));
+
+        QProcess forwarder;
+        startForwarder(forwarder, runtime, fallbackExecutable(runtime, marker));
+        QVERIFY(forwarder.waitForFinished(10000));
+        QCOMPARE(forwarder.exitCode(), 0);
+        QFile started(marker);
+        QVERIFY(started.open(QIODevice::ReadOnly));
+        QCOMPARE(started.readAll().trimmed(), QByteArrayLiteral("--capture"));
     }
 
     void prefersStableIntegratedAppImagePath()
@@ -256,7 +320,36 @@ private slots:
         qputenv("PATH", previousPath);
         qunsetenv("ESHOT_GSETTINGS_LOG");
     }
+
+private:
+    // Runs the command the way GNOME does: the shell-quoted command line is
+    // split into arguments (sh follows the same quoting rules here).
+    static void startForwarder(QProcess &process, const QTemporaryDir &runtime,
+                               const QString &executable)
+    {
+        QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
+        environment.insert(QStringLiteral("XDG_RUNTIME_DIR"), runtime.path());
+        process.setProcessEnvironment(environment);
+        process.start(QStringLiteral("/bin/sh"),
+                      {QStringLiteral("-c"),
+                       LinuxGnomeShortcutInstaller::forwardingCaptureCommand(executable)});
+        QVERIFY(process.waitForStarted(5000));
+    }
+
+    // Stand-in for EShot: records its arguments so a test can tell whether
+    // the forwarder fell back to starting it.
+    static QString fallbackExecutable(const QTemporaryDir &runtime, const QString &marker)
+    {
+        const QString path = runtime.filePath(QStringLiteral("fake eshot"));
+        QFile file(path);
+        if (!file.open(QIODevice::WriteOnly))
+            return {};
+        file.write(QStringLiteral("#!/bin/sh\nprintf '%s\\n' \"$*\" > '%1'\n").arg(marker).toUtf8());
+        file.close();
+        file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+        return path;
+    }
 };
 
-QTEST_APPLESS_MAIN(LinuxGnomeShortcutInstallerTests)
+QTEST_GUILESS_MAIN(LinuxGnomeShortcutInstallerTests)
 #include "LinuxGnomeShortcutInstallerTests.moc"

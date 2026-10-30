@@ -871,7 +871,7 @@ bool HotkeyManager::activateGnomeShortcutFallback()
         QCoreApplication::applicationFilePath(),
         QFileInfo::exists(integratedAppImage) ? integratedAppImage : QString());
     const auto installed = LinuxGnomeShortcutInstaller::installCaptureShortcut(
-        LinuxGnomeShortcutInstaller::captureCommand(executable), binding);
+        LinuxGnomeShortcutInstaller::forwardingCaptureCommand(executable), binding);
     if (installed.success) {
         qInfo() << "[HotkeyManager] GNOME shortcut fallback installed:" << binding;
         return true;
