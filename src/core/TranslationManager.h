@@ -433,6 +433,10 @@ public:
     static QString uploadErrorApiKeyMissing(const QString &service) { return tr("uploadErrorApiKeyMissing").arg(service); }
     static QString copy()             { return tr("copy"); }
 
+    // ─── 4.7.2 lifecycle and platform fixes (accessors) ───
+    static QString updateStatusWaitingToInstall() { return tr("updateStatusWaitingToInstall"); }
+    // ─── end of 4.7.2 lifecycle and platform fixes (accessors) ───
+
 private:
     static inline Language m_lang = Turkish;
 
@@ -1122,6 +1126,9 @@ private:
         // ─── Linux packaging (4.7.2): GNOME tray re-login hint, in-place AppImage update ───
         {"gnomeTrayReloginHint", {"AppIndicator uzantısı kuruldu. EShot tepsi simgesini görmek için oturumu kapatıp yeniden açın.", "The AppIndicator extension was installed. Log out and back in to see the EShot tray icon.", "Die AppIndicator-Erweiterung wurde installiert. Melden Sie sich ab und wieder an, um das EShot-Symbol im Infobereich zu sehen.", "L’extension AppIndicator a été installée. Déconnectez-vous puis reconnectez-vous pour voir l’icône d’EShot dans la zone de notification.", "Se instaló la extensión AppIndicator. Cierra la sesión y vuelve a iniciarla para ver el icono de EShot en la bandeja.", "AppIndicator 拡張機能をインストールしました。EShot のトレイアイコンを表示するには、一度ログアウトしてから再度ログインしてください。", "已安装 AppIndicator 扩展。请注销并重新登录以显示 EShot 托盘图标。", "Расширение AppIndicator установлено. Выйдите из сеанса и войдите снова, чтобы увидеть значок EShot в трее."}},
         {"updateStatusRestartingInPlace", {"%2 kuruluyor ve EShot yeniden başlatılıyor. %1 dosyasının adı değişmez, ancak artık %2 sürümünü içerir.", "Installing %2 and restarting. %1 keeps its file name but now contains version %2.", "%2 wird installiert und EShot neu gestartet. %1 behält seinen Dateinamen, enthält aber jetzt Version %2.", "Installation de %2 et redémarrage. %1 garde son nom de fichier mais contient désormais la version %2.", "Instalando %2 y reiniciando. %1 conserva su nombre de archivo, pero ahora contiene la versión %2.", "%2 をインストールして再起動します。%1 のファイル名は変わりませんが、中身はバージョン %2 になります。", "正在安装 %2 并重新启动。%1 的文件名保持不变，但其内容现在是 %2 版本。", "Устанавливается версия %2, EShot перезапускается. Файл %1 сохранит своё имя, но теперь будет содержать версию %2."}},
+        // ─── 4.7.2 lifecycle and platform fixes ───
+        {"updateStatusWaitingToInstall", {"Güncelleme indirildi; kayıt veya yakalama bitince kurulacak.", "Update downloaded; it will install when the recording or capture ends.", "Update heruntergeladen; es wird installiert, sobald die Aufnahme oder Bildschirmaufnahme endet.", "Mise à jour téléchargée ; elle sera installée à la fin de l'enregistrement ou de la capture.", "Actualización descargada; se instalará cuando termine la grabación o la captura.", "アップデートをダウンロードしました。録画またはキャプチャが終わるとインストールされます。", "更新已下载，将在录制或截图结束后安装。", "Обновление загружено; оно будет установлено после окончания записи или снимка."}},
+        // ─── end of 4.7.2 lifecycle and platform fixes ───
     };
 
     static constexpr int s_transCount = sizeof(s_trans) / sizeof(s_trans[0]);

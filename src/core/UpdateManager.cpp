@@ -459,10 +459,40 @@ void UpdateManager::finishDownload()
     launchInstaller(path);
 }
 
+void UpdateManager::quitForInstaller()
+{
+    if (m_quitHandler)
+        m_quitHandler();
+    else
+        qApp->quit();
+}
+
+void UpdateManager::failInstall(const QString &message)
+{
+    m_pendingInstall = false;
+    m_installing = false;
+    setStatus(TranslationManager::updateStatusFailed(message));
+    emit failed(message);
+}
+
 void UpdateManager::launchInstaller(const QString &installerPath)
 {
-    if (m_silentUpdate && m_busyCheck && m_busyCheck()) {
+    // Installing quits EShot. Wait while it is busy (a recording, the capture
+    // overlay), for manual updates too: quitting now would drop a recording.
+    if (m_busyCheck && m_busyCheck()) {
+        if (!m_pendingInstall) {
+            m_pendingInstall = true;
+            setStatus(TranslationManager::updateStatusWaitingToInstall());
+        }
         QTimer::singleShot(30000, this, [this, installerPath]() { launchInstaller(installerPath); });
+        return;
+    }
+    m_pendingInstall = false;
+    // The installer waited in a user-writable cache, possibly for a while.
+    // Check it again right before it runs.
+    if (!downloadedAssetDigestIsValid(installerPath, m_installerSha256, true)) {
+        QFile::remove(installerPath);
+        failInstall(TranslationManager::updateInvalidDownload());
         return;
     }
     m_installing = true;
@@ -527,7 +557,7 @@ void UpdateManager::launchInstaller(const QString &installerPath)
 
     setStatus(TranslationManager::updateStatusRestarting());
     emit installerLaunched();
-    QTimer::singleShot(500, qApp, &QCoreApplication::quit);
+    QTimer::singleShot(500, this, &UpdateManager::quitForInstaller);
 #elif defined(Q_OS_LINUX)
     const QString currentPath = QFileInfo(qEnvironmentVariable("APPIMAGE")).absoluteFilePath();
     const QFileInfo currentInfo(currentPath);
@@ -542,7 +572,7 @@ void UpdateManager::launchInstaller(const QString &installerPath)
     const QString scriptPath = QDir(updateCacheDir()).filePath(
         QStringLiteral("install_update_%1.sh").arg(QDateTime::currentMSecsSinceEpoch()));
     const QString script = buildLinuxUpdateScript(
-        QCoreApplication::applicationPid(), currentPath, installerPath);
+        QCoreApplication::applicationPid(), currentPath, installerPath, m_installerSha256);
     QFile file(scriptPath);
     if (script.isEmpty() || !file.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
         m_installing = false;
@@ -577,7 +607,7 @@ void UpdateManager::launchInstaller(const QString &installerPath)
                   : TranslationManager::tr("updateStatusRestartingInPlace")
                         .arg(currentInfo.fileName(), m_latestVersion));
     emit installerLaunched();
-    QTimer::singleShot(integratedAppImage ? 500 : 4000, qApp, &QCoreApplication::quit);
+    QTimer::singleShot(integratedAppImage ? 500 : 4000, this, &UpdateManager::quitForInstaller);
 #else
     Q_UNUSED(installerPath);
     m_installing = false;

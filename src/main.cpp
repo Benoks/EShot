@@ -1428,6 +1428,9 @@ private:
             return isRecordingActive() || m_recordingStartPending
                 || (m_overlay && m_overlay->isVisible());
         });
+        // Quit through the stop-and-save path in case a recording started
+        // between the busy check and the installer launch.
+        m_updateManager->setQuitHandler([this]() { onQuitAction(); });
         connect(m_updateManager, &UpdateManager::updateCheckFinished, this,
                 [this](bool available, const QString &version) {
             m_updateAvailable = available;
@@ -1656,7 +1659,9 @@ private:
             QAction *updateAction = m_trayMenu->addAction(
                 trayIcon(":/icons/pen_tray_update.svg"),
                 updateText);
-            updateAction->setEnabled(!m_updateManager || !m_updateManager->isBusy());
+            // Installing restarts EShot; not while a recording runs.
+            updateAction->setEnabled((!m_updateManager || !m_updateManager->isBusy())
+                                     && !isRecordingActive() && !m_recordingStartPending);
             connect(updateAction, &QAction::triggered, this, &EShotApp::onUpdateRequested);
             m_trayMenu->addSeparator();
         }

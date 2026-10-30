@@ -47,6 +47,50 @@ private slots:
         QVERIFY(buildLinuxUpdateScript(1, QStringLiteral("/a"), QString()).isEmpty());
     }
 
+    void verifiesDigestBeforeReplacing()
+    {
+        const QString digest(64, QLatin1Char('a'));
+        const QString script = buildLinuxUpdateScript(
+            42, QStringLiteral("/a/EShot.AppImage"), QStringLiteral("/b/new.AppImage"),
+            QStringLiteral("sha256:") + digest.toUpper());
+        QVERIFY(script.contains(QStringLiteral("expected=") + digest));
+        QVERIFY(script.indexOf(QStringLiteral("sha256sum")) < script.indexOf(QStringLiteral("mv -f")));
+        QVERIFY(!buildLinuxUpdateScript(42, QStringLiteral("/a"), QStringLiteral("/b"),
+                                        QStringLiteral("not-a-digest")).contains(QStringLiteral("sha256sum")));
+    }
+
+    void keepsCurrentAppImageWhenDigestDiffers()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString current = QDir(dir.path()).filePath(QStringLiteral("EShot.AppImage"));
+        const QString download = QDir(dir.path()).filePath(QStringLiteral("new.AppImage"));
+        const QString scriptPath = QDir(dir.path()).filePath(QStringLiteral("apply-update.sh"));
+        QFile oldFile(current);
+        QVERIFY(oldFile.open(QIODevice::WriteOnly));
+        oldFile.write("#!/bin/sh\nexit 0\n");
+        oldFile.close();
+        QFile::setPermissions(current, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+        QFile newFile(download);
+        QVERIFY(newFile.open(QIODevice::WriteOnly));
+        newFile.write("#!/bin/sh\necho tampered\n");
+        newFile.close();
+        QFile scriptFile(scriptPath);
+        QVERIFY(scriptFile.open(QIODevice::WriteOnly));
+        scriptFile.write(buildLinuxUpdateScript(2147483647, current, download,
+                                                QString(64, QLatin1Char('0'))).toUtf8());
+        scriptFile.close();
+
+        QProcess process;
+        process.start(QStringLiteral("/bin/sh"), {scriptPath});
+        QVERIFY(process.waitForFinished(5000));
+        QVERIFY(process.exitCode() != 0);
+        QFile installed(current);
+        QVERIFY(installed.open(QIODevice::ReadOnly));
+        QCOMPARE(installed.readAll(), QByteArray("#!/bin/sh\nexit 0\n"));
+        QVERIFY(!QFileInfo::exists(current + QStringLiteral(".new")));
+    }
+
     void replacesAndRestartsAppImage()
     {
         QTemporaryDir dir;

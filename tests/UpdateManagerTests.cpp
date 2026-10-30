@@ -2,6 +2,8 @@
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QTimer>
+#include <QTemporaryDir>
+#include <QSignalSpy>
 
 #include "core/UpdateManager.h"
 
@@ -137,6 +139,40 @@ private slots:
         QCOMPARE(manager.latestVersion(), QStringLiteral("4.7.0"));
         QVERIFY(!manager.updateAvailable());
         QVERIFY(!manager.isBusy());
+    }
+
+    void waitingInstallerKeepsManagerBusyAndIsReverified()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString installer = dir.filePath(QStringLiteral("EShot_Update.AppImage"));
+        QFile file(installer);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write("partial download");
+        file.close();
+
+        UpdateManager manager;
+        bool busy = true;
+        bool quitCalled = false;
+        manager.setBusyCheck([&busy]() { return busy; });
+        manager.setQuitHandler([&quitCalled]() { quitCalled = true; });
+        manager.m_installerSha256 = QStringLiteral("sha256:") + QString(64, QLatin1Char('0'));
+        QSignalSpy failures(&manager, &UpdateManager::failed);
+
+        // Busy (recording): the install waits and the manager reports busy,
+        // so "Update now" cannot restart the download over the same file.
+        manager.launchInstaller(installer);
+        QVERIFY(manager.isBusy());
+        QVERIFY(!manager.m_installing);
+        QCOMPARE(failures.count(), 0);
+
+        // Idle again: the digest no longer matches, so nothing is launched.
+        busy = false;
+        manager.launchInstaller(installer);
+        QCOMPARE(failures.count(), 1);
+        QVERIFY(!manager.isBusy());
+        QVERIFY(!QFileInfo::exists(installer));
+        QVERIFY(!quitCalled);
     }
 };
 

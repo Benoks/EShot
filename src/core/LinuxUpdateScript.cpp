@@ -1,16 +1,29 @@
 #include "LinuxUpdateScript.h"
 
+#include <QRegularExpression>
+
 namespace {
 QString shellSingleQuote(QString value)
 {
     value.replace(QChar(0x27), QStringLiteral("'\"'\"'"));
     return QStringLiteral("'") + value + QStringLiteral("'");
 }
+
+// Lowercase hex digest, accepting GitHub's "sha256:" prefix; empty if invalid.
+QString plainSha256(const QString &value)
+{
+    QString digest = value.trimmed().toLower();
+    if (digest.startsWith(QStringLiteral("sha256:")))
+        digest = digest.mid(7);
+    static const QRegularExpression hex(QStringLiteral("^[0-9a-f]{64}$"));
+    return hex.match(digest).hasMatch() ? digest : QString();
+}
 }
 
 QString buildLinuxUpdateScript(qint64 processId,
                                const QString &currentAppImage,
-                               const QString &downloadedAppImage)
+                               const QString &downloadedAppImage,
+                               const QString &expectedSha256)
 {
     if (processId <= 0 || currentAppImage.isEmpty() || downloadedAppImage.isEmpty())
         return QString();
@@ -31,6 +44,16 @@ QString buildLinuxUpdateScript(qint64 processId,
     script += QStringLiteral("  attempts=$((attempts + 1))\n");
     script += QStringLiteral("done\n");
     script += QStringLiteral("if kill -0 \"$pid\" 2>/dev/null; then rm -f -- \"$staged\"; exit 1; fi\n");
+    const QString digest = plainSha256(expectedSha256);
+    if (!digest.isEmpty()) {
+        // The download sat in a user-writable cache; never install a file
+        // that no longer matches the release digest.
+        script += QStringLiteral("expected=%1\n").arg(digest);
+        script += QStringLiteral("if command -v sha256sum >/dev/null 2>&1; then\n");
+        script += QStringLiteral("  actual=$(sha256sum -- \"$staged\" | cut -d' ' -f1)\n");
+        script += QStringLiteral("  if [ \"$actual\" != \"$expected\" ]; then rm -f -- \"$staged\"; \"$current\" --silent >/dev/null 2>&1 & exit 1; fi\n");
+        script += QStringLiteral("fi\n");
+    }
     script += QStringLiteral("cp -f -- \"$current\" \"$current.bak\"\n");
     script += QStringLiteral("mv -f -- \"$staged\" \"$current\"\n");
     script += QStringLiteral("chmod 0755 -- \"$current\"\n");
