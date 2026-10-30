@@ -932,6 +932,12 @@ void VideoRecorder::stop()
     }
     if (!m_recording || m_stopping)
         return;
+    if (m_gstStarting && !m_process) {
+        // Stopped before the portal pipeline was even launched: there is
+        // nothing to save, and this is not a failure.
+        cancel();
+        return;
+    }
     m_stopping = true;
     m_resumePending = false;
     if (m_countdownTimer)
@@ -1062,6 +1068,17 @@ void VideoRecorder::onProcessFinished(int exitCode, QProcess::ExitStatus status)
     }
 
     if (m_starting) {
+        if (m_stopAfterStart) {
+            // Stop was pressed before capture started; whatever FFmpeg did
+            // meanwhile, that is a cancel, not a failure to report.
+            qInfo() << "VideoRecorder: stopped during startup; nothing recorded" << stderrText;
+            stopSystemAudioCapture();
+            QFile::remove(segment);
+            removeRecordingFiles();
+            cleanupProcess();
+            emit recordingCanceled();
+            return;
+        }
         // FFmpeg exited before it reported any progress.
         handleWindowsStartupFailure(stderrText, segment);
         return;
@@ -1825,6 +1842,12 @@ void VideoRecorder::handleGstSegmentEnded(int exitCode, QProcess::ExitStatus sta
         stopSystemAudioCapture();
         removeRecordingFiles();
         cleanupProcess();
+        if (expectedStop) {
+            // Stop was pressed before the first frame: a silent cancel.
+            qInfo() << "VideoRecorder: stopped during startup; nothing recorded" << failureText;
+            emit recordingCanceled();
+            return;
+        }
         emit recordingFailed(failureText.isEmpty()
                                  ? QStringLiteral("gstreamer pipeline exited during startup")
                                  : failureText);

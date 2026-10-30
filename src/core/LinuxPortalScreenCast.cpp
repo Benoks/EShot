@@ -169,9 +169,17 @@ LinuxPortalScreenCast::Stream LinuxPortalScreenCast::select(
         return stream;
     };
 
+    // A call that failed or timed out; the timeout is reported apart from a
+    // refusal so the user is not told permission was denied.
+    auto unanswered = [this]() {
+        Stream stream;
+        stream.timedOut = m_timedOut;
+        return stream;
+    };
+
     if (!callAndWait(screencast, QStringLiteral("CreateSession"),
                      {sessionOptions}, createToken, timeoutMs))
-        return {};
+        return unanswered();
     if (m_response != 0)
         return rejected(QString());
 
@@ -190,7 +198,7 @@ LinuxPortalScreenCast::Stream LinuxPortalScreenCast::select(
                      {QVariant::fromValue(QDBusObjectPath(sessionHandle)), selectOptions},
                      sourcesToken, timeoutMs)) {
         closeSession(sessionHandle);
-        return {};
+        return unanswered();
     }
     if (m_response != 0)
         return rejected(sessionHandle);
@@ -207,7 +215,7 @@ LinuxPortalScreenCast::Stream LinuxPortalScreenCast::select(
                      {QVariant::fromValue(QDBusObjectPath(sessionHandle)),
                       parentWindow, startOptions}, startToken, timeoutMs)) {
         closeSession(sessionHandle);
-        return {};
+        return unanswered();
     }
     if (m_response != 0)
         return rejected(sessionHandle);
@@ -261,6 +269,7 @@ bool LinuxPortalScreenCast::callAndWait(QDBusInterface &portal,
     m_response = 2;
     m_results.clear();
     m_finished = false;
+    m_timedOut = false;
 
     QStringList connectedPaths;
     auto connectResponse = [&](const QString &path) {
@@ -313,8 +322,10 @@ bool LinuxPortalScreenCast::callAndWait(QDBusInterface &portal,
                        SLOT(onPortalResponse(uint,QVariantMap)));
     }
 
-    if (!m_finished)
+    if (!m_finished) {
+        m_timedOut = true;
         qWarning() << "[LinuxScreenCast]" << method << "timed out after" << timeoutMs << "ms";
+    }
 
     return m_finished;
 #else

@@ -26,9 +26,9 @@ LinuxPortalScreenCast::Stream selectPortalRecordingStream(const QRect &captureRe
     LinuxPortalScreenCast::Stream stream = LinuxPortalScreenCast::selectStream(
         nullptr, 120000, persistenceId);
     if (!stream.isValid()) {
-        return fail(stream.canceled
-                        ? portalCanceledReason()
-                        : QStringLiteral("Wayland screen recording permission was not granted"));
+        return fail(stream.canceled ? portalCanceledReason()
+                    : stream.timedOut ? portalTimedOutReason()
+                                      : QStringLiteral("Wayland screen recording permission was not granted"));
     }
 
     // Only the region check matters here; the recorders compute their own
@@ -45,6 +45,8 @@ LinuxPortalScreenCast::Stream selectPortalRecordingStream(const QRect &captureRe
     }
     if (!stream.isValid() && stream.canceled)
         return fail(portalCanceledReason());
+    if (!stream.isValid() && stream.timedOut)
+        return fail(portalTimedOutReason());
     if (!stream.isValid() || !covered) {
         LinuxPortalScreenCast::closeSession(stream.sessionHandle);
         return fail(QStringLiteral("Wayland recording source does not contain the selected region"));

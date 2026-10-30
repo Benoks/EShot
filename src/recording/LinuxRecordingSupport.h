@@ -50,6 +50,9 @@ QString gstMissingElementsReason(const QStringList &missingElements);
 // gst-inspect-1.0 failed or timed out, so the needed elements (an AAC
 // encoder for audio) could not be checked.
 QString gstInspectFailedReason();
+// The portal source picker got no answer in time (left open, or the portal
+// hung); not a refusal of the permission.
+QString portalTimedOutReason();
 // Reported instead of a failure when the user closes the portal picker.
 QString portalCanceledReason();
 // gst-launch prints progress ("Setting pipeline to PAUSED ...") before the

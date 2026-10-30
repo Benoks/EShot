@@ -62,6 +62,8 @@ QString knownReason(const QString &line)
         {"failed to convert portal video to GIF", "recFailGifConvert"},
         {"gstreamer pipeline exited during startup", "recFailGstStartup"},
         {"gst-inspect-1.0 could not list the GStreamer plugins", "recFailGstInspect"},
+        {"Wayland screen recording source picker timed out", "recFailPortalTimeout"},
+        {"ffmpeg exited during startup", "recFailFfmpegStartup"},
     };
     for (const Literal &literal : literals) {
         if (line == QLatin1String(literal.reason))

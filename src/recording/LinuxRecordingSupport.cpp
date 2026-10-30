@@ -271,6 +271,11 @@ QString gstInspectFailedReason()
     return QStringLiteral("gst-inspect-1.0 could not list the GStreamer plugins");
 }
 
+QString portalTimedOutReason()
+{
+    return QStringLiteral("Wayland screen recording source picker timed out");
+}
+
 QString portalCanceledReason()
 {
     return QStringLiteral("portal canceled");

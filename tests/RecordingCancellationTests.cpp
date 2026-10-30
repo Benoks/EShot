@@ -168,6 +168,61 @@ private slots:
         QCOMPARE(canceled.count(), 1);
     }
 
+    void videoStopDuringStartupIsASilentCancel_data()
+    {
+        QTest::addColumn<bool>("portal");
+        QTest::addColumn<bool>("withProcess");
+        QTest::newRow("portal-before-launch") << true << false;
+        QTest::newRow("portal-before-playing") << true << true;
+        QTest::newRow("ffmpeg-before-progress") << false << true;
+    }
+
+    void videoStopDuringStartupIsASilentCancel()
+    {
+        QFETCH(bool, portal);
+        QFETCH(bool, withProcess);
+        VideoRecorder recorder;
+        QSignalSpy canceled(&recorder, &VideoRecorder::recordingCanceled);
+        QSignalSpy failed(&recorder, &VideoRecorder::recordingFailed);
+        QSignalSpy saved(&recorder, &VideoRecorder::recordingStopped);
+        QTemporaryDir dir;
+        recorder.m_outputPath = dir.filePath(QStringLiteral("out.mp4"));
+        recorder.m_segmentPath = dir.filePath(QStringLiteral("segment.mp4"));
+        recorder.m_usesGStreamer = portal;
+        recorder.m_recording = portal;
+        recorder.m_gstStarting = portal;
+        recorder.m_starting = !portal;
+        QProcess *process = nullptr;
+        if (withProcess) {
+            process = encoder(&recorder);
+            recorder.m_process = process;
+            connect(process, qOverload<int, QProcess::ExitStatus>(&QProcess::finished),
+                    &recorder, &VideoRecorder::onProcessFinished);
+        }
+        recorder.stop();
+        // FFmpeg exits before it reports progress.
+        if (!portal && process)
+            process->kill();
+        QTRY_COMPARE(canceled.count(), 1);
+        QCOMPARE(failed.count(), 0);
+        QCOMPARE(saved.count(), 0);
+        QVERIFY(!recorder.isRecording());
+    }
+
+    void gifStopDuringStartupIsASilentCancel()
+    {
+        ScreenRecorder recorder;
+        QSignalSpy canceled(&recorder, &ScreenRecorder::recordingCanceled);
+        QSignalSpy failed(&recorder, &ScreenRecorder::recordingFailed);
+        recorder.m_recording = true;
+        recorder.m_portalRecording = true;
+        recorder.m_portalStarting = true;
+        recorder.stop();
+        QCOMPARE(canceled.count(), 1);
+        QCOMPARE(failed.count(), 0);
+        QVERIFY(!recorder.isRecording());
+    }
+
 };
 
 int main(int argc, char **argv)

@@ -243,6 +243,12 @@ void ScreenRecorder::stop()
         // aborts gst-launch while it is still finalizing the MP4.
         if (m_stopping)
             return;
+        if (m_portalStarting) {
+            // Stopped before the first frame: nothing to save, and not a
+            // failure to report.
+            cancel();
+            return;
+        }
         m_stopping = true;
         m_portalResumePending = false;
         if (m_countdownTimer)
@@ -479,8 +485,12 @@ void ScreenRecorder::handlePortalSegmentEnded(int exitCode, QProcess::ExitStatus
         removePortalIntermediates();
         QString reason = stderrText;
         if (reason.isEmpty()) {
-            reason = firstSegment ? QStringLiteral("gstreamer pipeline exited during startup")
-                                  : QStringLiteral("gstreamer exited with code %1").arg(exitCode);
+            // The Windows GIF path records with FFmpeg, not GStreamer.
+            const QString process = m_windowsFfmpeg ? QStringLiteral("ffmpeg") : QStringLiteral("gstreamer");
+            reason = firstSegment
+                ? (m_windowsFfmpeg ? QStringLiteral("ffmpeg exited during startup")
+                                   : QStringLiteral("gstreamer pipeline exited during startup"))
+                : QStringLiteral("%1 exited with code %2").arg(process).arg(exitCode);
         }
         emit recordingFailed(reason);
         return;

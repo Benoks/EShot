@@ -28,6 +28,8 @@ public:
         bool usedRestoreToken = false;
         // The user closed the source picker (portal response 1); not an error.
         bool canceled = false;
+        // The portal did not answer in time (e.g. the picker was left open).
+        bool timedOut = false;
         bool isValid() const { return nodeId != 0 || pipewireSerial != 0; }
         int remoteFd() const { return pipewireFd ? *pipewireFd : -1; }
     };
@@ -68,6 +70,7 @@ private:
     uint m_response = 2;
     QVariantMap m_results;
     bool m_finished = false;
+    bool m_timedOut = false;
     bool m_selectInProgress = false;
     QEventLoop *m_loop = nullptr;
 };
