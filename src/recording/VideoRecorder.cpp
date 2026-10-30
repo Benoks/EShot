@@ -1727,8 +1727,9 @@ void VideoRecorder::handleGstSegmentEnded(int exitCode, QProcess::ExitStatus sta
     if (!process)
         return;
     m_processLog += process->readAll();
+    const QString processLog = QString::fromLocal8Bit(m_processLog);
     const QString failureText = launchError.isEmpty()
-        ? gstFailureReason(QString::fromLocal8Bit(m_processLog)) : launchError;
+        ? gstFailureReason(processLog) : launchError;
     const qint64 runMs = m_segmentRunClock.isValid() ? m_segmentRunClock.elapsed() : -1;
     const bool reachedPlaying = m_segmentPlaying;
     const QString segment = m_segmentPath;
@@ -1782,12 +1783,20 @@ void VideoRecorder::handleGstSegmentEnded(int exitCode, QProcess::ExitStatus sta
         break;
     }
 
-    if (shouldRetryPortalStartWithSoftwareEncoder(m_gstH264Encoder, m_segmentCount == 1,
-                                                  !m_segmentPaths.isEmpty(), expectedStop,
-                                                  reachedPlaying, runMs, m_gstEncoderRetried)) {
+    // Only an error from the encoder (or its helper elements) disables it for
+    // good; a missing microphone or a PipeWire/property error would fail the
+    // software encoder just the same and must not cost the GPU encoder.
+    const PortalEncoderFailureBlame blame = launchError.isEmpty()
+        ? portalH264EncoderFailureBlame(processLog, m_gstH264Encoder, status == QProcess::CrashExit)
+        : PortalEncoderFailureBlame::NotEncoder;
+    if (blame != PortalEncoderFailureBlame::NotEncoder
+        && shouldRetryPortalStartWithSoftwareEncoder(m_gstH264Encoder, m_segmentCount == 1,
+                                                     !m_segmentPaths.isEmpty(), expectedStop,
+                                                     reachedPlaying, runMs, m_gstEncoderRetried)) {
         qWarning() << "VideoRecorder: hardware encoder" << m_gstH264Encoder
                    << "failed to start, retrying with" << m_gstSoftwareH264Encoder << failureText;
-        GstH264EncoderProbe::instance()->markFailed(m_gstH264Encoder);
+        if (blame == PortalEncoderFailureBlame::Encoder)
+            GstH264EncoderProbe::instance()->markFailed(m_gstH264Encoder);
         m_gstH264Encoder = m_gstSoftwareH264Encoder;
         m_gstEncoderRetried = true;
         restartPortalWithSoftwareEncoder();

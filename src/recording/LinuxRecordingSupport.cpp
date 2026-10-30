@@ -4,6 +4,7 @@
 #include <QFileInfo>
 #include <QHash>
 #include <QProcess>
+#include <QRegularExpression>
 #include <QStandardPaths>
 
 QString pipeWireSourcePath(uint nodeId, quint64 pipewireSerial)
@@ -545,6 +546,61 @@ bool shouldRetryPortalStartWithSoftwareEncoder(const QString &encoder, bool firs
     const bool earlyFailure = !reachedPlaying || (runMs >= 0 && runMs < 5000);
     return isHardwareGstH264Encoder(encoder) && firstPipeline && !keptAnySegment
         && !expectedStop && earlyFailure && !alreadyRetried;
+}
+
+QStringList gstErrorElementNames(const QString &log)
+{
+    static const QString marker = QStringLiteral("ERROR: from element ");
+    QStringList names;
+    for (const QString &rawLine : log.split(QLatin1Char('\n'))) {
+        const QString line = rawLine.trimmed();
+        if (!line.startsWith(marker))
+            continue;
+        // The element path has no spaces: "/GstPipeline:pipeline0/GstX:name:".
+        QString path = line.mid(marker.size()).section(QLatin1Char(' '), 0, 0);
+        if (path.endsWith(QLatin1Char(':')))
+            path.chop(1);
+        const QString last = path.section(QLatin1Char('/'), -1);
+        const QString name = last.section(QLatin1Char(':'), -1).trimmed();
+        if (!name.isEmpty() && !names.contains(name))
+            names.append(name);
+    }
+    return names;
+}
+
+PortalEncoderFailureBlame portalH264EncoderFailureBlame(const QString &log, const QString &encoder,
+                                                        bool crashed)
+{
+    if (!isHardwareGstH264Encoder(encoder))
+        return PortalEncoderFailureBlame::NotEncoder;
+    QStringList suspects = gstH264EncoderHelperElements(encoder);
+    suspects.prepend(encoder);
+    // gst-launch names instances after their factory plus a counter.
+    static const QRegularExpression counter(QStringLiteral("\\d+$"));
+    const QStringList failing = gstErrorElementNames(log);
+    for (const QString &name : failing) {
+        QString factory = name;
+        factory.remove(counter);
+        if (suspects.contains(factory) || suspects.contains(name))
+            return PortalEncoderFailureBlame::Encoder;
+    }
+    if (log.contains(QStringLiteral("erroneous pipeline")))
+        return PortalEncoderFailureBlame::NotEncoder;
+    if (failing.isEmpty())
+        return crashed ? PortalEncoderFailureBlame::Suspected : PortalEncoderFailureBlame::NotEncoder;
+    // Caps the hardware chain could not take are reported by the source
+    // ("streaming stopped, reason not-negotiated"), not by the encoder.
+    static const QStringList audioElements = {
+        QStringLiteral("pulsesrc"), QStringLiteral("audioconvert"), QStringLiteral("audioresample"),
+        QStringLiteral("volume"), QStringLiteral("audiomixer")};
+    for (const QString &name : failing) {
+        QString factory = name;
+        factory.remove(counter);
+        if (audioElements.contains(factory))
+            return PortalEncoderFailureBlame::NotEncoder;
+    }
+    return log.contains(QStringLiteral("not-negotiated")) ? PortalEncoderFailureBlame::Suspected
+                                                           : PortalEncoderFailureBlame::NotEncoder;
 }
 
 QStringList portalVideoBranchArguments(const PortalVideoPipelineOptions &options)

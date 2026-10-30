@@ -150,6 +150,25 @@ bool shouldRetryPortalStartWithSoftwareEncoder(const QString &encoder, bool firs
                                                bool keptAnySegment, bool expectedStop,
                                                bool reachedPlaying, qint64 runMs,
                                                bool alreadyRetried);
+// Who is to blame for a failed portal pipeline start with `encoder`:
+// - Encoder: a gst ERROR comes from the encoder or one of its helper
+//   elements (vapostproc, cudaupload ...); the encoder is marked failed.
+// - Suspected: the video branch failed to negotiate caps, or gst-launch
+//   crashed without an ERROR line (driver crash); worth one software retry
+//   for this recording, but not proof enough to disable the encoder.
+// - NotEncoder: anything else (pulsesrc, a pipeline syntax/property error,
+//   filesink ...); the software encoder would fail the same way.
+enum class PortalEncoderFailureBlame {
+    NotEncoder,
+    Suspected,
+    Encoder
+};
+PortalEncoderFailureBlame portalH264EncoderFailureBlame(const QString &log, const QString &encoder,
+                                                        bool crashed);
+// Element instance names ("vah264enc0") that raised the ERROR lines of a
+// gst-launch log ("ERROR: from element /GstPipeline:pipeline0/...:name: ...").
+QStringList gstErrorElementNames(const QString &log);
+
 // pipewiresrc ... ! h264parse
 QStringList portalVideoBranchArguments(const PortalVideoPipelineOptions &options);
 // Complete gst-launch arguments: fragmented mp4mux (a killed recording stays

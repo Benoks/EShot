@@ -547,6 +547,53 @@ private slots:
         QVERIFY(!shouldRetryPortalStartWithSoftwareEncoder(va, true, false, false, false, 300, true));
     }
 
+    void blamesTheHardwareEncoderOnlyForItsOwnErrors()
+    {
+        const QString va = QStringLiteral("vah264enc");
+        const QString encoderError = QStringLiteral(
+            "Setting pipeline to PAUSED ...\n"
+            "ERROR: from element /GstPipeline:pipeline0/GstVaH264Enc:vah264enc0: Could not configure encoder.\n"
+            "Additional debug info:\n../sys/va/gstvaencoder.c(123): ...\n");
+        QCOMPARE(gstErrorElementNames(encoderError), QStringList{QStringLiteral("vah264enc0")});
+        QCOMPARE(portalH264EncoderFailureBlame(encoderError, va, false), PortalEncoderFailureBlame::Encoder);
+
+        const QString helperError = QStringLiteral(
+            "ERROR: from element /GstPipeline:pipeline0/GstVaPostProc:vapostproc0: Internal error\n");
+        QCOMPARE(portalH264EncoderFailureBlame(helperError, va, false), PortalEncoderFailureBlame::Encoder);
+        const QString cudaError = QStringLiteral(
+            "ERROR: from element /GstPipeline:pipeline0/GstCudaUpload:cudaupload0: No CUDA context\n");
+        QCOMPARE(portalH264EncoderFailureBlame(cudaError, QStringLiteral("nvh264enc"), false),
+                 PortalEncoderFailureBlame::Encoder);
+        // The NVENC helper is not the VA-API encoder's business.
+        QCOMPARE(portalH264EncoderFailureBlame(cudaError, va, false), PortalEncoderFailureBlame::NotEncoder);
+
+        // A missing microphone fails the software encoder just the same.
+        const QString micError = QStringLiteral(
+            "ERROR: from element /GstPipeline:pipeline0/GstPulseSrc:pulsesrc0: Failed to connect: No such entity\n"
+            "streaming stopped, reason not-negotiated (-4)\n");
+        QCOMPARE(portalH264EncoderFailureBlame(micError, va, false), PortalEncoderFailureBlame::NotEncoder);
+        // Unknown property / syntax errors are not the encoder's fault.
+        const QString propertyError = QStringLiteral(
+            "WARNING: erroneous pipeline: no property \"on-disconnect\" in element \"pipewiresrc0\"\n");
+        QCOMPARE(portalH264EncoderFailureBlame(propertyError, va, true), PortalEncoderFailureBlame::NotEncoder);
+        // Negotiation failures reported by the video source are suspicious.
+        const QString caps = QStringLiteral(
+            "ERROR: from element /GstPipeline:pipeline0/GstPipeWireSrc:pipewiresrc0: Internal data stream error.\n"
+            "Additional debug info:\nstreaming stopped, reason not-negotiated (-4)\n");
+        QCOMPARE(portalH264EncoderFailureBlame(caps, va, false), PortalEncoderFailureBlame::Suspected);
+        const QString disconnected = QStringLiteral(
+            "ERROR: from element /GstPipeline:pipeline0/GstPipeWireSrc:pipewiresrc0: stream error: no more input formats\n");
+        QCOMPARE(portalH264EncoderFailureBlame(disconnected, va, false), PortalEncoderFailureBlame::NotEncoder);
+        // A crash without any error line (driver crash) is suspicious too.
+        QCOMPARE(portalH264EncoderFailureBlame(QStringLiteral("Setting pipeline to PLAYING ...\n"), va, true),
+                 PortalEncoderFailureBlame::Suspected);
+        QCOMPARE(portalH264EncoderFailureBlame(QStringLiteral("Setting pipeline to PLAYING ...\n"), va, false),
+                 PortalEncoderFailureBlame::NotEncoder);
+        // Software encoders are never "blamed".
+        QCOMPARE(portalH264EncoderFailureBlame(encoderError, QStringLiteral("x264enc"), true),
+                 PortalEncoderFailureBlame::NotEncoder);
+    }
+
     void joinsPausedPartsWithFfmpegWhenInstalled()
     {
         QVERIFY(joinPortalSegmentsWithFfmpeg(true));
