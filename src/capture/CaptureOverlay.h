@@ -100,6 +100,9 @@ protected:
 private:
     void captureAllScreens();
     QPixmap grabScreenUnderCursor();
+    // Per-output captures keep only m_screenImages; the full composed
+    // snapshot is built on demand for blur/pixelate and the eyedropper.
+    void ensureComposedSnapshot();
     bool captureNativeScreenImages(const QRect &logicalRect, const QRect &physicalRect);
     void presentCapture();
     QPoint capturePositionFromGlobal(const QPoint &point) const;

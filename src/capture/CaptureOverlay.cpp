@@ -2128,7 +2128,8 @@ void CaptureOverlay::performCapture()
     m_captureInFlight = true;
     captureAllScreens();
     m_captureInFlight = false;
-    if (!LinuxScreenshotPolicy::canPresentCapture(!m_screenSnapshot.isNull())) {
+    if (!LinuxScreenshotPolicy::canPresentCapture(
+            !m_screenSnapshot.isNull() || !m_screenImages.isEmpty())) {
         qCritical() << "[CaptureOverlay] capture aborted: no usable cursor-free snapshot";
         cancelCapture();
         emit captureFailed(TranslationManager::tr("captureSnapshotFailed"));
@@ -2139,6 +2140,10 @@ void CaptureOverlay::performCapture()
     if (m_annotationEngine) {
         m_annotationEngine->setScreenSnapshot(m_screenSnapshot);
         m_annotationEngine->setSnapshotScale(m_dpr);
+        // A remembered blur/pixelate tool can draw before any tool click.
+        const AnnotationEngine::Tool tool = m_annotationEngine->currentTool();
+        if (tool == AnnotationEngine::Blur || tool == AnnotationEngine::Pixelate)
+            ensureComposedSnapshot();
     }
 
 #ifdef Q_OS_WIN
@@ -2565,17 +2570,35 @@ bool CaptureOverlay::captureNativeScreenImages(const QRect &logicalRect, const Q
         image.setDevicePixelRatio(1.0);
         images.append({screen->geometry(), image, grab.devicePixelRatio()});
     }
-    const QImage canvas = composeCaptureImages(images, logicalRect);
-    if (canvas.isNull())
+    if (images.isEmpty() || captureSelectionSize(images, logicalRect).isEmpty())
         return false;
+    // The composed canvas (at the highest output scale) is not kept here: it
+    // doubles the memory of a capture and only redaction and the eyedropper
+    // need it (ensureComposedSnapshot).
     m_screenImages = images;
-    m_screenSnapshot = QPixmap::fromImage(canvas);
+    m_screenSnapshot = QPixmap();
     m_virtualDesktopRect = logicalRect;
     m_physicalVirtualDesktopTopLeft = physicalRect.topLeft();
     m_dpr = captureSelectionScale(images, logicalRect);
     qInfo() << "[CaptureOverlay] selected capture backend=kwin-per-screen"
-            << "canvas=" << canvas.size() << "scale=" << m_dpr;
+            << "canvas=" << captureSelectionSize(images, logicalRect) << "scale=" << m_dpr;
     return true;
+}
+
+void CaptureOverlay::ensureComposedSnapshot()
+{
+    if (!m_screenSnapshot.isNull() || m_screenImages.isEmpty())
+        return;
+    const QImage canvas = composeCaptureImages(m_screenImages, m_virtualDesktopRect);
+    if (canvas.isNull())
+        return;
+    m_screenSnapshot = QPixmap::fromImage(canvas);
+    m_screenSnapshot.setDevicePixelRatio(1.0);
+    if (m_annotationEngine) {
+        m_annotationEngine->setScreenSnapshot(m_screenSnapshot);
+        m_annotationEngine->setSnapshotScale(m_dpr);
+    }
+    qInfo() << "[CaptureOverlay] composed full snapshot on demand:" << canvas.size();
 }
 
 QPoint CaptureOverlay::capturePositionFromGlobal(const QPoint &point) const
@@ -4619,6 +4642,7 @@ void CaptureOverlay::onClose() { cancelCapture(); }
 
 void CaptureOverlay::onEyedropperRequested()
 {
+    ensureComposedSnapshot();
     if (m_eyedropperImage.isNull() && !m_screenSnapshot.isNull())
         m_eyedropperImage = m_screenSnapshot.toImage();
     m_eyedropperActive = true;
@@ -5027,6 +5051,8 @@ void CaptureOverlay::applyAutoSelectionLock()
 
 void CaptureOverlay::onToolSelected(int toolId)
 {
+    if (toolId == AnnotationEngine::Blur || toolId == AnnotationEngine::Pixelate)
+        ensureComposedSnapshot();
     if (m_annotationEngine) {
         m_annotationEngine->setCurrentTool(static_cast<AnnotationEngine::Tool>(toolId));
         m_annotationEngine->setSelectedIndex(-1);
