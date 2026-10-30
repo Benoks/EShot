@@ -43,7 +43,7 @@ EShot keeps the complete screenshot workflow in one compact tray application: se
 - Undo/redo, selection locking, color controls, and configurable toolbar visibility
 - Tesseract OCR with selectable language packs, copy, retry, and one-click Google Translate handoff
 - Google Lens or Yandex Images visual search for the selected region
-- Screenshot uploads to Catbox, Uguu, Litterbox, TmpFiles.org, temp.sh, Allwebs, Radikal Cloud, Google Drive, and Yandex Disk
+- Screenshot uploads to Catbox, Uguu, TmpFiles.org, temp.sh, Allwebs, Radikal Cloud, Google Drive, and Yandex Disk
 - Always-on-top pinned captures
 - Selected-region GIF recording
 - MP4 recording with configurable FPS, quality, duration, desktop audio, and microphone audio
@@ -151,7 +151,7 @@ For the AUR package and the `.tar.gz` archive, files owned by the package manage
 
 - Wayland screenshots and recordings use XDG Desktop Portal and PipeWire.
 - KDE global shortcuts use KGlobalAccel. GNOME uses the Global Shortcuts portal where available and can install an EShot-only GNOME custom shortcut as a compatibility fallback.
-- Stock GNOME does not expose legacy tray icons. When no tray integration is available, launching EShot from the application list opens a compact control window with Capture, Settings, About, and Quit. Autostart remains silent. `Print Screen` and custom shortcuts continue to work independently of the tray.
+- Stock GNOME does not expose legacy tray icons. When no tray integration is available, launching EShot from the application list opens a compact control window with Capture, Record GIF, Record Video, Open Screenshots Folder, Settings, About, and Quit. Autostart remains silent. `Print Screen` and custom shortcuts continue to work independently of the tray.
 - GNOME screenshots are delivered through its secure Screenshot portal. EShot warms that service at startup, but the portal still adds a short delay before the selection panel appears. This varies by GNOME and portal version and is expected on Wayland.
 - GNOME and KDE Wayland use an XWayland selection overlay so text entry, focus, one-canvas multi-monitor selection and the placement of pinned images and recording controls behave consistently. On KDE, `ESHOT_CAPTURE_BACKEND=wayland` opts into experimental per-output native surfaces, which give sharper previews on mixed-DPI setups but cannot place pinned images or the recording frame.
 - GIF recording uses GStreamer for portal capture and FFmpeg for final GIF encoding.
@@ -192,42 +192,101 @@ OAuth Playground access tokens expire. Generate a new token if an upload later r
 
 ## Default shortcuts
 
-Most shortcuts can be changed in Settings.
+Most shortcuts can be changed in Settings. Press `?` (or `F1`) during a capture to see the keys that are currently configured.
+
+### Global
 
 | Shortcut | Action |
 | --- | --- |
 | `Print Screen` | Start region capture |
+| `Shift+Print Screen` | Capture a window (Windows) |
+
+Instant capture, GIF and video recording, and the recording controls (pause, stop, cancel) have their own global shortcuts in **Settings → Hotkey**.
+
+### Selection
+
+| Shortcut | Action |
+| --- | --- |
+| Drag | Select an area |
 | Double-click a screen | Capture the complete monitor |
 | `Enter` / `Ctrl+C` | Copy selection |
 | `Ctrl+S` | Save selection |
+| `Ctrl+P` | Pin selection to the screen |
+| `K` | Lock or unlock the selection |
+| Arrow keys | Move the selection (`Shift`: 10 px) |
+| `Ctrl` + arrow keys | Resize the selection (`Shift`: 10 px) |
 | `Esc` | Cancel or close |
+| `?` / `F1` | Show or hide the shortcut sheet |
+
+### Actions
+
+| Shortcut | Action |
+| --- | --- |
+| `Ctrl+O` | Recognize text (OCR) |
+| `Ctrl+U` | Upload |
+| `Ctrl+L` | Visual search (Google Lens or Yandex Images) |
+| `Ctrl+G` | Record the selection as a GIF |
+| `Ctrl+Shift+V` | Record the selection as a video |
+
+### Tools
+
+| Shortcut | Action |
+| --- | --- |
 | `P` | Pen |
 | `A` | Arrow |
 | `L` | Line |
 | `R` | Rectangle |
 | `C` | Circle |
-| `T` | Text |
+| `D` | Semi-transparent rectangle |
 | `H` | Highlighter |
+| `T` | Text |
 | `B` | Blur |
+| `M` | Pixelate |
 | `N` | Counter |
 | `X` | Eraser |
-| `D` | Semi-transparent rectangle |
 | `I` | Eyedropper |
+
+### Editing
+
+| Shortcut | Action |
+| --- | --- |
 | `Ctrl+Z` / `Ctrl+Shift+Z` | Undo / redo |
+| `Del` | Delete the selected object |
+| `Ctrl` + click | Move an object |
+| Arrow keys | Nudge the selected object |
+| `Shift` + drag | Straight line, square or circle |
+| Double-click / `F2` | Edit a text object |
+| `Enter` / `Shift+Enter` | Finish text / new line |
+| `Ctrl+B` | Bold text |
+| `Ctrl` `+` / `Ctrl` `-` | Larger / smaller text |
 
 ## Command line
+
+| Option | Effect |
+| --- | --- |
+| `--capture` | Start a region capture (in the running instance if there is one) |
+| `--save <path>` | Capture and save the selection to `<path>` |
+| `--settings` | Open Settings |
+| `--control` | Open the compact control window (used by the application-menu entry on desktops without a tray) |
+| `--silent` | Start in the background without the first-run wizard (used by autostart) |
+| `--quit` | Quit the running instance |
+| `--uninstall` | Linux: restore Print Screen and remove EShot's desktop integration for this user |
 
 ```powershell
 # Windows
 EShot.exe --capture
 EShot.exe --save "C:\path\to\capture.png"
+EShot.exe --settings
 EShot.exe --silent
+EShot.exe --quit
 ```
 
 ```bash
 # Linux
 EShot --capture
 EShot --save "$HOME/Pictures/capture.png"
+EShot --settings
+EShot --control
 EShot --silent
 EShot --quit
 EShot --uninstall  # restore Print Screen and remove desktop integration
