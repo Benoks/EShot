@@ -1,11 +1,9 @@
 #include "WindowsElevatedStartup.h"
 
+#include <QByteArray>
 #include <QCoreApplication>
-#include <QDateTime>
 #include <QDir>
-#include <QFile>
 #include <QProcess>
-#include <QStandardPaths>
 
 #ifdef Q_OS_WIN
 #include <windows.h>
@@ -26,26 +24,24 @@ QString psQuote(QString value)
 // Runs a PowerShell script as administrator and waits for it to finish.
 bool runElevatedScript(const QString &script)
 {
-    const QString dir = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
-    const QString path = QDir(dir).filePath(QStringLiteral("eshot_elevated_%1.ps1")
-                                                .arg(QDateTime::currentMSecsSinceEpoch()));
-    QFile file(path);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text))
-        return false;
-    file.write(QByteArrayLiteral("\xEF\xBB\xBF"));
-    file.write(script.toUtf8());
-    file.close();
-
     const QString parameters = QStringLiteral(
-        "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"%1\"")
-        .arg(QDir::toNativeSeparators(path));
+        "-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -EncodedCommand %1")
+        .arg(encodedPowerShellCommand(script));
     const std::wstring params = parameters.toStdWString();
+    // Full path: an elevated start must not resolve powershell.exe through a
+    // user-writable PATH entry.
+    wchar_t systemDir[MAX_PATH] = {};
+    const UINT systemDirLength = GetSystemDirectoryW(systemDir, MAX_PATH);
+    if (systemDirLength == 0 || systemDirLength >= MAX_PATH)
+        return false;
+    const std::wstring powershell = std::wstring(systemDir)
+        + L"\\WindowsPowerShell\\v1.0\\powershell.exe";
 
     SHELLEXECUTEINFOW info = {};
     info.cbSize = sizeof(info);
     info.fMask = SEE_MASK_NOCLOSEPROCESS;
     info.lpVerb = L"runas";
-    info.lpFile = L"powershell.exe";
+    info.lpFile = powershell.c_str();
     info.lpParameters = params.c_str();
     info.nShow = SW_HIDE;
     bool ok = false;
@@ -57,9 +53,56 @@ bool runElevatedScript(const QString &script)
         }
         CloseHandle(info.hProcess);
     }
-    QFile::remove(path);
     return ok;
 }
+#endif
+}
+
+QString encodedPowerShellCommand(const QString &script)
+{
+    QByteArray utf16le;
+    utf16le.reserve(script.size() * 2);
+    for (const QChar ch : script) {
+        const char16_t unit = ch.unicode();
+        utf16le.append(char(unit & 0xff));
+        utf16le.append(char((unit >> 8) & 0xff));
+    }
+    return QString::fromLatin1(utf16le.toBase64());
+}
+
+bool installLocationIsAdminProtected(const QString &appDirectory,
+                                     const QStringList &protectedRoots)
+{
+    const auto normalized = [](QString path) {
+        path = QDir::cleanPath(path.trimmed().replace(QLatin1Char('\\'), QLatin1Char('/')));
+        while (path.endsWith(QLatin1Char('/')) && path.size() > 1)
+            path.chop(1);
+        return path;
+    };
+    const QString app = normalized(appDirectory);
+    if (app.isEmpty())
+        return false;
+    for (const QString &root : protectedRoots) {
+        const QString base = normalized(root);
+        if (base.isEmpty())
+            continue;
+        if (app.compare(base, Qt::CaseInsensitive) == 0
+            || app.startsWith(base + QLatin1Char('/'), Qt::CaseInsensitive)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool currentInstallIsAdminProtected()
+{
+#ifdef Q_OS_WIN
+    return installLocationIsAdminProtected(
+        QCoreApplication::applicationDirPath(),
+        {qEnvironmentVariable("ProgramFiles"), qEnvironmentVariable("ProgramW6432"),
+         qEnvironmentVariable("ProgramFiles(x86)")});
+#else
+    return false;
 #endif
 }
 

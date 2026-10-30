@@ -618,6 +618,15 @@ QWidget* SettingsDialog::createGeneralTab()
         runElevatedNote->setWordWrap(true);
         runElevatedNote->setStyleSheet(QStringLiteral("color: #888; font-size: 11px; margin-left: 22px;"));
         genLayout->addWidget(runElevatedNote);
+        // A per-user or portable copy lives in a folder any program the user
+        // runs can write to; starting it elevated without a prompt would hand
+        // those programs admin rights. Say so plainly (confirmed again on save).
+        if (!WindowsElevatedStartup::currentInstallIsAdminProtected()) {
+            auto *unsafeNote = new QLabel(TranslationManager::runElevatedUnsafeInstall());
+            unsafeNote->setWordWrap(true);
+            unsafeNote->setStyleSheet(QStringLiteral("color: #e0a030; font-size: 11px; margin-left: 22px;"));
+            genLayout->addWidget(unsafeNote);
+        }
     }
     genLayout->addWidget(m_showNotificationsCheck);
     m_notificationOptionsWidget = new QWidget(genGroup);
@@ -2646,6 +2655,14 @@ void SettingsDialog::onSave()
     // Apply startup changes before persisting anything: if they fail, no
     // partial settings are written (onSave partial success guard).
     const bool wantAutoStart = m_autoStartCheck->isChecked();
+    if (m_runElevatedCheck && m_runElevatedCheck->isChecked() && !m_loadedRunElevated
+        && !WindowsElevatedStartup::currentInstallIsAdminProtected()
+        && QMessageBox::warning(this, TranslationManager::tr("runElevated"),
+                                TranslationManager::runElevatedUnsafeConfirm(),
+                                QMessageBox::Yes | QMessageBox::No, QMessageBox::No)
+               != QMessageBox::Yes) {
+        m_runElevatedCheck->setChecked(false);
+    }
     const bool wantElevated = m_runElevatedCheck && m_runElevatedCheck->isChecked();
     if (wantElevated != m_loadedRunElevated
         || (wantElevated && wantAutoStart != m_loadedAutoStart)) {

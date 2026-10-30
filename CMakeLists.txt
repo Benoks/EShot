@@ -929,8 +929,13 @@ if(BUILD_TESTING)
             tests/AppLifecyclePolicyTests.cpp
             src/core/AppLifecyclePolicy.cpp
             src/core/AppLifecyclePolicy.h
+            src/core/WindowsElevatedStartup.cpp
+            src/core/WindowsElevatedStartup.h
         LIBS Qt6::Core
     )
+    if(WIN32)
+        target_link_libraries(eshot_app_lifecycle_policy_tests PRIVATE shell32 advapi32)
+    endif()
 
     eshot_add_test(eshot_notification_folder_opener_tests notification_folder_opener
         SOURCES
