@@ -169,47 +169,181 @@ void writeSilence(QFile &file, quint64 bytes)
     }
 }
 
+#ifndef AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM
+#define AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM 0x80000000
+#endif
+#ifndef AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY
+#define AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY 0x08000000
+#endif
+
+// Raises `changed` when Windows switches the default playback device
+// (headphones plugged in, Bluetooth connected, device picked in the tray).
+class DefaultRenderDeviceWatcher final : public IMMNotificationClient {
+public:
+    explicit DefaultRenderDeviceWatcher(std::atomic_bool *changed) : m_changed(changed) {}
+    virtual ~DefaultRenderDeviceWatcher() = default;
+
+    ULONG STDMETHODCALLTYPE AddRef() override { return static_cast<ULONG>(InterlockedIncrement(&m_refs)); }
+    ULONG STDMETHODCALLTYPE Release() override
+    {
+        const LONG refs = InterlockedDecrement(&m_refs);
+        if (refs == 0)
+            delete this;
+        return static_cast<ULONG>(refs);
+    }
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void **object) override
+    {
+        if (!object)
+            return E_POINTER;
+        if (riid == __uuidof(IUnknown) || riid == __uuidof(IMMNotificationClient)) {
+            *object = static_cast<IMMNotificationClient *>(this);
+            AddRef();
+            return S_OK;
+        }
+        *object = nullptr;
+        return E_NOINTERFACE;
+    }
+    HRESULT STDMETHODCALLTYPE OnDefaultDeviceChanged(EDataFlow flow, ERole role, LPCWSTR) override
+    {
+        if (flow == eRender && role == eConsole)
+            m_changed->store(true);
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE OnDeviceStateChanged(LPCWSTR, DWORD) override { return S_OK; }
+    HRESULT STDMETHODCALLTYPE OnDeviceAdded(LPCWSTR) override { return S_OK; }
+    HRESULT STDMETHODCALLTYPE OnDeviceRemoved(LPCWSTR) override { return S_OK; }
+    HRESULT STDMETHODCALLTYPE OnPropertyValueChanged(LPCWSTR, const PROPERTYKEY) override { return S_OK; }
+
+private:
+    LONG m_refs = 1;
+    std::atomic_bool *m_changed;
+};
+
+// One loopback capture of the current default playback device.
+struct LoopbackStream {
+    IMMDevice *device = nullptr;
+    IAudioClient *client = nullptr;
+    IAudioCaptureClient *capture = nullptr;
+
+    void release()
+    {
+        if (client) client->Stop();
+        if (capture) capture->Release();
+        if (client) client->Release();
+        if (device) device->Release();
+        capture = nullptr;
+        client = nullptr;
+        device = nullptr;
+    }
+};
+
+// Opens and starts loopback capture of the default playback device. The
+// first open (`fileFormat` null) uses the device's mix format, returned in
+// *mixFormat and owned by the caller. A re-open must deliver `fileFormat`,
+// the format the WAV was started with, and lets Windows convert to it when
+// the new device's mix format differs.
+bool openLoopbackStream(IMMDeviceEnumerator *enumerator, const WAVEFORMATEX *fileFormat,
+                        LoopbackStream *stream, WAVEFORMATEX **mixFormat)
+{
+    stream->release();
+    if (FAILED(enumerator->GetDefaultAudioEndpoint(eRender, eConsole, &stream->device))
+        || FAILED(stream->device->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr,
+                                           reinterpret_cast<void **>(&stream->client)))) {
+        stream->release();
+        return false;
+    }
+    HRESULT initialized = E_FAIL;
+    if (!fileFormat) {
+        if (FAILED(stream->client->GetMixFormat(mixFormat))) {
+            stream->release();
+            return false;
+        }
+        initialized = stream->client->Initialize(AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_LOOPBACK,
+                                                 10000000, 0, *mixFormat, nullptr);
+    } else {
+        initialized = stream->client->Initialize(
+            AUDCLNT_SHAREMODE_SHARED,
+            AUDCLNT_STREAMFLAGS_LOOPBACK | AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM
+                | AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY,
+            10000000, 0, fileFormat, nullptr);
+        if (FAILED(initialized)) {
+            // Without format conversion only a device with the very same
+            // mix format can continue the file.
+            WAVEFORMATEX *deviceFormat = nullptr;
+            const bool sameFormat = SUCCEEDED(stream->client->GetMixFormat(&deviceFormat))
+                && deviceFormat->cbSize == fileFormat->cbSize
+                && memcmp(deviceFormat, fileFormat, sizeof(WAVEFORMATEX) + fileFormat->cbSize) == 0;
+            if (deviceFormat)
+                CoTaskMemFree(deviceFormat);
+            // A client whose Initialize failed cannot be initialized again.
+            stream->client->Release();
+            stream->client = nullptr;
+            if (sameFormat
+                && SUCCEEDED(stream->device->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr,
+                                                      reinterpret_cast<void **>(&stream->client)))) {
+                initialized = stream->client->Initialize(AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_LOOPBACK,
+                                                         10000000, 0, fileFormat, nullptr);
+            }
+        }
+    }
+    if (FAILED(initialized) || !stream->client
+        || FAILED(stream->client->GetService(__uuidof(IAudioCaptureClient),
+                                             reinterpret_cast<void **>(&stream->capture)))
+        || FAILED(stream->client->Start())) {
+        stream->release();
+        return false;
+    }
+    return true;
+}
+
 // Writes the loopback audio of the active (not paused) time to `path` and
 // records where each active span starts and ends in the file, in sample
 // frames, so the mux step can line every span up with its video segment.
+// When the default playback device changes or disappears, capture moves to
+// the new default device; the time in between is padded with silence like
+// any other gap, so the span bookkeeping is unaffected. `interrupted` is
+// raised when the move did not work right away, i.e. part of the recording
+// has no desktop audio.
 void recordWasapiLoopback(const QString &path, std::atomic_bool *stopFlag,
                           std::atomic_bool *pauseFlag, std::atomic<qint64> *startedEpochMs,
-                          int *sampleRate, QList<QPair<qint64, qint64>> *spans)
+                          int *sampleRate, QList<QPair<qint64, qint64>> *spans,
+                          std::atomic_bool *interrupted)
 {
     HRESULT init = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     if (FAILED(init) && init != RPC_E_CHANGED_MODE)
         return;
 
     IMMDeviceEnumerator *enumerator = nullptr;
-    IMMDevice *device = nullptr;
-    IAudioClient *client = nullptr;
-    IAudioCaptureClient *capture = nullptr;
+    LoopbackStream stream;
     WAVEFORMATEX *format = nullptr;
+    std::atomic_bool defaultDeviceChanged { false };
+    DefaultRenderDeviceWatcher *watcher = nullptr;
     QFile file(path);
     // 64-bit: a 32-bit count wrapped after about three hours of float audio.
     quint64 dataBytes = 0;
 
     auto cleanup = [&]() {
-        if (client) client->Stop();
+        stream.release();
+        if (watcher) {
+            enumerator->UnregisterEndpointNotificationCallback(watcher);
+            watcher->Release();
+        }
         if (format) CoTaskMemFree(format);
-        if (capture) capture->Release();
-        if (client) client->Release();
-        if (device) device->Release();
         if (enumerator) enumerator->Release();
         if (SUCCEEDED(init)) CoUninitialize();
     };
 
     if (FAILED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
-                                __uuidof(IMMDeviceEnumerator), reinterpret_cast<void **>(&enumerator))) ||
-        FAILED(enumerator->GetDefaultAudioEndpoint(eRender, eConsole, &device)) ||
-        FAILED(device->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr, reinterpret_cast<void **>(&client))) ||
-        FAILED(client->GetMixFormat(&format)) ||
-        FAILED(client->Initialize(AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_LOOPBACK,
-                                  10000000, 0, format, nullptr)) ||
-        FAILED(client->GetService(__uuidof(IAudioCaptureClient), reinterpret_cast<void **>(&capture))) ||
-        !file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+                                __uuidof(IMMDeviceEnumerator), reinterpret_cast<void **>(&enumerator)))
+        || !openLoopbackStream(enumerator, nullptr, &stream, &format)
+        || !file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
         cleanup();
         return;
+    }
+    watcher = new DefaultRenderDeviceWatcher(&defaultDeviceChanged);
+    if (FAILED(enumerator->RegisterEndpointNotificationCallback(watcher))) {
+        watcher->Release();
+        watcher = nullptr;
     }
 
     const QByteArray waveFormat(reinterpret_cast<const char *>(format),
@@ -218,11 +352,6 @@ void recordWasapiLoopback(const QString &path, std::atomic_bool *stopFlag,
     // switches to RF64 past 4 GiB, which FFmpeg reads as well.
     file.write(wavFileHeader(waveFormat, 0));
     syncHiddenAttribute(path);
-
-    if (FAILED(client->Start())) {
-        cleanup();
-        return;
-    }
     startedEpochMs->store(QDateTime::currentMSecsSinceEpoch());
 
     // Loopback capture delivers no packets while nothing is playing. Pad those
@@ -239,6 +368,8 @@ void recordWasapiLoopback(const QString &path, std::atomic_bool *stopFlag,
     const quint64 blockAlign = qMax<quint64>(1, format->nBlockAlign);
     *sampleRate = static_cast<int>(format->nSamplesPerSec);
     qint64 spanStartFrame = 0;
+    bool deviceLost = false;
+    ULONGLONG nextReopenTick = 0;
 
     while (!stopFlag->load()) {
         Sleep(10);
@@ -254,27 +385,55 @@ void recordWasapiLoopback(const QString &path, std::atomic_bool *stopFlag,
                 spanStartFrame = frame;
             }
         }
-        bool gotPacket = false;
-        UINT32 packetFrames = 0;
-        while (SUCCEEDED(capture->GetNextPacketSize(&packetFrames)) && packetFrames > 0) {
-            gotPacket = true;
-            BYTE *data = nullptr;
-            UINT32 frames = 0;
-            DWORD flags = 0;
-            if (FAILED(capture->GetBuffer(&data, &frames, &flags, nullptr, nullptr)))
-                break;
-            const quint32 bytes = frames * format->nBlockAlign;
-            // While paused, packets are still drained (and dropped) so the
-            // endpoint buffer cannot overflow.
-            if (!paused) {
-                if (flags & AUDCLNT_BUFFERFLAGS_SILENT) {
-                    writeSilence(file, bytes);
-                } else {
-                    file.write(reinterpret_cast<const char *>(data), bytes);
-                }
-                dataBytes += bytes;
+        if (defaultDeviceChanged.exchange(false)) {
+            deviceLost = true;
+            nextReopenTick = 0;
+        }
+        if (deviceLost && GetTickCount64() >= nextReopenTick) {
+            if (openLoopbackStream(enumerator, format, &stream, nullptr)) {
+                deviceLost = false;
+                qInfo() << "VideoRecorder: system audio continues on the new playback device";
+            } else {
+                // No playback device right now (or one that cannot deliver
+                // this format): keep padding silence and try again shortly.
+                interrupted->store(true);
+                nextReopenTick = GetTickCount64() + 1000;
             }
-            capture->ReleaseBuffer(frames);
+        }
+        bool gotPacket = false;
+        if (!deviceLost && stream.capture) {
+            UINT32 packetFrames = 0;
+            HRESULT hr = S_OK;
+            while (SUCCEEDED(hr = stream.capture->GetNextPacketSize(&packetFrames)) && packetFrames > 0) {
+                BYTE *data = nullptr;
+                UINT32 frames = 0;
+                DWORD flags = 0;
+                hr = stream.capture->GetBuffer(&data, &frames, &flags, nullptr, nullptr);
+                if (FAILED(hr))
+                    break;
+                gotPacket = true;
+                const quint32 bytes = frames * format->nBlockAlign;
+                // While paused, packets are still drained (and dropped) so the
+                // endpoint buffer cannot overflow.
+                if (!paused) {
+                    if (flags & AUDCLNT_BUFFERFLAGS_SILENT) {
+                        writeSilence(file, bytes);
+                    } else {
+                        file.write(reinterpret_cast<const char *>(data), bytes);
+                    }
+                    dataBytes += bytes;
+                }
+                stream.capture->ReleaseBuffer(frames);
+            }
+            if (FAILED(hr)) {
+                // AUDCLNT_E_DEVICE_INVALIDATED (unplugged, disabled, format
+                // changed) or another error: move to the default device.
+                qWarning() << "VideoRecorder: system audio device lost; reopening"
+                           << QString::number(static_cast<quint32>(hr), 16);
+                stream.release();
+                deviceLost = true;
+                nextReopenTick = 0;
+            }
         }
         if (!gotPacket && !paused) {
             const ULONGLONG activeTicks = GetTickCount64() - startTick - pausedTicks;
@@ -576,8 +735,10 @@ bool VideoRecorder::startWindowsCapture(QString *error)
         m_audioSampleRate = 0;
         m_audioSpans.clear();
         m_audioStop.store(false);
+        m_audioInterrupted.store(false);
         m_audioThread = std::thread(recordWasapiLoopback, m_audioPath, &m_audioStop, &m_audioPaused,
-                                    &m_audioStartEpochMs, &m_audioSampleRate, &m_audioSpans);
+                                    &m_audioStartEpochMs, &m_audioSampleRate, &m_audioSpans,
+                                    &m_audioInterrupted);
     }
 
     m_starting = true;
@@ -1374,6 +1535,12 @@ void VideoRecorder::stopSystemAudioCapture()
     m_audioStop.store(true);
     if (m_audioThread.joinable())
         m_audioThread.join();
+    if (m_audioInterrupted.exchange(false)) {
+        const QString warning = TranslationManager::tr("recWarnSystemAudioInterrupted");
+        if (!m_warnings.contains(warning))
+            m_warnings << warning;
+        qWarning() << "VideoRecorder: system audio could not follow a playback device change";
+    }
 }
 
 void VideoRecorder::removeRecordingFiles()

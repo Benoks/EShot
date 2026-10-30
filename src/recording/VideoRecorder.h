@@ -217,6 +217,9 @@ private:
     bool m_canceling = false;
     std::atomic_bool m_audioStop { false };
     std::atomic_bool m_audioPaused { false };
+    // Set by the WASAPI thread when the playback device changed and capture
+    // could not move to the new one right away.
+    std::atomic_bool m_audioInterrupted { false };
     std::thread m_audioThread;
 };
 
