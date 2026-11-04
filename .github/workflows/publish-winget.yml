@@ -1,0 +1,37 @@
+name: Publish winget package
+
+# Opens a PR at microsoft/winget-pkgs for each release. Needs the
+# WINGET_TOKEN secret (classic token, public_repo scope) and a fork of
+# microsoft/winget-pkgs under the repository owner.
+on:
+  workflow_run:
+    workflows: [Build]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to publish, for example v4.8.0
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    if: >-
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       (startsWith(github.event.workflow_run.head_branch, 'refs/tags/v') ||
+        startsWith(github.event.workflow_run.head_branch, 'v'))) ||
+      (github.event_name == 'workflow_dispatch' && startsWith(inputs.tag, 'v'))
+    runs-on: windows-latest
+    steps:
+      # Pinned to a commit: this action gets a token that can open PRs as the owner.
+      - uses: vedantmgoyal9/winget-releaser@b7370d4d152efdce803a26cc6ca9eee58cb2ad54 # v2
+        with:
+          identifier: Benoks.EShot
+          release-tag: ${{ inputs.tag || github.event.workflow_run.head_branch }}
+          installers-regex: '^EShot_Setup_v.*_(x64|arm64)\.exe$'
+          token: ${{ secrets.WINGET_TOKEN }}
