@@ -215,11 +215,22 @@ Instant capture, GIF and video recording, and the recording controls (pause, sto
 | `Enter` / `Ctrl+C` | Copy selection |
 | `Ctrl+S` | Save selection |
 | `Ctrl+P` | Pin selection to the screen |
-| `K` | Lock or unlock the selection |
+| `K` | Lock or unlock the selection (a click outside no longer starts a new one; resizing still works) |
+| Double-click outside | Start over while the selection is locked |
 | Arrow keys | Move the selection (`Shift`: 10 px) |
 | `Ctrl` + arrow keys | Resize the selection (`Shift`: 10 px) |
 | `Esc` | Cancel or close |
 | `?` / `F1` | Show or hide the shortcut sheet |
+
+### Pinned images
+
+| Action | Result |
+| --- | --- |
+| Drag | Move |
+| Drag a corner / `Shift` + wheel | Resize |
+| Wheel | Change opacity |
+| Double-click / `Esc` | Close |
+| Right-click | Copy, save or close |
 
 ### Actions
 

@@ -28,6 +28,7 @@ protected:
     void mousePressEvent(QMouseEvent *event) override;
     void mouseMoveEvent(QMouseEvent *event) override;
     void mouseReleaseEvent(QMouseEvent *event) override;
+    void mouseDoubleClickEvent(QMouseEvent *event) override;
     void keyPressEvent(QKeyEvent *event) override;
     void enterEvent(QEnterEvent *event) override;
     void leaveEvent(QEvent *event) override;
@@ -36,6 +37,7 @@ protected:
 
 private:
     QPixmap m_pixmap;       // Original image (never mutated)
+    QPixmap m_scaledPixmap; // m_pixmap smoothly scaled to the current size
     double m_scale;         // Scale factor (1.0 = original size)
     QPoint m_dragOffset;
     bool m_dragging;

@@ -212,6 +212,7 @@ void drawShortcutSheet(QPainter &painter, const QRect &monitorRect, bool windowS
     selection.rows.append({{arrows}, TM::tr("sheetNudgeSelection")});
     selection.rows.append({{QStringLiteral("Ctrl+") + arrows}, TM::tr("sheetResizeSelection")});
     selection.rows.append({{QStringLiteral("Esc")}, TM::tr("sheetCancel")});
+    selection.rows.append({{TM::tr("keyDoubleClick")}, TM::tr("sheetResetSelection")});
 
     Section more{TM::tr("sheetSectionMore"), {}};
     addShortcut(more.rows, "actionOcr", "Ctrl+O", plainName(TM::actionOcr()));

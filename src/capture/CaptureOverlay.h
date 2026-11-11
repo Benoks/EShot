@@ -309,6 +309,7 @@ private:
     void setToolSettingsDrawerVisible(bool visible);
     void updateCounterQuickSettings();
     bool isToolSettingsUiAt(const QPoint &pos) const;
+    bool isOverlayUiAt(const QPoint &pos) const;
     void setupRecordingDrawer();
     void showRecordingDrawer(RecordingDrawerMode mode);
     void setRecordingDrawerMode(RecordingDrawerMode mode);

@@ -18,7 +18,7 @@
 #include "../core/TranslationManager.h"
 #include "CaptureInteractionPolicy.h"
 
-static constexpr int BAR_HEIGHT = 32;
+static constexpr int INFO_HEIGHT = 28;
 static constexpr int CLOSE_BTN_SIZE = 20;
 static constexpr int HANDLE_SIZE = 8;
 static constexpr double MIN_SCALE = 0.1;
@@ -38,6 +38,7 @@ PinnedWindow::PinnedWindow(const QPixmap &pixmap, const QPoint &screenPos, qreal
     setAttribute(Qt::WA_TranslucentBackground, true);
     setMouseTracking(true);
     setCursor(Qt::SizeAllCursor);
+    setToolTip(TranslationManager::tr("pinnedTip"));
 
     // The pixmap holds the selection at full physical resolution. Tag it with the
     // devicePixelRatio of the screen it appears on so it is displayed at the same
@@ -56,8 +57,7 @@ PinnedWindow::PinnedWindow(const QPixmap &pixmap, const QPoint &screenPos, qreal
         m_pixmap.setDevicePixelRatio(dpr);
 
     updateWindowSize();
-    // screenPos is where the image was captured; the title bar sits above it.
-    QPoint windowPos = screenPos - QPoint(1, BAR_HEIGHT + 1);
+    QPoint windowPos = screenPos - QPoint(1, 1);
     if (QScreen *screen = QGuiApplication::screenAt(screenPos))
         windowPos.setY(qMax(windowPos.y(), screen->availableGeometry().top()));
     move(windowPos);
@@ -76,7 +76,7 @@ void PinnedWindow::updateWindowSize()
     const QSizeF base = baseSize();
     int w = qMax(1, static_cast<int>(base.width() * m_scale));
     int h = qMax(1, static_cast<int>(base.height() * m_scale));
-    setFixedSize(w + 2, h + BAR_HEIGHT + 2);
+    setFixedSize(w + 2, h + 2);
 }
 
 void PinnedWindow::setOpacity(double opacity)
@@ -89,7 +89,7 @@ void PinnedWindow::setOpacity(double opacity)
 QRect PinnedWindow::closeButtonRect() const
 {
     int x = width() - CLOSE_BTN_SIZE - 8;
-    int y = (BAR_HEIGHT - CLOSE_BTN_SIZE) / 2 + 1;
+    int y = (INFO_HEIGHT - CLOSE_BTN_SIZE) / 2 + 1;
     return QRect(x, y, CLOSE_BTN_SIZE, CLOSE_BTN_SIZE);
 }
 
@@ -122,20 +122,28 @@ void PinnedWindow::paintEvent(QPaintEvent *event)
 
     painter.fillRect(rect(), Qt::transparent);
 
-    // Draw original image at scaled size
+    // Scale from the original whenever the size changes, with smooth filtering
+    // so small text stays readable (a plain scaled drawPixmap is nearest-neighbour).
     const QSizeF base = baseSize();
-    int drawW = qMax(1, static_cast<int>(base.width() * m_scale));
-    int drawH = qMax(1, static_cast<int>(base.height() * m_scale));
-    painter.drawPixmap(1, BAR_HEIGHT + 1, drawW, drawH, m_pixmap);
-
-    // Top bar
-    QPainterPath barPath;
-    barPath.addRoundedRect(QRectF(1, 1, width() - 2, BAR_HEIGHT), 6, 6);
-    painter.setPen(Qt::NoPen);
-    painter.setBrush(QColor(20, 20, 20, 210));
-    painter.drawPath(barPath);
+    const QSize drawSize(qMax(1, static_cast<int>(base.width() * m_scale)),
+                         qMax(1, static_cast<int>(base.height() * m_scale)));
+    const qreal dpr = devicePixelRatioF();
+    const QSize deviceSize = (QSizeF(drawSize) * dpr).toSize();
+    if (deviceSize == m_pixmap.size())
+        m_scaledPixmap = m_pixmap;
+    else if (m_scaledPixmap.size() != deviceSize)
+        m_scaledPixmap = m_pixmap.scaled(deviceSize, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+    m_scaledPixmap.setDevicePixelRatio(dpr);
+    painter.drawPixmap(QRect(QPoint(1, 1), drawSize), m_scaledPixmap);
 
     if (m_hovered) {
+        // Info strip over the top of the image, only while hovered.
+        QPainterPath barPath;
+        barPath.addRoundedRect(QRectF(1, 1, width() - 2, INFO_HEIGHT), 3, 3);
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(QColor(20, 20, 20, 190));
+        painter.drawPath(barPath);
+
         // Close button
         QRect closeRect = closeButtonRect();
         painter.setPen(Qt::NoPen);
@@ -151,7 +159,7 @@ void PinnedWindow::paintEvent(QPaintEvent *event)
 
         // Pin icon
         int iconX = 14;
-        int iconY = BAR_HEIGHT / 2;
+        int iconY = INFO_HEIGHT / 2;
         painter.setPen(QPen(QColor(0, 122, 204), 1.5));
         painter.setBrush(Qt::NoBrush);
         painter.drawEllipse(QPoint(iconX, iconY - 2), 3, 3);
@@ -165,7 +173,7 @@ void PinnedWindow::paintEvent(QPaintEvent *event)
         QFont f("Segoe UI", 9);
         f.setBold(true);
         painter.setFont(f);
-        painter.drawText(iconX + 8, 0, width() - iconX - 8 - CLOSE_BTN_SIZE - 14, BAR_HEIGHT,
+        painter.drawText(iconX + 8, 1, width() - iconX - 8 - CLOSE_BTN_SIZE - 14, INFO_HEIGHT,
                          Qt::AlignVCenter, sizeText);
 
         // Resize handles
@@ -177,10 +185,10 @@ void PinnedWindow::paintEvent(QPaintEvent *event)
         }
     }
 
-    // Border
+    // Thin outline so the pin stands out from what is behind it; accent on hover.
     QPainterPath borderPath;
-    borderPath.addRoundedRect(QRectF(1, 1, width() - 2, height() - 2), 7, 7);
-    painter.setPen(QPen(QColor(0, 122, 204), 2));
+    borderPath.addRoundedRect(QRectF(0.5, 0.5, width() - 1, height() - 1), 3, 3);
+    painter.setPen(m_hovered ? QPen(QColor(0, 122, 204), 2) : QPen(QColor(0, 0, 0, 110), 1));
     painter.setBrush(Qt::NoBrush);
     painter.drawPath(borderPath);
 }
@@ -285,6 +293,12 @@ void PinnedWindow::mouseReleaseEvent(QMouseEvent *event)
         m_dragging = false;
         m_resizeHandle = NoHandle;
     }
+}
+
+void PinnedWindow::mouseDoubleClickEvent(QMouseEvent *event)
+{
+    if (event->button() == Qt::LeftButton)
+        close();
 }
 
 void PinnedWindow::keyPressEvent(QKeyEvent *event)

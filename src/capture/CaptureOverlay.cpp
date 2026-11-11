@@ -2981,7 +2981,7 @@ void CaptureOverlay::mousePressEvent(QMouseEvent *event)
             }
         }
 
-        if (m_selectionComplete && !m_selectionLocked) {
+        if (m_selectionComplete) {
             QRect selRect = normalizedSelectionRect();
 
             ResizeMode mode = getResizeMode(event->pos());
@@ -3036,6 +3036,8 @@ void CaptureOverlay::mousePressEvent(QMouseEvent *event)
             
             if (selRect.contains(event->pos())) {
                 // Click in selection area — move current selection
+            } else if (m_selectionLocked) {
+                // Locked: a click outside keeps the selection; a double-click starts over.
             } else {
                 m_selectionComplete = false;
                 m_isSelecting = true;
@@ -3049,32 +3051,6 @@ void CaptureOverlay::mousePressEvent(QMouseEvent *event)
                 hideToolbar();
                 if (m_annotationEngine) m_annotationEngine->clear();
                 update();
-            }
-        } else if (m_selectionComplete && m_selectionLocked) {
-            // Selection locked — allow annotation drawing only
-            QRect selRect = normalizedSelectionRect();
-            bool isDrawingTool = (m_annotationEngine && m_annotationEngine->currentTool() != AnnotationEngine::None);
-            if (!isDrawingTool && m_annotationEngine && selRect.contains(event->pos())) {
-                const int idx = m_annotationEngine->findAnnotationAt(event->pos());
-                if (idx >= 0) {
-                    startAnnotationMove(idx, event->pos());
-                    return;
-                }
-            }
-            if (isDrawingTool && selRect.contains(event->pos())) {
-                QPoint rel = event->pos();
-                if (m_annotationEngine->currentTool() == AnnotationEngine::Eraser) {
-                    if (m_annotationEngine->eraseAnnotationAt(rel)) {
-                        update();
-                        updateUndoRedoState();
-                    }
-                } else {
-                    if (handleAnnotationPress(rel, event->modifiers()))
-                        return;
-                    m_annotationEngine->setSelectedIndex(-1);
-                    m_annotationEngine->beginDraw(rel);
-                    update();
-                }
             }
         } else {
             if (!m_hoveredWindowRect.isEmpty()) {
@@ -3192,6 +3168,13 @@ bool CaptureOverlay::handleAnnotationPress(const QPoint &pos, Qt::KeyboardModifi
     return true;
 }
 
+bool CaptureOverlay::isOverlayUiAt(const QPoint &pos) const
+{
+    return (m_toolbar && m_toolbar->isVisible() && m_toolbar->geometry().contains(pos))
+        || (m_actionPanel && m_actionPanel->isVisible() && m_actionPanel->geometry().contains(pos))
+        || isToolSettingsUiAt(pos);
+}
+
 void CaptureOverlay::mouseDoubleClickEvent(QMouseEvent *event)
 {
     if (event->button() != Qt::LeftButton || m_eyedropperActive)
@@ -3211,18 +3194,18 @@ void CaptureOverlay::mouseDoubleClickEvent(QMouseEvent *event)
             m_ignoreNextMouseRelease = true;
             return;
         }
-        if (m_selectionLocked)
+        if (m_selectionLocked) {
+            const ResizeMode mode = getResizeMode(event->pos());
+            if ((mode == ResNone || mode == ResNewSelection) && !isOverlayUiAt(event->pos())) {
+                resetSelection();
+                m_ignoreNextMouseRelease = true;
+            }
             return;
+        }
         mousePressEvent(event);
         return;
     }
-    if (!manualSelectionAllowed())
-        return;
-    if (m_toolbar && m_toolbar->isVisible() && m_toolbar->geometry().contains(event->pos()))
-        return;
-    if (m_actionPanel && m_actionPanel->isVisible() && m_actionPanel->geometry().contains(event->pos()))
-        return;
-    if (isToolSettingsUiAt(event->pos()))
+    if (!manualSelectionAllowed() || isOverlayUiAt(event->pos()))
         return;
 
     selectMonitorAt(event->pos());
