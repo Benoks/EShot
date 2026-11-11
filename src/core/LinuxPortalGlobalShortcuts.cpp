@@ -366,6 +366,7 @@ QString LinuxPortalGlobalShortcuts::descriptionForInt(int id) const
     case 7: return QStringLiteral("Video capture");
     case 8: return QStringLiteral("Capture window");
     case 9: return QStringLiteral("Capture screen now");
+    case 10: return QStringLiteral("Capture last region");
     default: return QStringLiteral("EShot shortcut");
     }
 }

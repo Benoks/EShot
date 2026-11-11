@@ -59,6 +59,10 @@ Start a capture from the tray icon, `Print Screen`, a custom global shortcut, a 
 
 Double-clicking a screen during selection captures that complete monitor. The overlay adapts to tight spaces and scaled multi-monitor layouts.
 
+**Capture Last Region** (tray menu or its own hotkey) opens the overlay with the region you last copied or saved already selected: press `Enter` to copy it again, or draw and adjust first. Useful for documenting a process step by step.
+
+A left click on the tray icon opens the menu by default; **Settings → Capture → Tray icon click** can make it start a capture instead. A right click always opens the menu.
+
 **Capture Window** (tray menu or its own hotkey) highlights the window under the mouse; click to select it, then annotate and save as usual. It is available on Windows and on KDE Plasma (Wayland and X11). On KDE, EShot asks KWin for the window list with a short KWin script while the screenshot is taken; dragging still selects a free region, and if KWin does not answer within a second the capture continues with free selection only. Other Linux desktops do not offer window capture.
 
 ## Install
@@ -203,7 +207,7 @@ Most shortcuts can be changed in Settings. Press `?` (or `F1`) during a capture 
 | `Print Screen` | Start region capture |
 | `Shift+Print Screen` | Capture a window (Windows; on KDE Plasma, set a key in Settings) |
 
-Instant capture, GIF and video recording, and the recording controls (pause, stop, cancel) have their own global shortcuts in **Settings → Hotkey**.
+Instant capture, capture screen now, capture last region, GIF and video recording, and the recording controls (pause, stop, cancel) have their own global shortcuts in **Settings → Hotkey**.
 
 ### Selection
 

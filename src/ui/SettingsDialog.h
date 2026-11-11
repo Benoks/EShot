@@ -158,6 +158,7 @@ private:
     QSlider *m_opacitySlider = nullptr;
     QLabel *m_opacityValueLabel = nullptr;
     QComboBox *m_crosshairStyleCombo = nullptr;
+    QComboBox *m_trayClickCombo = nullptr;
     QCheckBox *m_captureHintsCheck = nullptr;
 
     // Accessibility
@@ -183,6 +184,7 @@ private:
     QKeySequenceEdit *m_videoCaptureHotkeyEdit = nullptr;
     QKeySequenceEdit *m_windowCaptureHotkeyEdit = nullptr;
     QKeySequenceEdit *m_screenCaptureHotkeyEdit = nullptr;
+    QKeySequenceEdit *m_lastRegionHotkeyEdit = nullptr;
     QMap<QString, QKeySequenceEdit*> m_overlayHotkeyEdits;
     // Global hotkeys cross-checked for duplicates (HotkeyManager ids).
     struct GlobalHotkeyField {

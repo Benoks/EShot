@@ -1883,6 +1883,17 @@ void CaptureOverlay::startCapture()
     startCaptureInternal(CaptureSelectionMode::FreeRegion, false);
 }
 
+void CaptureOverlay::startLastRegionCapture()
+{
+    startCaptureInternal(CaptureSelectionMode::FreeRegion, false, lastCaptureRegion());
+}
+
+QRect CaptureOverlay::lastCaptureRegion()
+{
+    return QSettings(QStringLiteral("EShot"), QStringLiteral("EShot"))
+        .value(QStringLiteral("lastCaptureRegion")).toRect();
+}
+
 void CaptureOverlay::startWindowCapture()
 {
     startCaptureInternal(CaptureSelectionMode::Window, false);
@@ -2016,12 +2027,14 @@ QPixmap CaptureOverlay::grabScreenUnderCursor()
     return result;
 }
 
-void CaptureOverlay::startCaptureInternal(CaptureSelectionMode selectionMode, bool recordingMode)
+void CaptureOverlay::startCaptureInternal(CaptureSelectionMode selectionMode, bool recordingMode,
+                                          const QRect &preselectGlobal)
 {
     if (m_captureInFlight) {
         qInfo() << "[CaptureOverlay] capture request ignored: a screenshot is already being taken";
         return;
     }
+    m_preselectGlobal = preselectGlobal;
     releaseCaptureBuffers();
     ++m_captureGeneration;
     m_showHighlighterStraightHint = false;
@@ -2204,6 +2217,13 @@ void CaptureOverlay::performCapture()
         raise();
     }
     beginCaptureActivation();
+    // "Capture last region": select it again if it still fits on the screens.
+    const QRect preselect = m_preselectGlobal.translated(-m_virtualDesktopRect.topLeft());
+    m_preselectGlobal = QRect();
+    if (preselect.isValid() && rect().contains(preselect)
+        && !monitorRectAt(preselect.center()).isEmpty()) {
+        completeSelection(preselect);
+    }
 }
 
 void CaptureOverlay::presentCapture()
@@ -3916,6 +3936,8 @@ QPixmap CaptureOverlay::getSelectedPixmap(qreal *outputScaleOut)
     if (selRect.isEmpty()) return QPixmap();
     // Crop at full physical resolution (selRect is logical).
     const QRect globalSelection = selRect.translated(m_virtualDesktopRect.topLeft());
+    QSettings(QStringLiteral("EShot"), QStringLiteral("EShot"))
+        .setValue(QStringLiteral("lastCaptureRegion"), globalSelection);
     const qreal outputScale = m_screenImages.isEmpty()
         ? m_dpr : captureSelectionScale(m_screenImages, globalSelection);
     QPixmap result = m_screenImages.isEmpty()

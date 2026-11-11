@@ -960,6 +960,11 @@ QWidget* SettingsDialog::createCaptureTab()
     m_autoLockSelectionCheck = new QCheckBox(TranslationManager::tr("autoLockSelection"));
     m_autoLockSelectionCheck->setToolTip(TranslationManager::tr("autoLockSelectionTip"));
     capLayout->addRow(m_autoLockSelectionCheck);
+    m_trayClickCombo = new QComboBox();
+    m_trayClickCombo->addItem(TranslationManager::tr("trayClickMenu"), "menu");
+    m_trayClickCombo->addItem(TranslationManager::tr("trayClickCapture"), "capture");
+    m_trayClickCombo->setToolTip(TranslationManager::tr("trayClickTip"));
+    capLayout->addRow(TranslationManager::tr("trayClickLabel"), m_trayClickCombo);
     layout->addWidget(capGroup);
 
     layout->addStretch();
@@ -1635,6 +1640,8 @@ QWidget* SettingsDialog::createHotkeyTab()
     m_videoCaptureHotkeyEdit = makeRecordingHotkeyEdit();
     m_screenCaptureHotkeyEdit = makeRecordingHotkeyEdit();
     m_screenCaptureHotkeyEdit->setToolTip(TranslationManager::tr("tipScreenNowHotkey"));
+    m_lastRegionHotkeyEdit = makeRecordingHotkeyEdit();
+    m_lastRegionHotkeyEdit->setToolTip(TranslationManager::tr("tipLastRegionHotkey"));
     if (windowCaptureSupported())
         m_windowCaptureHotkeyEdit = makeRecordingHotkeyEdit();
     m_instantCaptureHotkeyEdit->setToolTip(TranslationManager::tr("tipInstantCaptureHotkey"));
@@ -1653,6 +1660,8 @@ QWidget* SettingsDialog::createHotkeyTab()
     }
     addActionHotkeyRow(HotkeyManager::HOTKEY_SCREEN_CAPTURE, TranslationManager::tr("hotkeyScreenNowLabel"),
                        labelName(TranslationManager::tr("hotkeyScreenNowLabel")), m_screenCaptureHotkeyEdit);
+    addActionHotkeyRow(HotkeyManager::HOTKEY_LAST_REGION_CAPTURE, TranslationManager::tr("hotkeyLastRegionLabel"),
+                       labelName(TranslationManager::tr("hotkeyLastRegionLabel")), m_lastRegionHotkeyEdit);
     addActionHotkeyRow(HotkeyManager::HOTKEY_INSTANT_CAPTURE, TranslationManager::tr("hotkeyInstantRegionLabel"),
                        labelName(TranslationManager::tr("hotkeyInstantRegionLabel")), m_instantCaptureHotkeyEdit);
     addActionHotkeyRow(HotkeyManager::HOTKEY_GIF_CAPTURE, QStringLiteral("GIF:"),
@@ -2396,6 +2405,8 @@ void SettingsDialog::loadSettings()
     m_darkModeCheck->setChecked(m_settings->value("darkMode", true).toBool());
     int opacity = m_settings->value("overlayOpacity", 100).toInt();
     m_opacitySlider->setValue(opacity);
+    const int trayClick = m_trayClickCombo->findData(m_settings->value("trayClickAction", "menu").toString());
+    m_trayClickCombo->setCurrentIndex(qMax(0, trayClick));
     QString cross = m_settings->value("crosshairStyle", "dash").toString();
     int ci = m_crosshairStyleCombo->findData(cross);
     if (ci >= 0) m_crosshairStyleCombo->setCurrentIndex(ci);
@@ -2469,6 +2480,10 @@ void SettingsDialog::loadSettings()
         m_screenCaptureHotkeyEdit->setKeySequence(win32ToKeySequence(
             static_cast<UINT>(m_settings->value("screenCaptureHotkeyModifiers", 0).toUInt()),
             static_cast<UINT>(m_settings->value("screenCaptureHotkeyVKey", 0).toUInt())));
+    if (m_lastRegionHotkeyEdit)
+        m_lastRegionHotkeyEdit->setKeySequence(win32ToKeySequence(
+            static_cast<UINT>(m_settings->value("lastRegionHotkeyModifiers", 0).toUInt()),
+            static_cast<UINT>(m_settings->value("lastRegionHotkeyVKey", 0).toUInt())));
     if (m_windowCaptureHotkeyEdit)
         m_windowCaptureHotkeyEdit->setKeySequence(win32ToKeySequence(
             static_cast<UINT>(m_settings->value("windowCaptureHotkeyModifiers", defaultWindowCaptureModifiers()).toUInt()),
@@ -2740,7 +2755,9 @@ void SettingsDialog::onSave()
     UINT videoMod = 0, videoVKey = 0;
     UINT windowMod = 0, windowVKey = 0;
     UINT screenMod = 0, screenVKey = 0;
+    UINT lastRegionMod = 0, lastRegionVKey = 0;
     if (!optionalHotkey(m_screenCaptureHotkeyEdit, screenMod, screenVKey) ||
+        !optionalHotkey(m_lastRegionHotkeyEdit, lastRegionMod, lastRegionVKey) ||
         !optionalHotkey(m_instantCaptureHotkeyEdit, instantMod, instantVKey) ||
         !optionalHotkey(m_gifCaptureHotkeyEdit, gifMod, gifVKey) ||
         !optionalHotkey(m_videoCaptureHotkeyEdit, videoMod, videoVKey) ||
@@ -2772,6 +2789,10 @@ void SettingsDialog::onSave()
         {screenMod, screenVKey},
         {static_cast<quint32>(m_settings->value("screenCaptureHotkeyModifiers", 0).toUInt()),
          static_cast<quint32>(m_settings->value("screenCaptureHotkeyVKey", 0).toUInt())});
+    const bool lastRegionHotkeyChanged = settingsHotkeyChanged(
+        {lastRegionMod, lastRegionVKey},
+        {static_cast<quint32>(m_settings->value("lastRegionHotkeyModifiers", 0).toUInt()),
+         static_cast<quint32>(m_settings->value("lastRegionHotkeyVKey", 0).toUInt())});
     // Apply startup changes before persisting anything: if they fail, no
     // partial settings are written (onSave partial success guard).
     const bool wantAutoStart = m_autoStartCheck->isChecked();
@@ -2887,12 +2908,25 @@ void SettingsDialog::onSave()
         return;
     }
 
+    // Optional keys: if either is rejected, put both back to their stored values.
+    QString rejectedOptionalHotkey;
     if (screenHotkeyChanged
-        && !HotkeyManager::instance().reRegisterScreenCaptureHotkey(screenMod, screenVKey)) {
+        && !HotkeyManager::instance().reRegisterOptionalHotkey(HotkeyManager::HOTKEY_SCREEN_CAPTURE, screenMod, screenVKey)) {
+        rejectedOptionalHotkey = HotkeyManager::shortcutText(screenMod, screenVKey);
+    } else if (lastRegionHotkeyChanged
+        && !HotkeyManager::instance().reRegisterOptionalHotkey(HotkeyManager::HOTKEY_LAST_REGION_CAPTURE, lastRegionMod, lastRegionVKey)) {
+        rejectedOptionalHotkey = HotkeyManager::shortcutText(lastRegionMod, lastRegionVKey);
+        if (screenHotkeyChanged) {
+            HotkeyManager::instance().reRegisterOptionalHotkey(HotkeyManager::HOTKEY_SCREEN_CAPTURE,
+                static_cast<UINT>(m_settings->value("screenCaptureHotkeyModifiers", 0).toUInt()),
+                static_cast<UINT>(m_settings->value("screenCaptureHotkeyVKey", 0).toUInt()));
+        }
+    }
+    if (!rejectedOptionalHotkey.isEmpty()) {
         QMessageBox::warning(
             this,
             TranslationManager::errInvalidHotkeyTitle(),
-            HotkeyManager::shortcutText(screenMod, screenVKey) + QStringLiteral("\n\n")
+            rejectedOptionalHotkey + QStringLiteral("\n\n")
                 + TranslationManager::directCaptureHotkeyMayBeInUse());
         rollBackCapture();
         if (recordingHotkeysChanged) {
@@ -2970,6 +3004,7 @@ void SettingsDialog::onSave()
     m_settings->setValue("darkMode",           m_darkModeCheck->isChecked());
     m_settings->setValue("overlayOpacity",     m_opacitySlider->value());
     m_settings->setValue("crosshairStyle",     m_crosshairStyleCombo->currentData().toString());
+    m_settings->setValue("trayClickAction", m_trayClickCombo->currentData().toString());
     if (m_captureHintsCheck)
         m_settings->setValue("showCaptureHints", m_captureHintsCheck->isChecked());
     m_settings->setValue("highContrast",       m_highContrastCheck->isChecked());
@@ -3017,6 +3052,8 @@ void SettingsDialog::onSave()
     m_settings->setValue("windowCaptureHotkeyVKey",      windowVKey);
     m_settings->setValue("screenCaptureHotkeyModifiers", screenMod);
     m_settings->setValue("screenCaptureHotkeyVKey",      screenVKey);
+    m_settings->setValue("lastRegionHotkeyModifiers", lastRegionMod);
+    m_settings->setValue("lastRegionHotkeyVKey",      lastRegionVKey);
     for (auto it = m_overlayHotkeyEdits.constBegin(); it != m_overlayHotkeyEdits.constEnd(); ++it) {
         if (it.value())
             m_settings->setValue(QStringLiteral("overlayShortcut/%1").arg(it.key()),
@@ -3109,6 +3146,8 @@ void SettingsDialog::onReset()
         HotkeyManager::instance().reRegisterActionHotkeys(
             0, 0, 0, 0, 0, 0,
             defaultWindowCaptureModifiers(), defaultWindowCaptureVirtualKey());
+        HotkeyManager::instance().reRegisterOptionalHotkey(HotkeyManager::HOTKEY_SCREEN_CAPTURE, 0, 0);
+        HotkeyManager::instance().reRegisterOptionalHotkey(HotkeyManager::HOTKEY_LAST_REGION_CAPTURE, 0, 0);
         TranslationManager::init();
         loadSettings();
     }
@@ -3151,6 +3190,7 @@ void SettingsDialog::onExportSettings()
     obj["darkMode"] = m_darkModeCheck->isChecked();
     obj["overlayOpacity"] = m_opacitySlider->value();
     obj["crosshairStyle"] = m_crosshairStyleCombo->currentData().toString();
+    obj["trayClickAction"] = m_trayClickCombo->currentData().toString();
     obj["showCaptureHints"] = m_captureHintsCheck ? m_captureHintsCheck->isChecked() : true;
     obj["highContrast"] = m_highContrastCheck->isChecked();
     obj["blackTrayIcon"] = m_blackTrayIconCheck ? m_blackTrayIconCheck->isChecked() : false;
@@ -3192,6 +3232,7 @@ void SettingsDialog::onExportSettings()
     appendHotkey("videoCaptureHotkeyModifiers", "videoCaptureHotkeyVKey", m_videoCaptureHotkeyEdit);
     appendHotkey("windowCaptureHotkeyModifiers", "windowCaptureHotkeyVKey", m_windowCaptureHotkeyEdit);
     appendHotkey("screenCaptureHotkeyModifiers", "screenCaptureHotkeyVKey", m_screenCaptureHotkeyEdit);
+    appendHotkey("lastRegionHotkeyModifiers", "lastRegionHotkeyVKey", m_lastRegionHotkeyEdit);
     obj["uploadProvider"] = m_importedUploadProvider.isValid()
         ? m_importedUploadProvider.toInt()
         : m_settings->value("uploadProvider", 0).toInt();
@@ -3319,6 +3360,10 @@ void SettingsDialog::onImportSettings()
         m_autoLockSelectionCheck->setChecked(obj["autoLockSelection"].toBool());
     if (obj.contains("darkMode")) m_darkModeCheck->setChecked(obj["darkMode"].toBool());
     if (obj.contains("overlayOpacity")) m_opacitySlider->setValue(obj["overlayOpacity"].toInt());
+    if (obj.contains("trayClickAction")) {
+        const int ti = m_trayClickCombo->findData(obj["trayClickAction"].toString());
+        if (ti >= 0) m_trayClickCombo->setCurrentIndex(ti);
+    }
     if (obj.contains("crosshairStyle")) {
         int ci = m_crosshairStyleCombo->findData(obj["crosshairStyle"].toString());
         if (ci >= 0) m_crosshairStyleCombo->setCurrentIndex(ci);
@@ -3371,6 +3416,7 @@ void SettingsDialog::onImportSettings()
     importHotkey("videoCaptureHotkeyModifiers", "videoCaptureHotkeyVKey", m_videoCaptureHotkeyEdit);
     importHotkey("windowCaptureHotkeyModifiers", "windowCaptureHotkeyVKey", m_windowCaptureHotkeyEdit);
     importHotkey("screenCaptureHotkeyModifiers", "screenCaptureHotkeyVKey", m_screenCaptureHotkeyEdit);
+    importHotkey("lastRegionHotkeyModifiers", "lastRegionHotkeyVKey", m_lastRegionHotkeyEdit);
     if (obj.contains("uploadProvider"))
         m_importedUploadProvider = obj["uploadProvider"].toInt();
     if (obj.contains("visualSearchProvider") && m_visualSearchProviderCombo) {

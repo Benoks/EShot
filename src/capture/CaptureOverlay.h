@@ -66,6 +66,9 @@ public:
     ~CaptureOverlay();
     void startCapture();
     void startWindowCapture();
+    // Opens the overlay with the last copied/saved region already selected.
+    void startLastRegionCapture();
+    static QRect lastCaptureRegion();
     void startInstantCapture();
     void startCaptureForRecording();
     void refreshUI();
@@ -111,7 +114,8 @@ private:
     bool captureNativeScreenImages(const QRect &logicalRect, const QRect &physicalRect);
     void presentCapture();
     QPoint capturePositionFromGlobal(const QPoint &point) const;
-    void startCaptureInternal(CaptureSelectionMode selectionMode, bool recordingMode);
+    void startCaptureInternal(CaptureSelectionMode selectionMode, bool recordingMode,
+                              const QRect &preselectGlobal = QRect());
     void showToolbar();
     void hideToolbar();
     void finishCapture();
@@ -184,6 +188,7 @@ private:
     QPoint m_windowSnapPressPosition;
     bool m_windowSnapClickPending = false;
     CaptureSelectionMode m_selectionMode = CaptureSelectionMode::FreeRegion;
+    QRect m_preselectGlobal; // region to select once the overlay is shown
 #if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
     KWinWindowListClient *m_kwinWindowList = nullptr;
     KWinWindowSnapshot m_kdeWindowSnapshot;

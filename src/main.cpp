@@ -373,6 +373,19 @@ public slots:
         m_overlay->captureScreenNow();
     }
 
+    void onLastRegionCaptureRequested()
+    {
+        if (captureBlockedByDialog())
+            return;
+        if (closeBlockingDialogs()) {
+            QTimer::singleShot(80, this, &EShotApp::onLastRegionCaptureRequested);
+            return;
+        }
+        if (cancelOpenCapture()) return;
+        ensureOverlay();
+        m_overlay->startLastRegionCapture();
+    }
+
     void onWindowCaptureRequested()
     {
         if (!windowCaptureSupported())
@@ -520,7 +533,12 @@ public slots:
 
     void onTrayActivated(QSystemTrayIcon::ActivationReason reason)
     {
-        if (reason == QSystemTrayIcon::DoubleClick) {
+        const bool clickCaptures = QSettings(QStringLiteral("EShot"), QStringLiteral("EShot"))
+            .value(QStringLiteral("trayClickAction"), QStringLiteral("menu")).toString()
+            == QLatin1String("capture");
+        if (reason == QSystemTrayIcon::Trigger && clickCaptures) {
+            onCaptureRequested();
+        } else if (reason == QSystemTrayIcon::DoubleClick && !clickCaptures) {
             onCaptureRequested();
         } else if (reason == QSystemTrayIcon::Trigger && m_trayMenu) {
             rebuildTrayMenu();
@@ -1739,6 +1757,16 @@ private:
                 QTimer::singleShot(250, this, &EShotApp::onWindowCaptureRequested);
             });
         }
+        const QString lastRegionHotkey = m_hotkeysInitialized
+            ? HotkeyManager::instance().activeShortcutText(HotkeyManager::HOTKEY_LAST_REGION_CAPTURE)
+            : QString();
+        QAction *lastRegionAction = m_trayMenu->addAction(
+            trayIcon(":/icons/redo.svg"),
+            withShortcutColumn(TranslationManager::tr("trayCaptureLastRegion"), lastRegionHotkey));
+        lastRegionAction->setToolTip(TranslationManager::tr("tipLastRegionHotkey"));
+        connect(lastRegionAction, &QAction::triggered, this, [this]() {
+            QTimer::singleShot(250, this, &EShotApp::onLastRegionCaptureRequested);
+        });
         const QString screenNowHotkey = m_hotkeysInitialized
             ? HotkeyManager::instance().activeShortcutText(HotkeyManager::HOTKEY_SCREEN_CAPTURE)
             : QString();
@@ -1951,6 +1979,8 @@ private:
                 this, &EShotApp::onWindowCaptureRequested);
         connect(&HotkeyManager::instance(), &HotkeyManager::screenCaptureRequested,
                 this, &EShotApp::onScreenCaptureRequested);
+        connect(&HotkeyManager::instance(), &HotkeyManager::lastRegionCaptureRequested,
+                this, &EShotApp::onLastRegionCaptureRequested);
         connect(&HotkeyManager::instance(), &HotkeyManager::recordingPauseRequested,
                 this, &EShotApp::toggleActiveRecordingPause);
         connect(&HotkeyManager::instance(), &HotkeyManager::recordingStopRequested, this, [this]() {

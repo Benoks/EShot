@@ -33,8 +33,9 @@ public:
                                  UINT gifModifiers, UINT gifVirtualKey,
                                  UINT videoModifiers, UINT videoVirtualKey,
                                  UINT windowModifiers, UINT windowVirtualKey);
-    // "Capture screen now" (HOTKEY_SCREEN_CAPTURE); virtualKey 0 disables it.
-    bool reRegisterScreenCaptureHotkey(UINT modifiers, UINT virtualKey);
+    // Optional keys without a default: "Capture screen now" (HOTKEY_SCREEN_CAPTURE)
+    // and "Capture last region" (HOTKEY_LAST_REGION_CAPTURE); virtualKey 0 disables it.
+    bool reRegisterOptionalHotkey(int id, UINT modifiers, UINT virtualKey);
     bool requestLinuxPortalShortcutRebind();
     bool linuxPortalShortcutsAvailable() const;
     UINT captureModifiers() const { return m_captureModifiers; }
@@ -71,6 +72,7 @@ signals:
     void videoCaptureRequested();
     void windowCaptureRequested();
     void screenCaptureRequested();
+    void lastRegionCaptureRequested();
     // Emitted when configured hotkeys stop being or could not become active
     // outside a reRegister*() request; see failedHotkeys().
     void hotkeyRegistrationFailed(const QList<int> &ids);
@@ -103,6 +105,8 @@ private:
     UINT m_windowCaptureVirtualKey = 0;
     UINT m_screenCaptureModifiers = 0;
     UINT m_screenCaptureVirtualKey = 0;
+    UINT m_lastRegionModifiers = 0;
+    UINT m_lastRegionVirtualKey = 0;
     void *m_x11Display = nullptr;
     unsigned long m_x11RootWindow = 0;
     LinuxPortalGlobalShortcuts *m_portalShortcuts = nullptr;
@@ -131,6 +135,7 @@ public:
     static constexpr int HOTKEY_VIDEO_CAPTURE = 7;
     static constexpr int HOTKEY_WINDOW_CAPTURE = 8;
     static constexpr int HOTKEY_SCREEN_CAPTURE = 9;
+    static constexpr int HOTKEY_LAST_REGION_CAPTURE = 10;
 };
 
 #endif

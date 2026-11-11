@@ -229,6 +229,10 @@ void drawShortcutSheet(QPainter &painter, const QRect &monitorRect, bool windowS
         HotkeyManager::HOTKEY_SCREEN_CAPTURE);
     if (!screenNowKey.isEmpty())
         more.rows.append({{screenNowKey}, TM::tr("sheetCaptureScreenNow")});
+    const QString lastRegionKey = HotkeyManager::instance().activeShortcutText(
+        HotkeyManager::HOTKEY_LAST_REGION_CAPTURE);
+    if (!lastRegionKey.isEmpty())
+        more.rows.append({{lastRegionKey}, TM::tr("trayCaptureLastRegion")});
 
     Section tools{TM::tr("sheetSectionTools"), {}};
     addShortcut(tools.rows, "toolPen", "P", plainName(TM::toolPen()));

@@ -27,6 +27,7 @@ QString actionName(int id)
     case 7: return QStringLiteral("eshot_video_capture");
     case 8: return QStringLiteral("eshot_window_capture");
     case 9: return QStringLiteral("eshot_screen_capture");
+    case 10: return QStringLiteral("eshot_last_region_capture");
     default: return QStringLiteral("eshot_%1").arg(id);
     }
 }
@@ -43,6 +44,7 @@ QString actionDescription(int id)
     case 7: return QStringLiteral("Video capture");
     case 8: return QStringLiteral("Capture window");
     case 9: return QStringLiteral("Capture screen now");
+    case 10: return QStringLiteral("Capture last region");
     default: return QStringLiteral("EShot shortcut");
     }
 }

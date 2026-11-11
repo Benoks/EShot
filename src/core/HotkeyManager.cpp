@@ -291,6 +291,10 @@ HotkeyManager::HotkeyManager(QObject *parent) : QObject(parent)
     m_screenCaptureVirtualKey = static_cast<UINT>(s.value("screenCaptureHotkeyVKey", 0).toUInt());
     if (!registerHotkey(HOTKEY_SCREEN_CAPTURE, m_screenCaptureModifiers, m_screenCaptureVirtualKey))
         recordFailure(HOTKEY_SCREEN_CAPTURE, m_screenCaptureModifiers, m_screenCaptureVirtualKey);
+    m_lastRegionModifiers = static_cast<UINT>(s.value("lastRegionHotkeyModifiers", 0).toUInt());
+    m_lastRegionVirtualKey = static_cast<UINT>(s.value("lastRegionHotkeyVKey", 0).toUInt());
+    if (!registerHotkey(HOTKEY_LAST_REGION_CAPTURE, m_lastRegionModifiers, m_lastRegionVirtualKey))
+        recordFailure(HOTKEY_LAST_REGION_CAPTURE, m_lastRegionModifiers, m_lastRegionVirtualKey);
 }
 
 QList<HotkeyBinding> HotkeyManager::recordingHotkeyBindings() const
@@ -720,22 +724,24 @@ bool HotkeyManager::reRegisterCaptureHotkey(UINT modifiers, UINT virtualKey)
     return false;
 }
 
-bool HotkeyManager::reRegisterScreenCaptureHotkey(UINT modifiers, UINT virtualKey)
+bool HotkeyManager::reRegisterOptionalHotkey(int id, UINT modifiers, UINT virtualKey)
 {
-    if (modifiers == m_screenCaptureModifiers && virtualKey == m_screenCaptureVirtualKey
-        && !m_failedHotkeys.contains(HOTKEY_SCREEN_CAPTURE)) {
+    UINT &currentModifiers = id == HOTKEY_LAST_REGION_CAPTURE ? m_lastRegionModifiers : m_screenCaptureModifiers;
+    UINT &currentVirtualKey = id == HOTKEY_LAST_REGION_CAPTURE ? m_lastRegionVirtualKey : m_screenCaptureVirtualKey;
+    if (modifiers == currentModifiers && virtualKey == currentVirtualKey
+        && !m_failedHotkeys.contains(id)) {
         return true;
     }
-    const UINT oldModifiers = m_screenCaptureModifiers;
-    const UINT oldVirtualKey = m_screenCaptureVirtualKey;
-    unregisterHotkey(HOTKEY_SCREEN_CAPTURE);
-    if (registerHotkey(HOTKEY_SCREEN_CAPTURE, modifiers, virtualKey)) {
-        m_screenCaptureModifiers = modifiers;
-        m_screenCaptureVirtualKey = virtualKey;
+    const UINT oldModifiers = currentModifiers;
+    const UINT oldVirtualKey = currentVirtualKey;
+    unregisterHotkey(id);
+    if (registerHotkey(id, modifiers, virtualKey)) {
+        currentModifiers = modifiers;
+        currentVirtualKey = virtualKey;
         return true;
     }
-    if (!registerHotkey(HOTKEY_SCREEN_CAPTURE, oldModifiers, oldVirtualKey))
-        recordFailure(HOTKEY_SCREEN_CAPTURE, oldModifiers, oldVirtualKey);
+    if (!registerHotkey(id, oldModifiers, oldVirtualKey))
+        recordFailure(id, oldModifiers, oldVirtualKey);
     return false;
 }
 
@@ -875,6 +881,7 @@ void HotkeyManager::emitHotkey(int id)
     else if (id == HOTKEY_VIDEO_CAPTURE) emit videoCaptureRequested();
     else if (id == HOTKEY_WINDOW_CAPTURE) emit windowCaptureRequested();
     else if (id == HOTKEY_SCREEN_CAPTURE) emit screenCaptureRequested();
+    else if (id == HOTKEY_LAST_REGION_CAPTURE) emit lastRegionCaptureRequested();
 }
 
 void HotkeyManager::refreshPortalShortcuts()
