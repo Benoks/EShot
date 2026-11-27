@@ -3154,6 +3154,8 @@ void SettingsDialog::onReset()
         HotkeyManager::instance().reRegisterOptionalHotkey(HotkeyManager::HOTKEY_LAST_REGION_CAPTURE, 0, 0);
         TranslationManager::init();
         loadSettings();
+        // loadSettings() sets the theme boxes with their signals blocked.
+        onThemeChanged();
     }
 }
 
@@ -3214,19 +3216,17 @@ void SettingsDialog::onExportSettings()
     obj["visibleTools"] = tools;
     obj["visibleToolbarControls"] = toolbarControls;
 
-    QKeySequence seq = m_hotkeyEdit->keySequence();
-    UINT mod = 0, vk = 0;
-    if (!seq.isEmpty() && keySequenceToWin32(seq, mod, vk)) {
-        obj["hotkeyModifiers"] = static_cast<int>(mod);
-        obj["hotkeyVKey"] = static_cast<int>(vk);
-    }
-    auto appendHotkey = [this, &obj](const char *modKey, const char *vkeyKey, QKeySequenceEdit *edit) {
+    auto appendHotkey = [&obj](const char *modKey, const char *vkeyKey, QKeySequenceEdit *edit) {
         UINT mod = 0, vk = 0;
-        if (edit && keySequenceToWin32(edit->keySequence(), mod, vk)) {
+        // An empty field goes out as 0/0, so importing it clears that hotkey
+        // instead of keeping the current one (e.g. a default Shift+PrtSc).
+        if (edit && (edit->keySequence().isEmpty()
+                     || keySequenceToWin32(edit->keySequence(), mod, vk))) {
             obj[modKey] = static_cast<int>(mod);
             obj[vkeyKey] = static_cast<int>(vk);
         }
     };
+    appendHotkey("hotkeyModifiers", "hotkeyVKey", m_hotkeyEdit);
     appendHotkey("recordingPauseHotkeyModifiers", "recordingPauseHotkeyVKey", m_recordingPauseHotkeyEdit);
     appendHotkey("recordingStopHotkeyModifiers", "recordingStopHotkeyVKey", m_recordingStopHotkeyEdit);
     appendHotkey("recordingCancelHotkeyModifiers", "recordingCancelHotkeyVKey", m_recordingCancelHotkeyEdit);
