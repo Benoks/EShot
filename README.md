@@ -76,7 +76,7 @@ Download the latest build from [GitHub Releases](https://github.com/Benoks/EShot
 2. Run the installer and choose the optional FFmpeg/OCR components you need.
 3. Launch EShot from the Start menu or system tray.
 
-The installer defaults to the current user and does not require administrator permission. An all-users install is optional and may require an administrator account; each account can enable auto-start from EShot Settings. Existing all-users installations stay in that mode when updated; uninstall the old installation first if you want to switch to a per-user install. For all-users installs, uninstall can remove per-user auto-start entries only from profiles loaded at that time. Windows may restrict capture or keyboard focus over applications running as administrator and the UAC secure desktop. To capture them, turn on **Start as administrator** in Settings: after one administrator prompt, EShot starts elevated without further prompts.
+The installer defaults to the current user and does not require administrator permission. Auto-start is on by default so `Print Screen` keeps working after a restart; the first-run wizard shows the same choice and can turn it off. An all-users install is optional and may require an administrator account; each account turns auto-start on in the first-run wizard or EShot Settings. Existing all-users installations stay in that mode when updated; uninstall the old installation first if you want to switch to a per-user install. For all-users installs, uninstall can remove per-user auto-start entries only from profiles loaded at that time. Windows may restrict capture or keyboard focus over applications running as administrator and the UAC secure desktop. To capture them, turn on **Start as administrator** in Settings: after one administrator prompt, EShot starts elevated without further prompts.
 
 Portable x64 and ARM64 ZIP archives are also attached to each release.
 
@@ -101,7 +101,7 @@ Do not open the AppImage with Gear Lever, AppImageLauncher or another AppImage m
 
    KDE Plasma commonly offers a graphical launch flow after the file is executable. Stock GNOME Files does not register AppImages as applications, so double-clicking can show an "open with" prompt instead of starting EShot. Running the two commands above is the reliable first-launch method on GNOME. Avoid AppImage managers such as AppImageLauncher or Gear Lever for EShot; they move the file and skip EShot's own setup and updates.
 
-4. Complete the graphical first-run wizard. It can install FFmpeg/GStreamer, PipeWire portal components, Tesseract, selected OCR languages, and optional application-menu integration through the system package manager.
+4. Complete the graphical first-run wizard. It can install FFmpeg/GStreamer, PipeWire portal components, Tesseract, selected OCR languages, and optional application-menu integration through the system package manager. It also starts EShot at login (on by default) and lets you pick Lightshot-style or locked selection.
 5. Use **Use Print Screen for EShot** to assign `Print Screen`. KDE keeps Spectacle's other shortcuts. GNOME uses the Global Shortcuts portal when available and an EShot-only custom shortcut on older GNOME releases.
 
 #### AppImage first launch and integration

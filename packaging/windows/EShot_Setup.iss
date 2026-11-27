@@ -124,7 +124,7 @@ english.EShotStillSaving=EShot is still saving a recording. Keep waiting?%n%nIf 
 
 [Tasks]
 Name: "desktopicon";  Description: "{cm:CreateDesktopShortcut}"; GroupDescription: "{cm:AdditionalIcons}"
-Name: "startupicon";  Description: "{cm:AutoStartWithWindows}"; GroupDescription: "{cm:Startup}"; Flags: unchecked; Check: not IsAdminInstallMode
+Name: "startupicon";  Description: "{cm:AutoStartWithWindows}"; GroupDescription: "{cm:Startup}"; Check: not IsAdminInstallMode
 Name: "ffmpeg";       Description: "{code:ComponentDescription|ffmpeg}"; GroupDescription: "{cm:OptionalComponents}"
 Name: "ocrengine";    Description: "{code:ComponentDescription|ocrengine}"; GroupDescription: "{cm:OptionalComponents}"
 Name: "ocrengine\lang_eng"; Description: "{code:ComponentDescription|lang_eng}"; GroupDescription: "{cm:OptionalComponents}"
@@ -203,8 +203,12 @@ Name: "{autodesktop}\{#MyAppName}";  Filename: "{app}\{#MyAppExeName}"; Tasks: d
 
 [Registry]
 ; Autostart belongs to the signed-in user, not an elevated installer account.
-; In all-users mode, each user can enable it from EShot settings instead.
+; In all-users mode, each user turns it on in the first-run wizard or Settings.
 Root: HKA; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "EShot"; ValueData: """{app}\{#MyAppExeName}"" --silent"; Tasks: startupicon; Check: not IsAdminInstallMode
+; The first-run wizard starts its "Start EShot when I log in" box from this
+; choice and then owns the same Run value, so the two never disagree.
+Root: HKCU; Subkey: "Software\EShot\EShot"; ValueType: dword; ValueName: "installerAutoStart"; ValueData: 1; Flags: uninsdeletevalue; Tasks: startupicon; Check: not IsAdminInstallMode
+Root: HKCU; Subkey: "Software\EShot\EShot"; ValueType: dword; ValueName: "installerAutoStart"; ValueData: 0; Flags: uninsdeletevalue; Tasks: not startupicon; Check: not IsAdminInstallMode
 
 [Run]
 ; Preserve auto-start for the original user before deleting the legacy task.
