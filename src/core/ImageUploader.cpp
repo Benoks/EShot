@@ -202,7 +202,7 @@ public:
         filePart.setHeader(QNetworkRequest::ContentDispositionHeader,
                            QVariant(QStringLiteral("form-data; name=\"%1\"; filename=\"%2\"")
                                         .arg(m_fileField, sanitizedFileName(imagePath()))));
-        QFile *file = new QFile(imagePath(), m_multipart);
+        QFile *file = newImageFile(m_multipart);
         if (!file->open(QIODevice::ReadOnly)) {
             delete m_multipart;
             m_multipart = nullptr;
@@ -316,7 +316,7 @@ public:
         filePart.setHeader(QNetworkRequest::ContentDispositionHeader,
                            QVariant(QStringLiteral("form-data; name=\"%1\"; filename=\"%2\"")
                                         .arg(m_fileField, sanitizedFileName(imagePath()))));
-        QFile *file = new QFile(imagePath(), m_multipart);
+        QFile *file = newImageFile(m_multipart);
         if (!file->open(QIODevice::ReadOnly)) {
             delete m_multipart;
             m_multipart = nullptr;
@@ -506,7 +506,7 @@ public:
         filePart.setHeader(QNetworkRequest::ContentDispositionHeader,
                            QVariant(QStringLiteral("form-data; name=\"source\"; filename=\"%1\"")
                                         .arg(sanitizedFileName(imagePath()))));
-        QFile *file = new QFile(imagePath(), m_multipart);
+        QFile *file = newImageFile(m_multipart);
         if (!file->open(QIODevice::ReadOnly)) {
             delete m_multipart;
             m_multipart = nullptr;
@@ -739,7 +739,7 @@ private:
 
     void putFile(const QUrl &href)
     {
-        QFile *file = new QFile(imagePath(), this);
+        QFile *file = newImageFile(this);
         if (!file->open(QIODevice::ReadOnly)) {
             file->deleteLater();
             finishWithError(TranslationManager::uploadErrorCannotReadImage());
@@ -945,7 +945,7 @@ private:
 
     void sendFile(const QUrl &session)
     {
-        auto *file = new QFile(imagePath(), this);
+        auto *file = newImageFile(this);
         if (!file->open(QIODevice::ReadOnly)) {
             delete file;
             finishWithError(TranslationManager::uploadErrorCannotReadImage());
@@ -1084,6 +1084,18 @@ void ImageUploader::finishWithSuccess(const QString &url, const QString &deleteU
 {
     cleanupTempFile();
     emit succeeded(url, deleteUrl);
+}
+
+QFile *ImageUploader::newImageFile(QObject *parent) const
+{
+    auto *file = new QFile(m_imagePath, parent);
+    // A cancelled upload deletes this file object later, and Windows cannot
+    // remove the temp PNG while it is open: remove it once it is closed too.
+    if (m_ownsTempFile) {
+        const QString path = m_imagePath;
+        QObject::connect(file, &QObject::destroyed, [path]() { QFile::remove(path); });
+    }
+    return file;
 }
 
 void ImageUploader::cleanupTempFile()

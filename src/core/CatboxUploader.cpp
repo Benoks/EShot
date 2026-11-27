@@ -94,7 +94,7 @@ void CatboxUploader::upload()
     filePart.setHeader(QNetworkRequest::ContentDispositionHeader,
                    QVariant(QStringLiteral("form-data; name=\"fileToUpload\"; filename=\"%1\"")
                                 .arg(sanitizedFileName(imagePath()))));
-    QFile *file = new QFile(imagePath(), m_multipart);
+    QFile *file = newImageFile(m_multipart);
     if (!file->open(QIODevice::ReadOnly)) {
         delete m_multipart;
         m_multipart = nullptr;

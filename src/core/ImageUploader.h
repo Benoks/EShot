@@ -5,6 +5,7 @@
 #include <QString>
 #include <QPixmap>
 
+class QFile;
 class QNetworkAccessManager;
 
 class ImageUploader : public QObject {
@@ -58,6 +59,8 @@ signals:
 protected:
     QNetworkAccessManager *nam() const { return m_nam; }
     QString imagePath() const { return m_imagePath; }
+    // Unopened QFile for the upload body; use it instead of a plain QFile.
+    QFile *newImageFile(QObject *parent) const;
 
     void finishWithError(const QString &reason);
     void finishWithSuccess(const QString &url, const QString &deleteUrl = QString());
