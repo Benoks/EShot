@@ -129,12 +129,22 @@ void PinnedWindow::paintEvent(QPaintEvent *event)
                          qMax(1, static_cast<int>(base.height() * m_scale)));
     const qreal dpr = devicePixelRatioF();
     const QSize deviceSize = (QSizeF(drawSize) * dpr).toSize();
-    if (deviceSize == m_pixmap.size())
-        m_scaledPixmap = m_pixmap;
-    else if (m_scaledPixmap.size() != deviceSize)
-        m_scaledPixmap = m_pixmap.scaled(deviceSize, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
-    m_scaledPixmap.setDevicePixelRatio(dpr);
-    painter.drawPixmap(QRect(QPoint(1, 1), drawSize), m_scaledPixmap);
+    const QRect target(QPoint(1, 1), drawSize);
+    if (m_resizeHandle != NoHandle && deviceSize != m_pixmap.size()) {
+        // Rescaling the whole image on every resize step is slow: filter on
+        // the fly while a corner is dragged, the release rebuilds the copy.
+        painter.save();
+        painter.setRenderHint(QPainter::SmoothPixmapTransform);
+        painter.drawPixmap(target, m_pixmap);
+        painter.restore();
+    } else {
+        if (deviceSize == m_pixmap.size())
+            m_scaledPixmap = m_pixmap;
+        else if (m_scaledPixmap.size() != deviceSize)
+            m_scaledPixmap = m_pixmap.scaled(deviceSize, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+        m_scaledPixmap.setDevicePixelRatio(dpr);
+        painter.drawPixmap(target, m_scaledPixmap);
+    }
 
     if (m_hovered) {
         // Info strip over the top of the image, only while hovered.
@@ -291,7 +301,10 @@ void PinnedWindow::mouseReleaseEvent(QMouseEvent *event)
 {
     if (event->button() == Qt::LeftButton) {
         m_dragging = false;
-        m_resizeHandle = NoHandle;
+        if (m_resizeHandle != NoHandle) {
+            m_resizeHandle = NoHandle;
+            update(); // paint the smooth copy for the final size
+        }
     }
 }
 
