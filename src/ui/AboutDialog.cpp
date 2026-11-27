@@ -100,7 +100,8 @@ void AboutDialog::setupUI()
     m_checkUpdateBtn = new QPushButton(TranslationManager::checkForUpdates());
     m_checkUpdateBtn->setCursor(Qt::PointingHandCursor);
     m_checkUpdateBtn->setMinimumHeight(32);
-    m_checkUpdateBtn->setStyleSheet(R"(
+    m_checkUpdateBtn->setDefault(true);
+    if (ThemeColors::currentTheme() != ThemeColors::Theme::Dark) m_checkUpdateBtn->setStyleSheet(R"(
         QPushButton {
             background-color: #0078D4;
             color: white;

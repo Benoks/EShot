@@ -1,7 +1,13 @@
 #include "ApplicationTheme.h"
 
 #include <QApplication>
+#include <QAbstractButton>
+#include <QAbstractSlider>
 #include <QColor>
+#include <QComboBox>
+#include <QDialog>
+#include <QEvent>
+#include <QTabBar>
 #include <QList>
 #include <QPair>
 
@@ -133,13 +139,13 @@ QString eshotDialogStyleSheet()
         QDialog QCheckBox::indicator:checked { background: @accent; border-color: @accent; image: url(:/icons/check_dark.svg); }
         QDialog QRadioButton::indicator { width: 14px; height: 14px; border-radius: 8px; border: 1px solid @controlBorderHover; background: @field; }
         QDialog QRadioButton::indicator:checked { background: @accent; border: 4px solid @field; }
-        QDialog QTabWidget::pane { border: 1px solid @panelBorder; border-radius: 6px; top: -1px; }
+        QDialog QTabWidget::pane { border: 1px solid @panelBorder; border-radius: 6px; top: 6px; padding-top: 4px; }
         QDialog QTabBar::tab {
-            background: transparent; color: @textMuted; padding: 6px 14px; margin-right: 2px;
-            border: 1px solid transparent; border-bottom: none; border-top-left-radius: 4px; border-top-right-radius: 4px;
+            background: @control; color: @text; padding: 5px 12px; margin-right: 4px;
+            border: 1px solid @controlBorder; border-radius: 4px;
         }
-        QDialog QTabBar::tab:hover { color: @text; background: @controlHover; }
-        QDialog QTabBar::tab:selected { color: @text; background: @panel; border-color: @panelBorder; }
+        QDialog QTabBar::tab:hover { background: @controlHover; border-color: @controlBorderHover; }
+        QDialog QTabBar::tab:selected { background: @selected; border-color: @controlBorderHover; font-weight: 600; }
         QDialog QCheckBox::indicator:disabled { background: @controlPressed; border-color: @panelBorder; }
         QDialog QGroupBox {
             border: 1px solid @panelBorder; border-radius: 6px; margin-top: 16px; padding: 10px 8px 8px;
@@ -178,8 +184,38 @@ QString eshotDialogStyleSheet()
     return css;
 }
 
+namespace {
+
+// Clickable controls in dialogs get a pointing hand, like the overlay panels.
+class DialogPointerCursor : public QObject
+{
+public:
+    using QObject::QObject;
+
+protected:
+    bool eventFilter(QObject *watched, QEvent *event) override
+    {
+        if (event->type() != QEvent::Polish)
+            return false;
+        auto *widget = qobject_cast<QWidget *>(watched);
+        if (!widget || widget->testAttribute(Qt::WA_SetCursor) || !qobject_cast<QDialog *>(widget->window()))
+            return false;
+        if (qobject_cast<QAbstractButton *>(widget) || qobject_cast<QComboBox *>(widget)
+            || qobject_cast<QTabBar *>(widget) || qobject_cast<QAbstractSlider *>(widget))
+            widget->setCursor(Qt::PointingHandCursor);
+        return false;
+    }
+};
+
+}
+
 void applyEShotApplicationTheme(QApplication &application, bool dark, bool highContrast)
 {
+    static DialogPointerCursor *pointerCursor = nullptr;
+    if (!pointerCursor) {
+        pointerCursor = new DialogPointerCursor(&application);
+        application.installEventFilter(pointerCursor);
+    }
     application.setPalette(eshotApplicationPalette(dark, highContrast));
     application.setStyleSheet(dark && !highContrast ? eshotDialogStyleSheet() : QString());
 }

@@ -17,6 +17,8 @@ QPushButton *createActionButton(const QIcon &icon, const QString &text, QWidget 
     button->setCursor(Qt::PointingHandCursor);
     button->setIconSize(QSize(18, 18));
     button->setFixedHeight(38);
+    // All actions are equal; no button is styled as the default one.
+    button->setAutoDefault(false);
     return button;
 }
 

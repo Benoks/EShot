@@ -562,24 +562,30 @@ void SettingsDialog::setupUI()
     QHBoxLayout *btnLayout = new QHBoxLayout();
     btnLayout->addStretch();
 
-    QPushButton *resetBtn = new QPushButton(TranslationManager::reset());
+    QPushButton *resetBtn = new QPushButton(TranslationManager::reset(), this);
     ThemeColors::setStyleSheet(resetBtn, "color: @danger;");
     connect(resetBtn, &QPushButton::clicked, this, &SettingsDialog::onReset);
     btnLayout->addWidget(resetBtn);
 
-    QPushButton *cancelBtn = new QPushButton(TranslationManager::cancel());
+    QPushButton *cancelBtn = new QPushButton(TranslationManager::cancel(), this);
     connect(cancelBtn, &QPushButton::clicked, this, &QDialog::reject);
     btnLayout->addWidget(cancelBtn);
 
-    QPushButton *saveBtn = new QPushButton(TranslationManager::save());
+    QPushButton *saveBtn = new QPushButton(TranslationManager::save(), this);
     saveBtn->setDefault(true);
-    saveBtn->setStyleSheet(R"(
-        QPushButton { background-color: #0078D4; color: white; border: none;
-                      padding: 8px 24px; border-radius: 4px; font-weight: bold; }
-        QPushButton:hover { background-color: #1a8cff; }
-    )");
+    // The dark theme styles the default button itself (eshotDialogStyleSheet).
+    if (ThemeColors::currentTheme() != ThemeColors::Theme::Dark) {
+        saveBtn->setStyleSheet(R"(
+            QPushButton { background-color: #0078D4; color: white; border: none;
+                          padding: 8px 24px; border-radius: 4px; font-weight: bold; }
+            QPushButton:hover { background-color: #1a8cff; }
+        )");
+    }
     connect(saveBtn, &QPushButton::clicked, this, &SettingsDialog::onSave);
 
+    // Sizes only after the dialog style sheet applies to the buttons.
+    for (QPushButton *button : {resetBtn, cancelBtn, saveBtn})
+        button->ensurePolished();
     const QSize actionButtonSize = settingsDialogActionButtonSize(
         {resetBtn->sizeHint(), cancelBtn->sizeHint(), saveBtn->sizeHint()});
     resetBtn->setFixedSize(actionButtonSize);
