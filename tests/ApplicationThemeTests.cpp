@@ -60,7 +60,7 @@ private slots:
         // Dark values follow the graphite design tokens.
         QCOMPARE(css(Role::Muted, Theme::Dark), QStringLiteral("#b1ada8"));
         QCOMPARE(css(Role::Warning, Theme::Dark), QStringLiteral("#ff9800"));
-        QCOMPARE(css(Role::ListBackground, Theme::Dark), QStringLiteral("#22211f"));
+        QCOMPARE(css(Role::ListBackground, Theme::Dark), QStringLiteral("#302e2c"));
 
         const auto contrast = [](const QColor &a, const QColor &b) {
             auto luminance = [](const QColor &c) {

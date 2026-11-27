@@ -263,7 +263,7 @@ QString overlayPanelStyleSheet(bool highContrast)
         QSpinBox:disabled,
         QComboBox:disabled {
             color: #8a8681;
-            background: #22211f;
+            background: #302e2c;
             border-color: #42403d;
         }
         QComboBox::drop-down {
@@ -328,7 +328,7 @@ QString overlayPanelStyleSheet(bool highContrast)
             height: 14px;
             border-radius: 3px;
             border: 1px solid #66625d;
-            background: #22211f;
+            background: #302e2c;
         }
         QCheckBox::indicator:hover {
             border-color: #8a8681;
@@ -392,7 +392,7 @@ QString overlayPanelStyleSheet(bool highContrast)
             border-color: #66625d;
         }
         QPushButton[panelAction="secondary"]:pressed {
-            background: #22211f;
+            background: #302e2c;
         }
         QPushButton[panelAction="secondary"]:focus {
             border-color: #66625d;
@@ -408,7 +408,7 @@ QString overlayPanelStyleSheet(bool highContrast)
         QPushButton[panelSegment] {
             min-height: 28px;
             max-height: 28px;
-            background: #22211f;
+            background: #302e2c;
             border: 1px solid #57534f;
             color: #dcd9d5;
             font-weight: 600;
@@ -456,7 +456,7 @@ QString overlayPanelStyleSheet(bool highContrast)
             border: none;
         }
         QWidget[panelRole="segmentTrack"] {
-            background: #22211f;
+            background: #302e2c;
             border: 1px solid #42403d;
             border-radius: 5px;
         }

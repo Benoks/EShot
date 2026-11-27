@@ -568,7 +568,7 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
         QFontComboBox { padding: 0px 8px; }
         QFontComboBox:hover, QSpinBox:hover {
             border-color: #6a6a6a;
-            background: #22211f;
+            background: #302e2c;
         }
         QFontComboBox:focus, QSpinBox:focus {
             border-color: #e6e3de;

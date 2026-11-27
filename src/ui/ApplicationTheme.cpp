@@ -144,7 +144,7 @@ QString eshotDialogStyleSheet()
             top: -1px; background: @panel;
         }
         QDialog QTabBar::tab {
-            background: @field; color: @textMuted; padding: 6px 14px; margin-right: 2px; margin-top: 3px;
+            background: @tabInactive; color: @textMuted; padding: 6px 14px; margin-right: 2px; margin-top: 3px;
             border: 1px solid @panelBorder; border-bottom: none;
             border-top-left-radius: 6px; border-top-right-radius: 6px;
         }
@@ -183,6 +183,7 @@ QString eshotDialogStyleSheet()
         {"@panelBorder", DesignTokens::PanelBorder},
         {"@panel", DesignTokens::Panel},
         {"@field", DesignTokens::Field},
+        {"@tabInactive", DesignTokens::TabInactive},
         {"@selected", DesignTokens::Selected},
     };
     for (const auto &token : tokens)

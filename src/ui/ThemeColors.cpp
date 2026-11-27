@@ -41,10 +41,10 @@ Swatch swatch(Role role)
     case Role::Danger:          return {0xff6b6b, 0xc62828, 0xff6060};
     case Role::AccentText:      return {0xe0dcd6, 0x1a5fb4, 0x00ffff};
     case Role::Link:            return {0xe0dcd6, 0x0b57d0, 0x00ffff};
-    case Role::ListBackground:  return {0x22211f, 0xffffff, 0x000000};
+    case Role::ListBackground:  return {0x302e2c, 0xffffff, 0x000000};
     case Role::ListBorder:      return {0x42403d, 0xbdbdbd, 0xffffff};
     case Role::ListHover:       return {0x3a3836, 0xe5f1fb, 0x333333};
-    case Role::InputBackground: return {0x22211f, 0xffffff, 0x000000};
+    case Role::InputBackground: return {0x302e2c, 0xffffff, 0x000000};
     case Role::InputBorder:     return {0x57534f, 0x8a8a8a, 0xffffff};
     case Role::InputText:       return {0xedebe8, 0x000000, 0xffffff};
     }

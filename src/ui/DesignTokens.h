@@ -7,7 +7,8 @@ namespace DesignTokens {
 
 inline constexpr const char *Panel = "#2c2b29";          // toolbar, panels, windows
 inline constexpr const char *PanelBorder = "#42403d";
-inline constexpr const char *Field = "#22211f";          // text fields, segmented track
+inline constexpr const char *Field = "#302e2c";          // text fields, segmented track: just above Panel, the border marks them
+inline constexpr const char *TabInactive = "#252422";    // settings tabs behind the selected one
 inline constexpr const char *Control = "#3a3836";        // buttons, combo boxes
 inline constexpr const char *ControlHover = "#45433f";
 inline constexpr const char *ControlPressed = "#33312f";
