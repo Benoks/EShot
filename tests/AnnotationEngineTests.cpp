@@ -52,6 +52,9 @@ private slots:
     void propertyEditsFoldIntoOneUndoStepPerDrag();
     void filledShapesAreHitInside();
     void duplicatesAreShiftedAndContinueCounterNumbers();
+    void labelBeingEditedFollowsRemovalsAndUndo();
+    void boxesDraggedUpOrLeftKeepTheirSize();
+    void undoDuringAShapeResizeEndsTheGesture();
 };
 
 namespace {
@@ -926,6 +929,71 @@ void AnnotationEngineTests::duplicatesAreShiftedAndContinueCounterNumbers()
     engine.undo();
     QCOMPARE(engine.duplicateAnnotation(99, QPoint(1, 1)), -1);
     QCOMPARE(engine.nextCounterValue(), engine.counterValueOf(2) + 1);
+}
+
+void AnnotationEngineTests::labelBeingEditedFollowsRemovalsAndUndo()
+{
+    AnnotationEngine engine;
+    engine.addTextAnnotation(QPoint(10, 10), QStringLiteral("A"));
+    engine.addTextAnnotation(QPoint(10, 100), QStringLiteral("B"));
+    engine.addTextAnnotation(QPoint(10, 200), QStringLiteral("C"));
+    engine.setHiddenIndex(1); // B is open in the editor
+
+    QVERIFY(engine.eraseAnnotationAt(QPoint(14, 14)));
+    QCOMPARE(engine.hiddenIndex(), 0);
+    QCOMPARE(engine.textOf(engine.hiddenIndex()), QStringLiteral("B"));
+    engine.undo();
+    QCOMPARE(engine.textOf(engine.hiddenIndex()), QStringLiteral("B"));
+    engine.redo();
+    QCOMPARE(engine.textOf(engine.hiddenIndex()), QStringLiteral("B"));
+
+    QVERIFY(engine.removeAnnotation(1)); // C, after B
+    QCOMPARE(engine.textOf(engine.hiddenIndex()), QStringLiteral("B"));
+    QVERIFY(engine.removeAnnotation(engine.hiddenIndex()));
+    QCOMPARE(engine.hiddenIndex(), -1);
+}
+
+void AnnotationEngineTests::boxesDraggedUpOrLeftKeepTheirSize()
+{
+    AnnotationEngine engine;
+    for (AnnotationEngine::Tool tool : {AnnotationEngine::Rectangle, AnnotationEngine::Circle,
+                                        AnnotationEngine::SemiRect, AnnotationEngine::Blur}) {
+        engine.setCurrentTool(tool);
+        engine.beginDraw(QPoint(50, 30));
+        engine.endDraw(QPoint(10, 10));
+        QCOMPARE(engine.rotatedBoundingRectOf(engine.annotationCount() - 1), QRectF(10, 10, 41, 21));
+    }
+    // The edge of a box dragged up-left is hit where it is drawn.
+    QCOMPARE(engine.findAnnotationAt(QPoint(10, 20)), engine.annotationCount() - 1);
+}
+
+void AnnotationEngineTests::undoDuringAShapeResizeEndsTheGesture()
+{
+    using H = AnnotationEngine::ShapeHandle;
+    AnnotationEngine engine;
+    engine.setCurrentTool(AnnotationEngine::Rectangle);
+    engine.beginDraw(QPoint(10, 10));
+    engine.endDraw(QPoint(50, 50));
+    engine.beginDraw(QPoint(100, 100));
+    engine.endDraw(QPoint(140, 140));
+    const QRectF first = engine.rotatedBoundingRectOf(0);
+    const QRectF second = engine.rotatedBoundingRectOf(1);
+
+    QVERIFY(engine.eraseAnnotationAt(QPoint(10, 30)));
+    engine.beginShapeResize(0, H::BottomRight);
+    engine.resizeShape(QPointF(200, 200), false);
+
+    // Ctrl+Z mid-drag takes the drag back; later moves of the held handle
+    // change nothing, also after the next undo brings the first box back.
+    engine.undo();
+    QCOMPARE(engine.rotatedBoundingRectOf(0), second);
+    engine.resizeShape(QPointF(300, 300), false);
+    QCOMPARE(engine.rotatedBoundingRectOf(0), second);
+    engine.undo();
+    engine.resizeShape(QPointF(300, 300), false);
+    engine.endShapeResize();
+    QCOMPARE(engine.rotatedBoundingRectOf(0), first);
+    QCOMPARE(engine.rotatedBoundingRectOf(1), second);
 }
 
 #include "AnnotationEngineTests.moc"

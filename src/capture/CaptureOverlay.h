@@ -143,6 +143,7 @@ private:
 #endif
     void updateOverlayRegion(const QRegion &region);
     void resetGestureState();
+    void undoOrRedoAnnotation(bool redo);
     void resetSelection();
     void hideForModalDialog();
     void startAnnotationMove(int index, const QPoint &pos);
@@ -231,8 +232,9 @@ private:
     QToolButton *m_textCommitButton = nullptr;
     QToolButton *m_textBoldButton = nullptr;
     QToolButton *m_textBackgroundButton = nullptr;
-    // Index of the existing label open in the editor, or -1 for a new one.
-    int m_editingTextIndex = -1;
+    // An existing label is open in the editor; its index is the engine's
+    // hiddenIndex(), which follows inserts and removals made meanwhile.
+    bool m_editingExistingText = false;
     QPoint m_textEditStartPosition;
     ShortcutSheetLayer *m_shortcutSheet = nullptr;
     bool m_showSelectionHint = false;

@@ -123,6 +123,8 @@ public:
     bool removeAnnotation(int index);
     // Hides one annotation while it is being edited in place.
     void setHiddenIndex(int index) { m_hiddenIndex = index; }
+    // Follows inserts and removals before it; -1 once the annotation is gone.
+    int hiddenIndex() const { return m_hiddenIndex; }
     void addCounterAnnotation(const QPoint &pos);
     bool eraseAnnotationAt(const QPoint &pos);
 
@@ -238,6 +240,7 @@ private:
     void adjustSelectionForInsert(int index);
     void adjustSelectionForRemove(int index);
     void resetGestureState();
+    void finishGestures();
 
     Tool m_currentTool;
     QColor m_color;

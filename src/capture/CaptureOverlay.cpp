@@ -708,11 +708,11 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
     // Undo/redo shift annotation indices, so close an open label editor first.
     connect(m_toolbar, &AnnotationToolbar::undoRequested, [this]() {
         cancelTextEdit();
-        if (m_annotationEngine) { m_annotationEngine->undo(); update(); updateUndoRedoState(); }
+        undoOrRedoAnnotation(false);
     });
     connect(m_toolbar, &AnnotationToolbar::redoRequested, [this]() {
         cancelTextEdit();
-        if (m_annotationEngine) { m_annotationEngine->redo(); update(); updateUndoRedoState(); }
+        undoOrRedoAnnotation(true);
     });
     connect(m_toolbar, &AnnotationToolbar::colorChanged, [this](const QColor &c) {
         if (!m_annotationEngine) return;
@@ -3363,6 +3363,25 @@ void CaptureOverlay::resetGestureState()
     m_textPanelDragging = false;
 }
 
+void CaptureOverlay::undoOrRedoAnnotation(bool redo)
+{
+    if (!m_annotationEngine)
+        return;
+    // The engine ends a held move/rotate/resize first; stop feeding it mouse
+    // moves, whose index may now belong to another annotation.
+    m_isDraggingAnnotation = false;
+    m_isRotatingAnnotation = false;
+    m_isResizingTextAnnotation = false;
+    m_isResizingShape = false;
+    if (redo)
+        m_annotationEngine->redo();
+    else
+        m_annotationEngine->undo();
+    updateCounterQuickSettings(); // the selected shape's fill may have changed
+    update();
+    updateUndoRedoState();
+}
+
 void CaptureOverlay::resetSelection()
 {
     cancelTextEdit();
@@ -3989,9 +4008,9 @@ void CaptureOverlay::keyPressEvent(QKeyEvent *event)
         if (m_selectionComplete)
             onSave();
     } else if (matchesOverlayShortcut(event, QStringLiteral("actionUndo"), QStringLiteral("Ctrl+Z"))) {
-        if (m_annotationEngine) { m_annotationEngine->undo(); update(); updateUndoRedoState(); }
+        undoOrRedoAnnotation(false);
     } else if (matchesOverlayShortcut(event, QStringLiteral("actionRedo"), QStringLiteral("Ctrl+Shift+Z"))) {
-        if (m_annotationEngine) { m_annotationEngine->redo(); update(); updateUndoRedoState(); }
+        undoOrRedoAnnotation(true);
     } else if (m_selectionComplete && m_annotationEngine && m_annotationEngine->selectedIndex() >= 0
                && (!m_textEdit || !m_textEdit->isVisible())
                && matchesOverlayShortcut(event, QStringLiteral("actionDuplicate"), QStringLiteral("Ctrl+D"))) {
@@ -4838,7 +4857,7 @@ void CaptureOverlay::beginEditExistingText(int index)
     // editing an old label does not change the style of the next new one.
     m_styleBeforeTextEdit = m_annotationEngine->currentTextStyle();
     applyTextStyleToEngine(m_annotationEngine->textStyleOf(index));
-    m_editingTextIndex = index;
+    m_editingExistingText = true;
     m_annotationEngine->setSelectedIndex(-1);
     m_annotationEngine->setHiddenIndex(index);
 
@@ -4858,9 +4877,9 @@ void CaptureOverlay::beginEditExistingText(int index)
 
 void CaptureOverlay::finishExistingTextEdit()
 {
-    if (m_editingTextIndex < 0)
+    if (!m_editingExistingText)
         return;
-    m_editingTextIndex = -1;
+    m_editingExistingText = false;
     if (m_annotationEngine) {
         m_annotationEngine->setHiddenIndex(-1);
         applyTextStyleToEngine(m_styleBeforeTextEdit);
@@ -4920,9 +4939,9 @@ void CaptureOverlay::commitText()
 {
     if (!m_textEdit || m_textEdit->isHidden()) return;
     QString text = m_textEdit->toPlainText().trimmed();
-    if (m_editingTextIndex >= 0 && m_annotationEngine) {
+    if (m_editingExistingText && m_annotationEngine) {
         // Clearing an existing label deletes it.
-        m_annotationEngine->updateTextAnnotation(m_editingTextIndex, text,
+        m_annotationEngine->updateTextAnnotation(m_annotationEngine->hiddenIndex(), text,
                                                  m_annotationEngine->currentTextStyle(),
                                                  m_textEditPosition - m_textEditStartPosition);
         finishExistingTextEdit();
@@ -4945,7 +4964,7 @@ void CaptureOverlay::commitText()
 
 void CaptureOverlay::cancelTextEdit()
 {
-    if (m_editingTextIndex >= 0) {
+    if (m_editingExistingText) {
         finishExistingTextEdit();
         update();
     }
@@ -5467,6 +5486,11 @@ void CaptureOverlay::applyAutoSelectionLock()
 
 void CaptureOverlay::onToolSelected(int toolId)
 {
+    // Another tool (e.g. the eraser) changes the annotation list under an
+    // open label editor; finish the edit first.
+    if (m_textEdit && m_textEdit->isVisible() && m_annotationEngine
+        && toolId != m_annotationEngine->currentTool())
+        commitText();
     if (toolId == AnnotationEngine::Blur || toolId == AnnotationEngine::Pixelate)
         ensureComposedSnapshot();
     if (m_annotationEngine) {

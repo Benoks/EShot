@@ -495,8 +495,19 @@ void AnnotationEngine::clear()
     m_counterValue = 0;
 }
 
+void AnnotationEngine::finishGestures()
+{
+    // A held gesture keeps its index; once undo/redo shifts the list it would
+    // edit another annotation. Record it now so undo takes it back.
+    endShapeResize();
+    endTextResize();
+    endRotate();
+    endMove();
+}
+
 void AnnotationEngine::undo()
 {
+    finishGestures();
     if (m_undoStack.isEmpty()) return;
 
     HistoryAction action = m_undoStack.takeLast();
@@ -523,6 +534,7 @@ void AnnotationEngine::undo()
 
 void AnnotationEngine::redo()
 {
+    finishGestures();
     if (m_redoStack.isEmpty()) return;
 
     HistoryAction action = m_redoStack.takeLast();
@@ -657,12 +669,7 @@ bool AnnotationEngine::removeAnnotation(int index)
         return false;
     const Annotation removed = m_annotations[index];
     m_annotations.removeAt(index);
-    if (m_selectedIndex == index)
-        m_selectedIndex = -1;
-    else if (m_selectedIndex > index)
-        --m_selectedIndex;
-    if (m_hiddenIndex == index)
-        m_hiddenIndex = -1;
+    adjustSelectionForRemove(index);
     pushHistory(HistoryAction::Remove, removed, index);
     recalculateCounterValue();
     return true;
@@ -689,17 +696,8 @@ bool AnnotationEngine::eraseAnnotationAt(const QPoint &pos)
         const Annotation &ann = m_annotations[i];
         if (ann.points.isEmpty()) continue;
 
-        if (annotationContainsPoint(ann, pos, 8)) {
-            Annotation removed = m_annotations[i];
-            m_annotations.removeAt(i);
-            if (m_selectedIndex == i)
-                m_selectedIndex = -1;
-            else if (m_selectedIndex > i)
-                --m_selectedIndex;
-            pushHistory(HistoryAction::Remove, removed, i);
-            recalculateCounterValue();
-            return true;
-        }
+        if (annotationContainsPoint(ann, pos, 8))
+            return removeAnnotation(i);
     }
     return false;
 }
@@ -1392,10 +1390,14 @@ void AnnotationEngine::recalculateCounterValue()
     m_counterValue = maxCounter;
 }
 
+// The selected and the hidden (being edited) annotation must keep pointing at
+// the same annotation when another one is inserted or removed before them.
 void AnnotationEngine::adjustSelectionForInsert(int index)
 {
     if (m_selectedIndex >= index)
         ++m_selectedIndex;
+    if (m_hiddenIndex >= index)
+        ++m_hiddenIndex;
 }
 
 void AnnotationEngine::adjustSelectionForRemove(int index)
@@ -1404,6 +1406,10 @@ void AnnotationEngine::adjustSelectionForRemove(int index)
         m_selectedIndex = -1;
     else if (m_selectedIndex > index)
         --m_selectedIndex;
+    if (m_hiddenIndex == index)
+        m_hiddenIndex = -1;
+    else if (m_hiddenIndex > index)
+        --m_hiddenIndex;
 }
 
 void AnnotationEngine::resetGestureState()
