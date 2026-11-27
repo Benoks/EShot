@@ -14,6 +14,11 @@
 #include <QGroupBox>
 #include <QPointer>
 #include <QShowEvent>
+#include <QStackedWidget>
+#include <QListWidget>
+#include <QMessageBox>
+#include <QBuffer>
+#include <QLocale>
 
 UploadDialog::UploadDialog(QWidget *parent) : QDialog(parent)
 {
@@ -21,7 +26,11 @@ UploadDialog::UploadDialog(QWidget *parent) : QDialog(parent)
     setWindowIcon(QIcon(":/icons/pen.svg"));
     resize(540, 360);
 
-    auto *layout = new QVBoxLayout(this);
+    auto *outer = new QVBoxLayout(this);
+    m_pages = new QStackedWidget(this);
+    auto *uploadPage = new QWidget(this);
+    auto *layout = new QVBoxLayout(uploadPage);
+    layout->setContentsMargins(0, 0, 0, 0);
 
     auto *providerRow = new QHBoxLayout();
     QLabel *providerLabel = new QLabel(TranslationManager::uploadProvider(), this);
@@ -80,14 +89,50 @@ UploadDialog::UploadDialog(QWidget *parent) : QDialog(parent)
     auto *linkRow = new QHBoxLayout();
     m_copyLinkBtn = new QPushButton(TranslationManager::copy(), this);
     m_openLinkBtn = new QPushButton(TranslationManager::uploadOpen(), this);
-    m_closeBtn = new QPushButton(TranslationManager::ocrClose(), this);
     m_copyLinkBtn->setEnabled(false);
     m_openLinkBtn->setEnabled(false);
     linkRow->addWidget(m_copyLinkBtn);
     linkRow->addWidget(m_openLinkBtn);
     linkRow->addStretch();
-    linkRow->addWidget(m_closeBtn);
     layout->addLayout(linkRow);
+    layout->addStretch();
+    m_pages->addWidget(uploadPage);
+
+    auto *historyPage = new QWidget(this);
+    auto *historyLayout = new QVBoxLayout(historyPage);
+    historyLayout->setContentsMargins(0, 0, 0, 0);
+    auto *expiryNote = new QLabel(TranslationManager::tr("uploadHistoryExpiryNote"), historyPage);
+    expiryNote->setWordWrap(true);
+    ThemeColors::setStyleSheet(expiryNote, QStringLiteral("color: @hint; font-size: 12px;"));
+    historyLayout->addWidget(expiryNote);
+    m_historyList = new QListWidget(historyPage);
+    m_historyList->setIconSize(QSize(48, 48));
+    historyLayout->addWidget(m_historyList, 1);
+    auto *historyRow = new QHBoxLayout();
+    m_historyCopyBtn = new QPushButton(TranslationManager::tr("uploadCopyLink"), historyPage);
+    m_historyOpenBtn = new QPushButton(TranslationManager::uploadOpen(), historyPage);
+    m_historyCopyDeleteBtn = new QPushButton(TranslationManager::tr("uploadCopyDeleteLink"), historyPage);
+    m_historyRemoveBtn = new QPushButton(TranslationManager::tr("uploadHistoryRemove"), historyPage);
+    historyRow->addWidget(m_historyCopyBtn);
+    historyRow->addWidget(m_historyOpenBtn);
+    historyRow->addWidget(m_historyCopyDeleteBtn);
+    historyRow->addStretch();
+    historyRow->addWidget(m_historyRemoveBtn);
+    historyLayout->addLayout(historyRow);
+    m_pages->addWidget(historyPage);
+    outer->addWidget(m_pages, 1);
+
+    auto *bottomRow = new QHBoxLayout();
+    m_historyBtn = new QPushButton(TranslationManager::tr("uploadHistory"), this);
+    m_clearHistoryBtn = new QPushButton(TranslationManager::tr("uploadHistoryClear"), this);
+    m_clearHistoryBtn->setVisible(false);
+    m_historyStatusLabel = new QLabel(this);
+    m_closeBtn = new QPushButton(TranslationManager::ocrClose(), this);
+    bottomRow->addWidget(m_historyBtn);
+    bottomRow->addWidget(m_clearHistoryBtn);
+    bottomRow->addWidget(m_historyStatusLabel, 1);
+    bottomRow->addWidget(m_closeBtn);
+    outer->addLayout(bottomRow);
 
     connect(m_providerCombo, qOverload<int>(&QComboBox::currentIndexChanged),
             this, &UploadDialog::onProviderChanged);
@@ -96,6 +141,31 @@ UploadDialog::UploadDialog(QWidget *parent) : QDialog(parent)
     connect(m_openLinkBtn, &QPushButton::clicked, this, &UploadDialog::onOpenLink);
     connect(m_saveAuthBtn, &QPushButton::clicked, this, &UploadDialog::onSaveAuth);
     connect(m_closeBtn, &QPushButton::clicked, this, &QDialog::accept);
+    connect(m_historyBtn, &QPushButton::clicked, this, &UploadDialog::onToggleHistory);
+    connect(m_clearHistoryBtn, &QPushButton::clicked, this, &UploadDialog::onClearHistory);
+    connect(m_historyList, &QListWidget::currentRowChanged, this, &UploadDialog::updateHistoryButtons);
+    auto copyFromHistory = [this](bool deleteLink) {
+        const UploadHistory::Entry *e = currentHistoryEntry();
+        if (!e) return;
+        QGuiApplication::clipboard()->setText(deleteLink ? e->deleteUrl : e->url);
+        m_historyStatusLabel->setText(deleteLink ? TranslationManager::tr("uploadDeleteLinkCopied")
+                                                 : TranslationManager::uploadLinkCopied());
+    };
+    connect(m_historyCopyBtn, &QPushButton::clicked, this, [copyFromHistory] { copyFromHistory(false); });
+    connect(m_historyCopyDeleteBtn, &QPushButton::clicked, this, [copyFromHistory] { copyFromHistory(true); });
+    auto openFromHistory = [this] {
+        if (const UploadHistory::Entry *e = currentHistoryEntry())
+            QDesktopServices::openUrl(QUrl(e->url));
+    };
+    connect(m_historyOpenBtn, &QPushButton::clicked, this, openFromHistory);
+    connect(m_historyList, &QListWidget::itemActivated, this, openFromHistory);
+    connect(m_historyRemoveBtn, &QPushButton::clicked, this, [this] {
+        if (!currentHistoryEntry()) return;
+        const int row = m_historyList->currentRow();
+        m_history.remove(row);
+        refreshHistory();
+        m_historyList->setCurrentRow(qMin(row, int(m_history.entries().size()) - 1));
+    });
 
     QSettings s("EShot", "EShot");
     int provIdx = m_providerCombo->findData(s.value("uploadProvider", 0).toInt());
@@ -264,6 +334,19 @@ void UploadDialog::onSucceeded(const QString &url, const QString &deleteUrl)
     m_copyLinkBtn->setEnabled(true);
     m_openLinkBtn->setEnabled(true);
     onCopyLink();
+
+    UploadHistory::Entry entry;
+    entry.time = QDateTime::currentDateTimeUtc();
+    entry.provider = static_cast<int>(m_uploader->provider());
+    entry.providerName = m_uploader->providerDisplayName();
+    entry.url = url;
+    entry.deleteUrl = deleteUrl;
+    entry.imageSize = m_pixmap.size();
+    QBuffer thumbnail(&entry.thumbnailPng);
+    thumbnail.open(QIODevice::WriteOnly);
+    m_pixmap.scaled(64, 64, Qt::KeepAspectRatio, Qt::SmoothTransformation).save(&thumbnail, "PNG");
+    m_history.add(entry);
+    refreshHistory();
 }
 
 void UploadDialog::onFailed(const QString &reason)
@@ -285,4 +368,75 @@ void UploadDialog::onOpenLink()
     QString link = m_linkEdit->text();
     if (link.isEmpty()) return;
     QDesktopServices::openUrl(QUrl(link));
+}
+
+void UploadDialog::onToggleHistory()
+{
+    const bool showHistory = m_pages->currentIndex() == 0;
+    m_pages->setCurrentIndex(showHistory ? 1 : 0);
+    m_historyBtn->setText(showHistory ? TranslationManager::tr("uploadHistoryBack")
+                                      : TranslationManager::tr("uploadHistory"));
+    m_clearHistoryBtn->setVisible(showHistory);
+    m_historyStatusLabel->clear();
+    if (showHistory) {
+        refreshHistory();
+        m_historyList->setCurrentRow(m_history.entries().isEmpty() ? -1 : 0);
+    }
+}
+
+void UploadDialog::onClearHistory()
+{
+    if (QMessageBox::question(this, TranslationManager::tr("uploadHistoryClear"),
+                              TranslationManager::tr("uploadHistoryClearConfirm"),
+                              QMessageBox::Yes | QMessageBox::No, QMessageBox::No)
+        != QMessageBox::Yes)
+        return;
+    m_history.clear();
+    refreshHistory();
+}
+
+void UploadDialog::refreshHistory()
+{
+    const QSignalBlocker blocker(m_historyList);
+    m_historyList->clear();
+    const QDateTime now = QDateTime::currentDateTimeUtc();
+    for (const UploadHistory::Entry &e : m_history.entries()) {
+        // The combo text is translated and names the expiry, e.g. "Uguu.se (3 hours)".
+        const int comboIndex = m_providerCombo->findData(e.provider);
+        QString text = QStringLiteral("%1 · %2 · %3×%4\n%5")
+                           .arg(QLocale().toString(e.time.toLocalTime(), QLocale::ShortFormat),
+                                comboIndex >= 0 ? m_providerCombo->itemText(comboIndex) : e.providerName)
+                           .arg(e.imageSize.width())
+                           .arg(e.imageSize.height())
+                           .arg(e.url);
+        if (UploadHistory::likelyExpired(e, now))
+            text += QStringLiteral("\n") + TranslationManager::tr("uploadHistoryExpired");
+        auto *item = new QListWidgetItem(text, m_historyList);
+        QPixmap thumbnail;
+        if (thumbnail.loadFromData(e.thumbnailPng, "PNG"))
+            item->setIcon(QIcon(thumbnail));
+        item->setToolTip(e.url);
+    }
+    if (m_history.entries().isEmpty()) {
+        auto *item = new QListWidgetItem(TranslationManager::tr("uploadHistoryEmpty"), m_historyList);
+        item->setFlags(Qt::NoItemFlags);
+    }
+    updateHistoryButtons();
+}
+
+const UploadHistory::Entry *UploadDialog::currentHistoryEntry() const
+{
+    const int row = m_historyList->currentRow();
+    if (row < 0 || row >= m_history.entries().size()) return nullptr;
+    return &m_history.entries().at(row);
+}
+
+void UploadDialog::updateHistoryButtons()
+{
+    const UploadHistory::Entry *e = currentHistoryEntry();
+    m_historyCopyBtn->setEnabled(e);
+    m_historyOpenBtn->setEnabled(e);
+    m_historyCopyDeleteBtn->setEnabled(e && !e->deleteUrl.isEmpty());
+    m_historyRemoveBtn->setEnabled(e);
+    m_clearHistoryBtn->setEnabled(!m_history.entries().isEmpty());
 }
