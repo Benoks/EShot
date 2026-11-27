@@ -26,7 +26,7 @@ HintBubble::HintBubble(QWidget *parent)
     m_label->setStyleSheet(QStringLiteral("color: #e2dfda; font-size: 13px; background: transparent;"));
     m_label->setMaximumWidth(280);
 
-    m_button = new QPushButton(TranslationManager::tr("tipGotIt"), this);
+    m_button = new QPushButton(this);
     m_button->setCursor(Qt::PointingHandCursor);
     m_button->setFocusPolicy(Qt::NoFocus);
     m_button->setStyleSheet(QStringLiteral(
@@ -54,6 +54,8 @@ void HintBubble::showTip(const QString &text, const QRect &anchor, Pointer point
 {
     m_pointer = pointer;
     m_label->setText(text);
+    // Set per tip: the bubble outlives a language change.
+    m_button->setText(TranslationManager::tr("tipGotIt"));
     // Leave room for the arrow on the side that points at the anchor.
     const int m = 12;
     auto *box = static_cast<QVBoxLayout *>(layout());

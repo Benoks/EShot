@@ -152,6 +152,7 @@ private:
     void finishExistingTextEdit();
     void applyTextStyleToEngine(const AnnotationEngine::TextStyle &style);
     void refreshTextStyleButtons();
+    void refreshTextPanelToolTips();
     QIcon textBackgroundIcon(int background) const;
     void drawSelectionHint(QPainter &painter);
     void showSelectionOnboarding();

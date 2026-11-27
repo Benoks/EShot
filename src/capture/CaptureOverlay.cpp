@@ -624,7 +624,6 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
     m_textMoveHandle->setIcon(QIcon(QStringLiteral(":/icons/drag.svg")));
     m_textMoveHandle->setIconSize(QSize(17, 17));
     m_textMoveHandle->setFixedSize(30, 30);
-    m_textMoveHandle->setToolTip(TranslationManager::toolMove());
     m_textMoveHandle->setCursor(Qt::SizeAllCursor);
     m_textMoveHandle->setFocusPolicy(Qt::NoFocus);
     m_textMoveHandle->installEventFilter(this);
@@ -643,7 +642,6 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
     m_textBoldButton->setFont(boldButtonFont);
     m_textBoldButton->setCheckable(true);
     m_textBoldButton->setFixedSize(30, 30);
-    m_textBoldButton->setToolTip(TranslationManager::tr("textBold") + QStringLiteral(" (Ctrl+B)"));
     m_textBoldButton->setFocusPolicy(Qt::NoFocus);
     m_textBackgroundButton = new QToolButton(m_textEditPanel);
     m_textBackgroundButton->setIconSize(QSize(20, 20));
@@ -654,13 +652,11 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
     m_textCommitButton->setIcon(QIcon(QStringLiteral(":/icons/check.svg")));
     m_textCommitButton->setIconSize(QSize(18, 18));
     m_textCommitButton->setFixedSize(30, 30);
-    m_textCommitButton->setToolTip(TranslationManager::save() + QStringLiteral(" (Enter)"));
     m_textCommitButton->setFocusPolicy(Qt::NoFocus);
     m_textCancelButton = new QToolButton(m_textEditPanel);
     m_textCancelButton->setIcon(QIcon(QStringLiteral(":/icons/close.svg")));
     m_textCancelButton->setIconSize(QSize(16, 16));
     m_textCancelButton->setFixedSize(30, 30);
-    m_textCancelButton->setToolTip(TranslationManager::cancel() + QStringLiteral(" (Esc)"));
     m_textCancelButton->setFocusPolicy(Qt::NoFocus);
     textPanelLayout->addWidget(m_textMoveHandle);
     textPanelLayout->addWidget(m_textInlineFontCombo);
@@ -669,6 +665,7 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
     textPanelLayout->addWidget(m_textBackgroundButton);
     textPanelLayout->addWidget(m_textCommitButton);
     textPanelLayout->addWidget(m_textCancelButton);
+    refreshTextPanelToolTips();
     m_textEditPanel->hide();
     connect(m_textCommitButton, &QToolButton::clicked, this, &CaptureOverlay::commitText);
     connect(m_textCancelButton, &QToolButton::clicked, this, &CaptureOverlay::cancelTextEdit);
@@ -2004,6 +2001,18 @@ void CaptureOverlay::refreshUI()
         m_helpButton->setToolTip(QStringLiteral("<b>%1</b>&nbsp;&nbsp;<span style='color:#b1ada8'>? / F1</span>")
                                      .arg(TranslationManager::tr("sheetTitle").toHtmlEscaped()));
     }
+    refreshTextPanelToolTips();
+    refreshTextStyleButtons(); // the text background tooltip
+}
+
+void CaptureOverlay::refreshTextPanelToolTips()
+{
+    if (!m_textMoveHandle)
+        return;
+    m_textMoveHandle->setToolTip(TranslationManager::toolMove());
+    m_textBoldButton->setToolTip(TranslationManager::tr("textBold") + QStringLiteral(" (Ctrl+B)"));
+    m_textCommitButton->setToolTip(TranslationManager::save() + QStringLiteral(" (Enter)"));
+    m_textCancelButton->setToolTip(TranslationManager::cancel() + QStringLiteral(" (Esc)"));
 }
 
 void CaptureOverlay::prewarm()
