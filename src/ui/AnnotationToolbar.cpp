@@ -198,20 +198,20 @@ void AnnotationToolbar::setUndoEnabled(bool enabled)
         if (m_undoButton->styleSheet().isEmpty()) {
             m_undoButton->setStyleSheet(R"(
                 QPushButton {
-                    background-color: #3a3836;
-                    border: 1px solid #57534f;
-                    border-radius: 8px;
+                    background-color: transparent;
+                    border: 1px solid transparent;
+                    border-radius: 4px;
                 }
                 QPushButton:hover {
                     background-color: #45433f;
-                    border-color: #66625d;
+                    border-color: transparent;
                 }
                 QPushButton:pressed {
                     background-color: #33312f;
                 }
                 QPushButton:disabled {
-                    background-color: #2c2b29;
-                    border: 1px solid #33312f;
+                    background-color: transparent;
+                    border: 1px solid transparent;
                 }
             )");
         }
@@ -225,20 +225,20 @@ void AnnotationToolbar::setRedoEnabled(bool enabled)
         if (m_redoButton->styleSheet().isEmpty()) {
             m_redoButton->setStyleSheet(R"(
                 QPushButton {
-                    background-color: #3a3836;
-                    border: 1px solid #57534f;
-                    border-radius: 8px;
+                    background-color: transparent;
+                    border: 1px solid transparent;
+                    border-radius: 4px;
                 }
                 QPushButton:hover {
                     background-color: #45433f;
-                    border-color: #66625d;
+                    border-color: transparent;
                 }
                 QPushButton:pressed {
                     background-color: #33312f;
                 }
                 QPushButton:disabled {
-                    background-color: #2c2b29;
-                    border: 1px solid #33312f;
+                    background-color: transparent;
+                    border: 1px solid transparent;
                 }
             )");
         }
@@ -305,13 +305,13 @@ void AnnotationToolbar::setupUI()
     m_eyedropperButton->setIconSize(QSize(18, 18));
     m_eyedropperButton->setStyleSheet(R"(
         QPushButton {
-            background-color: #3a3836;
-            border: 1px solid #57534f;
-            border-radius: 8px;
+            background-color: transparent;
+            border: 1px solid transparent;
+            border-radius: 4px;
         }
         QPushButton:hover {
             background-color: #45433f;
-            border-color: #66625d;
+            border-color: transparent;
         }
         QPushButton:pressed {
             background-color: #33312f;
@@ -331,13 +331,13 @@ void AnnotationToolbar::setupUI()
     m_lockButton->setCheckable(true);
     m_lockButton->setStyleSheet(R"(
         QPushButton {
-            background-color: #3a3836;
-            border: 1px solid #57534f;
-            border-radius: 8px;
+            background-color: transparent;
+            border: 1px solid transparent;
+            border-radius: 4px;
         }
         QPushButton:hover {
             background-color: #45433f;
-            border-color: #66625d;
+            border-color: transparent;
         }
         QPushButton:pressed {
             background-color: #33312f;
@@ -400,13 +400,13 @@ void AnnotationToolbar::setupUI()
     m_ocrButton->setProperty("action", "ocr");
     m_ocrButton->setStyleSheet(R"(
         QPushButton {
-            background-color: #3a3836;
-            border: 1px solid #57534f;
-            border-radius: 8px;
+            background-color: transparent;
+            border: 1px solid transparent;
+            border-radius: 4px;
         }
         QPushButton:hover {
             background-color: #45433f;
-            border-color: #66625d;
+            border-color: transparent;
         }
     )");
     connect(m_ocrButton, &QPushButton::clicked, this, &AnnotationToolbar::onActionButtonClicked);
@@ -423,13 +423,13 @@ void AnnotationToolbar::setupUI()
     m_uploadButton->setProperty("action", "upload");
     m_uploadButton->setStyleSheet(R"(
         QPushButton {
-            background-color: #3a3836;
-            border: 1px solid #57534f;
-            border-radius: 8px;
+            background-color: transparent;
+            border: 1px solid transparent;
+            border-radius: 4px;
         }
         QPushButton:hover {
             background-color: #45433f;
-            border-color: #66625d;
+            border-color: transparent;
         }
     )");
     connect(m_uploadButton, &QPushButton::clicked, this, &AnnotationToolbar::onActionButtonClicked);
@@ -459,13 +459,13 @@ void AnnotationToolbar::setupUI()
     m_videoButton->setProperty("action", "record");
     m_videoButton->setStyleSheet(R"(
         QPushButton {
-            background-color: #3a3836;
-            border: 1px solid #57534f;
-            border-radius: 8px;
+            background-color: transparent;
+            border: 1px solid transparent;
+            border-radius: 4px;
         }
         QPushButton:hover {
             background-color: #45433f;
-            border-color: #66625d;
+            border-color: transparent;
         }
     )");
     connect(m_videoButton, &QPushButton::clicked, this, &AnnotationToolbar::onActionButtonClicked);
@@ -500,7 +500,7 @@ void AnnotationToolbar::applyStyles()
             AnnotationToolbar {
                 background-color: #2c2b29;
                 border: 1px solid #42403d;
-                border-radius: 10px;
+                border-radius: 6px;
             }
             QToolTip {
                 color: #ffffff;
@@ -528,7 +528,7 @@ QString AnnotationToolbar::colorButtonStyle(const QColor &color) const
         QPushButton {
             background-color: %1;
             border: 2px solid %2;
-            border-radius: 8px;
+            border-radius: 4px;
         }
         QPushButton:hover, QPushButton:focus {
             border-color: %3;

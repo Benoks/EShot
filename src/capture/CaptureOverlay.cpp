@@ -776,7 +776,7 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
     m_actionPanel = new QWidget(this);
     m_actionPanel->setCursor(Qt::ArrowCursor);
     m_actionPanel->setStyleSheet(R"(
-        QWidget { background-color: #2c2b29; border: 1px solid #42403d; border-radius: 10px; }
+        QWidget { background-color: #2c2b29; border: 1px solid #42403d; border-radius: 6px; }
     )");
     QVBoxLayout *actionLayout = new QVBoxLayout(m_actionPanel);
     actionLayout->setContentsMargins(6, 8, 6, 8);
@@ -796,29 +796,29 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
         QPushButton *pinBtn = addBtn(":/icons/pin.svg", TranslationManager::actionPin(),
             [this]() { onPinToDesktop(); });
         pinBtn->setStyleSheet(R"(
-            QPushButton { background-color: #3a3836; border: 1px solid #57534f; border-radius: 8px; }
-            QPushButton:hover { background-color: #42403d; border-color: #66625d; }
+            QPushButton { background-color: transparent; border: 1px solid transparent; border-radius: 4px; }
+            QPushButton:hover { background-color: #45433f; border-color: transparent; }
             QPushButton:pressed { background-color: #33312f; }
         )");
         QPushButton *copyBtn = addBtn(":/icons/copy.svg", TranslationManager::actionCopy(),
             [this]() { onCopyToClipboard(); });
         copyBtn->setStyleSheet(R"(
-            QPushButton { background-color: #3a3836; border: 1px solid #57534f; border-radius: 8px; }
-            QPushButton:hover { background-color: #42403d; border-color: #66625d; }
+            QPushButton { background-color: transparent; border: 1px solid transparent; border-radius: 4px; }
+            QPushButton:hover { background-color: #45433f; border-color: transparent; }
             QPushButton:pressed { background-color: #33312f; }
         )");
         QPushButton *saveBtn = addBtn(":/icons/save.svg", TranslationManager::actionSave(),
             [this]() { onSave(); });
         saveBtn->setStyleSheet(R"(
-            QPushButton { background-color: #3a3836; border: 1px solid #57534f; border-radius: 8px; }
-            QPushButton:hover { background-color: #42403d; border-color: #66625d; }
+            QPushButton { background-color: transparent; border: 1px solid transparent; border-radius: 4px; }
+            QPushButton:hover { background-color: #45433f; border-color: transparent; }
             QPushButton:pressed { background-color: #33312f; }
         )");
         QPushButton *closeBtn = addBtn(":/icons/close.svg", TranslationManager::actionClose(),
             [this]() { onClose(); });
         closeBtn->setStyleSheet(R"(
-            QPushButton { background-color: #3a3836; border: 1px solid #57534f; border-radius: 8px; }
-            QPushButton:hover { background-color: #42403d; border-color: #66625d; }
+            QPushButton { background-color: transparent; border: 1px solid transparent; border-radius: 4px; }
+            QPushButton:hover { background-color: #45433f; border-color: transparent; }
             QPushButton:pressed { background-color: #33312f; }
         )");
         // Shortcut sheet, set apart at the bottom: it helps rather than acts.
@@ -832,8 +832,8 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
         m_helpButton->setToolTip(QStringLiteral("<b>%1</b>&nbsp;&nbsp;<span style='color:#b1ada8'>? / F1</span>")
                                      .arg(TranslationManager::tr("sheetTitle").toHtmlEscaped()));
         m_helpButton->setStyleSheet(R"(
-            QPushButton { background-color: #3a3836; border: 1px solid #57534f; border-radius: 8px; }
-            QPushButton:hover { background-color: #42403d; border-color: #66625d; }
+            QPushButton { background-color: transparent; border: 1px solid transparent; border-radius: 4px; }
+            QPushButton:hover { background-color: #45433f; border-color: transparent; }
             QPushButton:pressed { background-color: #33312f; }
         )");
 
@@ -1343,14 +1343,18 @@ void CaptureOverlay::setupRecordingDrawer()
     connect(m_recordingDesktopAudioCheck, &QAbstractButton::toggled, this, [](bool enabled) {
         QSettings("EShot", "EShot").setValue("videoDesktopAudioEnabled", enabled);
     });
-    connect(m_recordingMicrophoneCheck, &QAbstractButton::toggled, this, [this](bool enabled) {
+    connect(m_recordingMicrophoneCheck, &QAbstractButton::toggled, this, [](bool enabled) {
         QSettings("EShot", "EShot").setValue("videoMicrophoneEnabled", enabled);
-        if (m_recordingMicrophoneDeviceCombo)
-            m_recordingMicrophoneDeviceCombo->setEnabled(enabled);
     });
     connect(m_recordingMicrophoneDeviceCombo, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int) {
         QSettings("EShot", "EShot").setValue(
             "videoMicrophoneDevice", m_recordingMicrophoneDeviceCombo->currentData().toString());
+    });
+    // The device list stays usable while the microphone is off (its toggle is
+    // on the bar, out of sight); picking a device turns the microphone on.
+    connect(m_recordingMicrophoneDeviceCombo, qOverload<int>(&QComboBox::activated), this, [this](int) {
+        if (m_recordingMicrophoneCheck && !m_recordingMicrophoneCheck->isChecked())
+            m_recordingMicrophoneCheck->setChecked(true);
     });
     connect(advancedButton, &QPushButton::clicked, this, &CaptureOverlay::openRecordingSettings);
     connect(m_recordingStartButton, &QPushButton::clicked, this, &CaptureOverlay::startRecordingFromDrawer);
@@ -1491,7 +1495,6 @@ void CaptureOverlay::loadRecordingDrawerValues()
         const int microphoneDeviceIndex = m_recordingMicrophoneDeviceCombo->findData(
             settings.value("videoMicrophoneDevice", "default").toString());
         m_recordingMicrophoneDeviceCombo->setCurrentIndex(microphoneDeviceIndex < 0 ? 0 : microphoneDeviceIndex);
-        m_recordingMicrophoneDeviceCombo->setEnabled(m_recordingMicrophoneCheck->isChecked());
     }
 
     const HotkeyManager &hotkeys = HotkeyManager::instance();
