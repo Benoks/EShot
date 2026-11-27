@@ -2842,7 +2842,6 @@ QPoint CaptureOverlay::capturePositionFromGlobal(const QPoint &point) const
 
 void CaptureOverlay::paintEvent(QPaintEvent *event)
 {
-    Q_UNUSED(event);
     QPainter painter(this);
     const qreal paintScale = m_screenViews && m_screenViews->isActive()
         ? qAbs(painter.deviceTransform().m11()) : painter.device()->devicePixelRatioF();
@@ -2856,19 +2855,28 @@ void CaptureOverlay::paintEvent(QPaintEvent *event)
         painter.fillRect(rect(), Qt::black);
         paintCaptureImages(&painter, m_screenImages, m_virtualDesktopRect.topLeft());
     }
-    // Draw once beneath the dim layer so annotations outside the selection
-    // remain visible with the same darkening as the desktop background.
-    if (m_annotationEngine && m_selectionComplete)
-        m_annotationEngine->render(&painter, QPoint());
-    painter.fillRect(rect(), QColor(0, 0, 0, m_overlayOpacity));
-
     const bool windowPreview = !m_isSelecting && !m_selectionComplete
         && !m_hoveredWindowRect.isEmpty();
     QRect selRect = windowPreview
         ? (m_animatedWindowRect.isValid() ? m_animatedWindowRect : m_hoveredWindowRect)
         : normalizedSelectionRect();
+    const bool clearSelection = !selRect.isEmpty() && selRect != rect();
 
-    if (!selRect.isEmpty() && selRect != rect()) {
+    // Draw once beneath the dim layer so annotations outside the selection
+    // remain visible with the same darkening as the desktop background. The
+    // selection is repainted clean below, so it is left out of this pass.
+    if (m_annotationEngine && m_selectionComplete) {
+        const QRegion dimmed = clearSelection ? event->region() - selRect : event->region();
+        if (!dimmed.isEmpty()) {
+            painter.save();
+            painter.setClipRegion(dimmed);
+            m_annotationEngine->render(&painter, QPoint());
+            painter.restore();
+        }
+    }
+    painter.fillRect(rect(), QColor(0, 0, 0, m_overlayOpacity));
+
+    if (clearSelection) {
         // Clean area. When the selection covers the whole overlay the base
         // blit above already painted it; skip the redundant second blit.
         painter.save();
