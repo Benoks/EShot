@@ -9,6 +9,8 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QSettings>
+#include <QSocketNotifier>
+#include <QAbstractEventDispatcher>
 #include <QDebug>
 #include <QFileInfo>
 #include <QGuiApplication>
@@ -188,9 +190,8 @@ HotkeyManager::HotkeyManager(QObject *parent) : QObject(parent)
 #if defined(ESHOT_HAVE_X11)
     else if (backend == LinuxHotkeyBackend::X11) {
         m_x11RootWindow = DefaultRootWindow(static_cast<Display *>(m_x11Display));
-        QTimer *pollTimer = new QTimer(this);
-        pollTimer->setInterval(40);
-        connect(pollTimer, &QTimer::timeout, this, [this]() {
+        Display *x11Display = static_cast<Display *>(m_x11Display);
+        const auto processEvents = [this]() {
             Display *display = static_cast<Display *>(m_x11Display);
             if (!display)
                 return;
@@ -214,8 +215,18 @@ HotkeyManager::HotkeyManager(QObject *parent) : QObject(parent)
                     }
                 }
             }
-        });
-        pollTimer->start();
+        };
+        // Wake on the X connection instead of polling. XSync in the grab code
+        // can pull events into Xlib's queue without new socket data, so the
+        // queue is also checked before the event loop sleeps.
+        m_x11Notifier = new QSocketNotifier(ConnectionNumber(x11Display), QSocketNotifier::Read, this);
+        connect(m_x11Notifier, &QSocketNotifier::activated, this, processEvents);
+        connect(QAbstractEventDispatcher::instance(), &QAbstractEventDispatcher::aboutToBlock, this,
+                [this, processEvents]() {
+                    Display *display = static_cast<Display *>(m_x11Display);
+                    if (display && XEventsQueued(display, QueuedAlready) > 0)
+                        processEvents();
+                });
     }
 #endif
     if (!kdeAvailable && backend == LinuxHotkeyBackend::Unavailable
@@ -424,6 +435,9 @@ HotkeyManager::~HotkeyManager()
 {
     unregisterAllHotkeys();
 #if defined(ESHOT_HAVE_X11)
+    // The notifier must not outlive the connection's socket.
+    delete m_x11Notifier;
+    m_x11Notifier = nullptr;
     if (m_x11Display) {
         XCloseDisplay(static_cast<Display *>(m_x11Display));
         m_x11Display = nullptr;

@@ -10,6 +10,7 @@
 
 class LinuxPortalGlobalShortcuts;
 class LinuxKGlobalAccelShortcuts;
+class QSocketNotifier;
 
 struct HotkeyBinding {
     int id = 0;
@@ -109,6 +110,7 @@ private:
     UINT m_lastRegionVirtualKey = 0;
     void *m_x11Display = nullptr;
     unsigned long m_x11RootWindow = 0;
+    QSocketNotifier *m_x11Notifier = nullptr;
     LinuxPortalGlobalShortcuts *m_portalShortcuts = nullptr;
     LinuxKGlobalAccelShortcuts *m_kdeShortcuts = nullptr;
     bool m_usePortalShortcuts = false;
