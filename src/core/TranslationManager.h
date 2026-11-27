@@ -404,7 +404,6 @@ public:
     static QString uploadProvider()   { return tr("uploadProvider"); }
     static QString upload()           { return tr("upload"); }
     static QString uploadUploading()  { return tr("uploadUploading"); }
-    static QString uploadSuccess()    { return tr("uploadSuccess"); }
     static QString uploadFailed()     { return tr("uploadFailed"); }
     static QString visualSearchBrowserLaunchTitle() { return tr("visualSearchBrowserLaunchTitle"); }
     static QString visualSearchBrowserLaunchError() { return tr("visualSearchBrowserLaunchError"); }
@@ -826,7 +825,6 @@ private:
         {"uploadProvider", {"Servis:", "Service:", "Dienst:", "Service :", "Servicio:", "サービス:", "服务:", "Сервис:"}},
         {"upload",         {"Yükle", "Upload", "Hochladen", "Téléverser", "Subir", "アップロード", "上传", "Загрузить"}},
         {"uploadUploading",{"Yükleniyor...", "Uploading...", "Wird hochgeladen...", "Téléversement...", "Subiendo...", "アップロード中...", "上传中...", "Загрузка..."}},
-        {"uploadSuccess",  {"Yüklendi!", "Uploaded!", "Hochgeladen!", "Téléversé !", "¡Subido!", "アップロード完了！", "上传成功！", "Загружено!"}},
         {"uploadFailed",   {"Yükleme başarısız", "Upload failed", "Hochladen fehlgeschlagen", "Échec du téléversement", "Error al subir", "アップロード失敗", "上传失败", "Ошибка загрузки"}},
         {"visualSearchBrowserLaunchTitle", {"Tarayıcı açılamadı", "Browser launch failed", "Browser konnte nicht geöffnet werden", "Échec de l'ouverture du navigateur", "No se pudo abrir el navegador", "ブラウザーを開けませんでした", "无法打开浏览器", "Не удалось открыть браузер"}},
         {"visualSearchBrowserLaunchError", {"Görsel arama sonucu varsayılan tarayıcınızda açılamadı.", "The visual-search result could not be opened in your default browser.", "Das Ergebnis der visuellen Suche konnte nicht im Standardbrowser geöffnet werden.", "Le résultat de recherche visuelle n'a pas pu être ouvert dans votre navigateur par défaut.", "El resultado de búsqueda visual no pudo abrirse en el navegador predeterminado.", "画像検索結果を既定のブラウザーで開けませんでした。", "无法在默认浏览器中打开视觉搜索结果。", "Не удалось открыть результат визуального поиска в браузере по умолчанию."}},

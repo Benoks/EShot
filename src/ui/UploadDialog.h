@@ -21,6 +21,9 @@ public:
 
     void setImage(const QPixmap &pixmap);
 
+protected:
+    void showEvent(QShowEvent *event) override;
+
 private slots:
     void onProviderChanged(int index);
     void onUploadClicked();
@@ -40,6 +43,7 @@ private:
 
     QPixmap m_pixmap;
     ImageUploader *m_uploader = nullptr;
+    bool m_autoUploadTried = false;
 
     QComboBox *m_providerCombo;
     QGroupBox *m_authBox;

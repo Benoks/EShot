@@ -13,6 +13,7 @@
 #include <QUrl>
 #include <QGroupBox>
 #include <QPointer>
+#include <QShowEvent>
 
 UploadDialog::UploadDialog(QWidget *parent) : QDialog(parent)
 {
@@ -114,6 +115,17 @@ void UploadDialog::setImage(const QPixmap &pixmap)
 {
     m_pixmap = pixmap;
     if (m_uploader) m_uploader->setImage(pixmap);
+}
+
+void UploadDialog::showEvent(QShowEvent *event)
+{
+    QDialog::showEvent(event);
+    if (m_autoUploadTried) return;
+    m_autoUploadTried = true;
+    // Start right away unless the service still needs a credential typed in.
+    if (m_uploader && !m_pixmap.isNull()
+        && (!m_uploader->authRequired() || !m_uploader->authValue().isEmpty()))
+        onUploadClicked();
 }
 
 void UploadDialog::setBusy(bool busy)
@@ -251,7 +263,7 @@ void UploadDialog::onSucceeded(const QString &url, const QString &deleteUrl)
     m_deleteEdit->setVisible(!deleteUrl.isEmpty());
     m_copyLinkBtn->setEnabled(true);
     m_openLinkBtn->setEnabled(true);
-    m_statusLabel->setText(TranslationManager::uploadSuccess());
+    onCopyLink();
 }
 
 void UploadDialog::onFailed(const QString &reason)

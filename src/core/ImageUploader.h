@@ -37,6 +37,8 @@ public:
     virtual Provider provider() const = 0;
     virtual QString providerDisplayName() const = 0;
     virtual bool needsAuth() const { return false; }
+    // False when the credential field is optional and uploads work without it.
+    virtual bool authRequired() const { return needsAuth(); }
     virtual QString authValue() const { return QString(); }
     virtual QString authPlaceholder() const { return QString(); }
     // Returns false when the credential could not be stored for later runs.

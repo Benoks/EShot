@@ -16,6 +16,7 @@ public:
     Provider provider() const override { return Provider::Catbox; }
     QString providerDisplayName() const override;
     bool needsAuth() const override { return true; }
+    bool authRequired() const override { return false; }
     QString authValue() const override { return m_userHash; }
     QString authPlaceholder() const override;
     bool setAuthValue(const QString &value) override { return setUserHash(value); }
