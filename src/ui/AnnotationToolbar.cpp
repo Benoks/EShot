@@ -94,6 +94,8 @@ AnnotationToolbar::AnnotationToolbar(QWidget *parent)
     , m_uploadButton(nullptr)
     , m_lensButton(nullptr)
 {
+    // A QWidget subclass paints its style sheet background only with this.
+    setAttribute(Qt::WA_StyledBackground, true);
     if (!parent) {
         setWindowFlags(Qt::Tool | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
         setAttribute(Qt::WA_TranslucentBackground);
@@ -605,13 +607,13 @@ QPushButton* AnnotationToolbar::createToolButton(const QString &iconPath, const 
     btn->setIconSize(QSize(18, 18));
     btn->setStyleSheet(R"(
         QPushButton {
-            background-color: #3a3836;
-            border: 1px solid #57534f;
-            border-radius: 8px;
+            background-color: transparent;
+            border: 1px solid transparent;
+            border-radius: 4px;
         }
         QPushButton:hover {
             background-color: #45433f;
-            border-color: #66625d;
+            border-color: transparent;
         }
         QPushButton:pressed {
             background-color: #33312f;
@@ -639,13 +641,13 @@ QPushButton* AnnotationToolbar::createActionButton(const QString &iconPath, cons
 
     btn->setStyleSheet(R"(
         QPushButton {
-            background-color: #3a3836;
-            border: 1px solid #57534f;
-            border-radius: 8px;
+            background-color: transparent;
+            border: 1px solid transparent;
+            border-radius: 4px;
         }
         QPushButton:hover {
             background-color: #45433f;
-            border-color: #66625d;
+            border-color: transparent;
         }
         QPushButton:pressed {
             background-color: #33312f;
