@@ -91,11 +91,7 @@ OcrDialog::OcrDialog(const QPixmap &pixmap, QWidget *parent)
     m_retryBtn = new QPushButton(TranslationManager::ocrRetry(), this);
     m_retryBtn->setEnabled(false);
     m_closeBtn = new QPushButton(TranslationManager::ocrClose(), this);
-    const QList<QPushButton *> actionButtons = {m_copyBtn, m_translateBtn, m_retryBtn, m_closeBtn};
-    for (QPushButton *button : actionButtons) {
-        button->setFixedHeight(30);
-        button->setStyleSheet(QStringLiteral("QPushButton { padding: 0 10px; }"));
-    }
+    // Button size comes from the dialog style, the same as in the upload window.
 
     btnRow->addWidget(m_copyBtn);
     btnRow->addWidget(m_translateBtn);
