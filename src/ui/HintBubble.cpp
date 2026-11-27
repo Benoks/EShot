@@ -23,14 +23,14 @@ HintBubble::HintBubble(QWidget *parent)
 
     m_label = new QLabel(this);
     m_label->setWordWrap(true);
-    m_label->setStyleSheet(QStringLiteral("color: #edebe8; font-size: 13px; background: transparent;"));
+    m_label->setStyleSheet(QStringLiteral("color: #e2dfda; font-size: 13px; background: transparent;"));
     m_label->setMaximumWidth(280);
 
     m_button = new QPushButton(TranslationManager::tr("tipGotIt"), this);
     m_button->setCursor(Qt::PointingHandCursor);
     m_button->setFocusPolicy(Qt::NoFocus);
     m_button->setStyleSheet(QStringLiteral(
-        "QPushButton { background: #3a3836; color: #edebe8; border: 1px solid #57534f;"
+        "QPushButton { background: #3a3836; color: #e2dfda; border: 1px solid #57534f;"
         " border-radius: 8px; padding: 4px 14px; font-size: 12px; font-weight: 600; }"
         "QPushButton:hover { background: #42403d; border-color: #66625d; }"
         "QPushButton:pressed { background: #33312f; }"));

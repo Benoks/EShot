@@ -140,7 +140,7 @@ int drawKeyChip(QPainter &painter, int x, int y, const QString &key)
     painter.setPen(QPen(QColor(0x57, 0x53, 0x4f), 1));
     painter.setBrush(QColor(0x3a, 0x38, 0x36));
     painter.drawRoundedRect(QRectF(chip).adjusted(0.5, 0.5, -0.5, -0.5), 3, 3);
-    painter.setPen(QColor(0xdc, 0xd9, 0xd5));
+    painter.setPen(QColor(0xd3, 0xd0, 0xcb));
     painter.drawText(chip, Qt::AlignCenter, key);
     return width;
 }
@@ -149,7 +149,7 @@ void drawSection(QPainter &painter, const Section &section, int x, int &y, int w
                  int keyColumnWidth)
 {
     painter.setFont(sheetFont(10, QFont::DemiBold));
-    painter.setPen(QColor(0xed, 0xeb, 0xe8));
+    painter.setPen(QColor(0xe2, 0xdf, 0xda));
     painter.drawText(QRect(x, y, width, SectionTitleHeight - 6),
                      Qt::AlignLeft | Qt::AlignVCenter, section.title);
     y += SectionTitleHeight;
@@ -167,7 +167,7 @@ void drawSection(QPainter &painter, const Section &section, int x, int &y, int w
 
         const QRect labelRect(x, y, width - keyColumnWidth - KeyLabelGap, RowHeight);
         painter.setFont(labelFont);
-        painter.setPen(QColor(0xed, 0xeb, 0xe8));
+        painter.setPen(QColor(0xe2, 0xdf, 0xda));
         painter.drawText(labelRect, Qt::AlignLeft | Qt::AlignVCenter,
                          QFontMetrics(labelFont).elidedText(row.label, Qt::ElideRight,
                                                             labelRect.width()));
@@ -337,7 +337,7 @@ void drawShortcutSheet(QPainter &painter, const QRect &monitorRect, bool windowS
     const int right = card.right() - Padding;
     const QRect headerRect(left, card.top() + Padding - 6, right - left, 30);
     painter.setFont(sheetFont(15, QFont::DemiBold));
-    painter.setPen(QColor(0xed, 0xeb, 0xe8));
+    painter.setPen(QColor(0xe2, 0xdf, 0xda));
     painter.drawText(headerRect, Qt::AlignLeft | Qt::AlignVCenter, title);
     painter.setFont(sheetFont(9, QFont::Normal));
     painter.setPen(QColor(0xb1, 0xad, 0xa8));

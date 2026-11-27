@@ -506,7 +506,7 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
         QTextEdit {
             background-color: rgba(0, 0, 0, 180);
             color: white;
-            border: 2px solid #e6e3de;
+            border: 2px solid #d8d4ce;
             border-radius: 4px;
             padding: 4px 8px;
             font-size: 14px;
@@ -568,10 +568,10 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
         QFontComboBox { padding: 0px 8px; }
         QFontComboBox:hover, QSpinBox:hover {
             border-color: #6a6a6a;
-            background: #302e2c;
+            background: #262422;
         }
         QFontComboBox:focus, QSpinBox:focus {
-            border-color: #e6e3de;
+            border-color: #d8d4ce;
         }
         QFontComboBox::drop-down {
             subcontrol-origin: padding;
@@ -4766,7 +4766,7 @@ void CaptureOverlay::updateTextEditorStyle()
         QTextEdit {
             background-color: rgba(0, 0, 0, 180);
             color: %1;
-            border: 2px solid #e6e3de;
+            border: 2px solid #d8d4ce;
             border-radius: 4px;
             padding: 4px 8px;
         }

@@ -5,7 +5,6 @@
 #include <QAbstractSlider>
 #include <QColor>
 #include <QComboBox>
-#include <QDialog>
 #include <QEvent>
 #include <QTabBar>
 #include <QList>
@@ -193,8 +192,10 @@ QString eshotDialogStyleSheet()
 
 namespace {
 
-// Clickable controls in dialogs get a pointing hand, like the overlay panels.
-class DialogPointerCursor : public QObject
+// Clickable controls get a pointing hand everywhere in the app. Checked on
+// the first hover: at creation many controls are not in their window yet.
+// Controls that set their own cursor keep it.
+class PointerCursorOnHover : public QObject
 {
 public:
     using QObject::QObject;
@@ -202,10 +203,10 @@ public:
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override
     {
-        if (event->type() != QEvent::Polish)
+        if (event->type() != QEvent::Enter)
             return false;
         auto *widget = qobject_cast<QWidget *>(watched);
-        if (!widget || widget->testAttribute(Qt::WA_SetCursor) || !qobject_cast<QDialog *>(widget->window()))
+        if (!widget || widget->testAttribute(Qt::WA_SetCursor))
             return false;
         if (qobject_cast<QAbstractButton *>(widget) || qobject_cast<QComboBox *>(widget)
             || qobject_cast<QTabBar *>(widget) || qobject_cast<QAbstractSlider *>(widget))
@@ -218,9 +219,9 @@ protected:
 
 void applyEShotApplicationTheme(QApplication &application, bool dark, bool highContrast)
 {
-    static DialogPointerCursor *pointerCursor = nullptr;
+    static PointerCursorOnHover *pointerCursor = nullptr;
     if (!pointerCursor) {
-        pointerCursor = new DialogPointerCursor(&application);
+        pointerCursor = new PointerCursorOnHover(&application);
         application.installEventFilter(pointerCursor);
     }
     application.setPalette(eshotApplicationPalette(dark, highContrast));
