@@ -142,7 +142,8 @@ QPixmap grabKWinScreenshot(const QString &method, QList<QVariant> arguments, int
             return;
         }
 
-        result = QPixmap::fromImage(image);
+        // Moved so Qt can adopt the buffer instead of copying a whole screen.
+        result = QPixmap::fromImage(std::move(image));
         qInfo() << "[LinuxScreenshot] selected backend=kwin method=" << method
                 << "size=" << result.size() << "dpr=" << result.devicePixelRatio();
         loop.quit();

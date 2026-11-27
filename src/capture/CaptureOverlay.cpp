@@ -2529,7 +2529,7 @@ void CaptureOverlay::captureAllScreens()
     }
     qInfo() << "[CaptureOverlay] selected capture backend=" << backend
             << "exclusiveFullscreen=" << plan.preferDuplication;
-    m_screenSnapshot = QPixmap::fromImage(image);
+    m_screenSnapshot = QPixmap::fromImage(std::move(image));
     m_screenSnapshot.setDevicePixelRatio(1.0);
 #else
     const QString currentDesktop = qEnvironmentVariable("XDG_CURRENT_DESKTOP");
@@ -2797,12 +2797,16 @@ bool CaptureOverlay::captureNativeScreenImages(const QRect &logicalRect, const Q
 {
     QVector<CaptureScreenImage> images;
     for (QScreen *screen : QGuiApplication::screens()) {
-        const QPixmap grab = LinuxPortalScreenshot::grabScreen(screen, this);
+        QPixmap grab = LinuxPortalScreenshot::grabScreen(screen, this);
         if (grab.isNull())
             return false;
+        const qreal grabScale = grab.devicePixelRatio();
         QImage image = grab.toImage();
+        // Drop the pixmap first: while it shares the buffer, changing the
+        // ratio would deep-copy the whole screen.
+        grab = QPixmap();
         image.setDevicePixelRatio(1.0);
-        images.append({screen->geometry(), image, grab.devicePixelRatio()});
+        images.append({screen->geometry(), std::move(image), grabScale});
     }
     if (images.isEmpty() || captureSelectionSize(images, logicalRect).isEmpty())
         return false;
@@ -2823,16 +2827,17 @@ void CaptureOverlay::ensureComposedSnapshot()
 {
     if (!m_screenSnapshot.isNull() || m_screenImages.isEmpty())
         return;
-    const QImage canvas = composeCaptureImages(m_screenImages, m_virtualDesktopRect);
+    QImage canvas = composeCaptureImages(m_screenImages, m_virtualDesktopRect);
     if (canvas.isNull())
         return;
-    m_screenSnapshot = QPixmap::fromImage(canvas);
+    const QSize canvasSize = canvas.size();
+    m_screenSnapshot = QPixmap::fromImage(std::move(canvas));
     m_screenSnapshot.setDevicePixelRatio(1.0);
     if (m_annotationEngine) {
         m_annotationEngine->setScreenSnapshot(m_screenSnapshot);
         m_annotationEngine->setSnapshotScale(m_dpr);
     }
-    qInfo() << "[CaptureOverlay] composed full snapshot on demand:" << canvas.size();
+    qInfo() << "[CaptureOverlay] composed full snapshot on demand:" << canvasSize;
 }
 
 QPoint CaptureOverlay::capturePositionFromGlobal(const QPoint &point) const
