@@ -49,6 +49,7 @@ set(SOURCES
     src/core/ImageUploader.cpp
     src/core/SecureCredentialStore.cpp
     src/core/UploadResponseParser.cpp
+    src/core/UploadHistory.cpp
     src/core/VisualSearch.cpp
     src/core/Sha256Digest.cpp
     src/core/ComponentDownloadPolicy.cpp
@@ -142,6 +143,7 @@ set(HEADERS
     src/core/ImageUploader.h
     src/core/SecureCredentialStore.h
     src/core/UploadResponseParser.h
+    src/core/UploadHistory.h
     src/core/VisualSearch.h
     src/core/Sha256Digest.h
     src/core/ComponentDownloadPolicy.h
@@ -420,6 +422,14 @@ if(BUILD_TESTING)
             src/core/UploadResponseParser.cpp
             src/core/UploadResponseParser.h
         LIBS Qt6::Core
+    )
+
+    eshot_add_test(eshot_upload_history_tests upload_history
+        SOURCES
+            tests/UploadHistoryTests.cpp
+            src/core/UploadHistory.cpp
+            src/core/UploadHistory.h
+        LIBS Qt6::Core Qt6::Gui
     )
 
     eshot_add_test(eshot_secure_credential_store_tests secure_credential_store
