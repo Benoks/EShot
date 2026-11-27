@@ -43,7 +43,7 @@ EShot keeps the complete screenshot workflow in one compact tray application: se
 - Undo/redo, selection locking, color controls, and configurable toolbar visibility
 - Tesseract OCR with selectable language packs, copy, retry, and one-click Google Translate handoff
 - Google Lens or Yandex Images visual search for the selected region
-- Screenshot uploads to Catbox, Uguu, TmpFiles.org, temp.sh, Allwebs, Radikal Cloud, Google Drive, and Yandex Disk
+- Screenshot uploads to Catbox, Uguu (3 hours), TmpFiles.org (1 hour), temp.sh (3 days), Allwebs, Google Drive, and Yandex Disk
 - Always-on-top pinned captures
 - Selected-region GIF recording
 - MP4 recording with configurable FPS, quality, duration, desktop audio, and microphone audio
@@ -179,7 +179,7 @@ OCR is powered by Tesseract. The first-run wizard can install English, the syste
 
 ## Upload services
 
-Anonymous providers work without credentials. Google Drive and Yandex Disk require OAuth access tokens; Allwebs and Radikal Cloud require service API keys. OAuth tokens are stored in the operating system credential store, never in EShot's plain-text settings file.
+Anonymous providers work without credentials. Google Drive and Yandex Disk require OAuth access tokens; Allwebs requires a service API key. OAuth tokens are stored in the operating system credential store, never in EShot's plain-text settings file.
 
 ### Google Drive token setup
 

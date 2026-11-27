@@ -123,6 +123,8 @@ QString script(const QString &service, const QString &path, const QString &inter
         "        var desktop = workspace.currentDesktop;\n"
         "        result.currentDesktop = desktop && typeof desktop === \"object\" ? String(desktop.id) : String(desktop || \"\");\n"
         "        result.currentActivity = String(workspace.currentActivity || \"\");\n"
+        "        var active = \"activeWindow\" in workspace ? workspace.activeWindow : workspace.activeClient;\n"
+        "        result.activeWindow = active ? String(active.internalId) : \"\";\n"
         "        var list = workspace.stackingOrder;\n"
         "        if (!list || list.length === undefined) {\n"
         "            list = typeof workspace.windowList === \"function\" ? workspace.windowList() : workspace.clientList();\n"
@@ -209,6 +211,7 @@ KWinWindowSnapshot parse(const QByteArray &json)
     snapshot.error = root.value(QStringLiteral("error")).toString();
     snapshot.currentDesktop = root.value(QStringLiteral("currentDesktop")).toString();
     snapshot.currentActivity = root.value(QStringLiteral("currentActivity")).toString();
+    snapshot.activeWindowId = root.value(QStringLiteral("activeWindow")).toString();
     const QJsonArray outputs = root.value(QStringLiteral("outputs")).toArray();
     for (const QJsonValue &value : outputs) {
         const QJsonObject object = value.toObject();

@@ -10,6 +10,7 @@
 #include <QPointer>
 #include <QSettings>
 #include <QDebug>
+#include <QCoreApplication>
 
 namespace {
 QString sanitizedFileName(const QString &filePath)
@@ -104,7 +105,7 @@ void CatboxUploader::upload()
     m_multipart->append(filePart);
 
     QNetworkRequest req(QUrl(QStringLiteral("https://catbox.moe/user/api.php")));
-    req.setRawHeader("User-Agent", "EShot/3.0");
+    req.setRawHeader("User-Agent", "EShot/" + QCoreApplication::applicationVersion().toLatin1());
     req.setTransferTimeout(60000);
 
     m_reply = nam()->post(req, m_multipart);

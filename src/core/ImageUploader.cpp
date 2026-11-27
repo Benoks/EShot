@@ -21,8 +21,14 @@
 #include <QTemporaryFile>
 #include <QUrl>
 #include <QUrlQuery>
+#include <QCoreApplication>
 
 namespace {
+QByteArray userAgent()
+{
+    return "EShot/" + QCoreApplication::applicationVersion().toLatin1();
+}
+
 QString sanitizedFileName(const QString &filePath)
 {
     QString name = QFileInfo(filePath).fileName();
@@ -207,7 +213,7 @@ public:
         m_multipart->append(filePart);
 
         QNetworkRequest req(m_url);
-        req.setRawHeader("User-Agent", "EShot/3.0");
+        req.setRawHeader("User-Agent", userAgent());
         req.setTransferTimeout(60000);
         m_reply = nam()->post(req, m_multipart);
         m_multipart->setParent(m_reply);
@@ -321,7 +327,7 @@ public:
         m_multipart->append(filePart);
 
         QNetworkRequest req(m_url);
-        req.setRawHeader("User-Agent", "EShot/3.0");
+        req.setRawHeader("User-Agent", userAgent());
         req.setTransferTimeout(60000);
         m_reply = nam()->post(req, m_multipart);
         m_multipart->setParent(m_reply);
@@ -375,7 +381,7 @@ private:
     void resolveTmpFilesDirectUrl(const QUrl &landingUrl)
     {
         QNetworkRequest req(landingUrl);
-        req.setRawHeader("User-Agent", "EShot/3.0");
+        req.setRawHeader("User-Agent", userAgent());
         req.setTransferTimeout(60000);
         m_reply = nam()->get(req);
 
@@ -512,7 +518,7 @@ public:
 
         QNetworkRequest req(m_url);
         req.setRawHeader("Accept", "application/json");
-        req.setRawHeader("User-Agent", "EShot/3.0");
+        req.setRawHeader("User-Agent", userAgent());
         req.setTransferTimeout(60000);
         m_reply = nam()->post(req, m_multipart);
         m_multipart->setParent(m_reply);
@@ -673,7 +679,7 @@ private:
         req.setRawHeader("Authorization", "OAuth " + m_token.toUtf8());
         req.setRawHeader("Accept", "application/json");
         req.setHeader(QNetworkRequest::ContentTypeHeader, QVariant(QStringLiteral("application/json")));
-        req.setRawHeader("User-Agent", "EShot/3.0");
+        req.setRawHeader("User-Agent", userAgent());
         req.setTransferTimeout(60000);
         return req;
     }
@@ -886,46 +892,67 @@ private:
     {
         QNetworkRequest req(url);
         req.setRawHeader("Authorization", "Bearer " + m_token.toUtf8());
-        req.setRawHeader("User-Agent", "EShot/3.0");
+        req.setRawHeader("User-Agent", userAgent());
         if (!contentType.isEmpty())
             req.setHeader(QNetworkRequest::ContentTypeHeader, QString::fromLatin1(contentType));
         req.setTransferTimeout(60000);
         return req;
     }
 
+    // Resumable upload: multipart uploads are limited to 5 MB, and a PNG of a
+    // 4K screen is often larger. First a session is opened with the file's
+    // metadata, then the file is sent to the session URL.
     void createFile()
     {
-        QUrl url(QStringLiteral("https://www.googleapis.com/upload/drive/v3/files"));
-        QUrlQuery query;
-        query.addQueryItem(QStringLiteral("uploadType"), QStringLiteral("multipart"));
-        query.addQueryItem(QStringLiteral("fields"), QStringLiteral("id"));
-        url.setQuery(query);
-
-        m_multipart = new QHttpMultiPart(QHttpMultiPart::RelatedType);
-
-        QJsonObject metadata;
-        metadata.insert(QStringLiteral("name"), QFileInfo(imagePath()).fileName());
-        metadata.insert(QStringLiteral("mimeType"), QStringLiteral("image/png"));
-
-        QHttpPart metadataPart;
-        metadataPart.setHeader(QNetworkRequest::ContentTypeHeader, QVariant(QStringLiteral("application/json; charset=UTF-8")));
-        metadataPart.setBody(QJsonDocument(metadata).toJson(QJsonDocument::Compact));
-        m_multipart->append(metadataPart);
-
-        QHttpPart filePart;
-        filePart.setHeader(QNetworkRequest::ContentTypeHeader, QVariant(QStringLiteral("image/png")));
-        QFile *file = new QFile(imagePath(), m_multipart);
-        if (!file->open(QIODevice::ReadOnly)) {
-            delete m_multipart;
-            m_multipart = nullptr;
+        QFileInfo info(imagePath());
+        if (!info.isReadable()) {
             finishWithError(TranslationManager::uploadErrorCannotReadImage());
             return;
         }
-        filePart.setBodyDevice(file);
-        m_multipart->append(filePart);
+        QUrl url(QStringLiteral("https://www.googleapis.com/upload/drive/v3/files"));
+        QUrlQuery query;
+        query.addQueryItem(QStringLiteral("uploadType"), QStringLiteral("resumable"));
+        query.addQueryItem(QStringLiteral("fields"), QStringLiteral("id"));
+        url.setQuery(query);
 
-        m_reply = nam()->post(request(url), m_multipart);
-        m_multipart->setParent(m_reply);
+        QJsonObject metadata;
+        metadata.insert(QStringLiteral("name"), info.fileName());
+        metadata.insert(QStringLiteral("mimeType"), QStringLiteral("image/png"));
+        QNetworkRequest req = request(url, "application/json; charset=UTF-8");
+        req.setRawHeader("X-Upload-Content-Type", "image/png");
+        req.setRawHeader("X-Upload-Content-Length", QByteArray::number(info.size()));
+        m_reply = nam()->post(req, QJsonDocument(metadata).toJson(QJsonDocument::Compact));
+
+        QPointer<GoogleDriveUploader> self(this);
+        QObject::connect(m_reply, &QNetworkReply::finished, this, [this, self]() {
+            if (!self) return;
+            const int code = m_reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+            const QNetworkReply::NetworkError err = m_reply->error();
+            const QUrl session = QUrl(QString::fromLatin1(m_reply->rawHeader("Location")));
+            clearReply();
+            if (err != QNetworkReply::NoError || code < 200 || code >= 300) {
+                finishWithError(code == 401 ? TranslationManager::uploadErrorGoogleAuthFailed()
+                                            : TranslationManager::uploadErrorHttp(code));
+                return;
+            }
+            if (!session.isValid() || session.scheme() != QLatin1String("https")) {
+                finishWithError(TranslationManager::uploadErrorHttp(code));
+                return;
+            }
+            sendFile(session);
+        });
+    }
+
+    void sendFile(const QUrl &session)
+    {
+        auto *file = new QFile(imagePath(), this);
+        if (!file->open(QIODevice::ReadOnly)) {
+            delete file;
+            finishWithError(TranslationManager::uploadErrorCannotReadImage());
+            return;
+        }
+        m_reply = nam()->put(request(session, "image/png"), file);
+        file->setParent(m_reply);
 
         QPointer<GoogleDriveUploader> self(this);
         QObject::connect(m_reply, &QNetworkReply::finished, this, [this, self]() {
@@ -933,21 +960,13 @@ private:
             const QByteArray data = m_reply->readAll();
             const int code = m_reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
             const QNetworkReply::NetworkError err = m_reply->error();
-            QNetworkReply *reply = m_reply;
-            QHttpMultiPart *mp = m_multipart;
-            m_multipart = nullptr;
             clearReply();
-            if (mp && mp->parent() != reply) mp->deleteLater();
             if (err != QNetworkReply::NoError || code < 200 || code >= 300) {
-                if (code == 401) {
-                    finishWithError(TranslationManager::uploadErrorGoogleAuthFailed());
-                    return;
-                }
-                finishWithError(TranslationManager::uploadErrorHttp(code));
+                finishWithError(code == 401 ? TranslationManager::uploadErrorGoogleAuthFailed()
+                                            : TranslationManager::uploadErrorHttp(code));
                 return;
             }
-            const QJsonObject obj = QJsonDocument::fromJson(data).object();
-            m_fileId = obj.value(QStringLiteral("id")).toString();
+            m_fileId = QJsonDocument::fromJson(data).object().value(QStringLiteral("id")).toString();
             if (m_fileId.isEmpty()) {
                 finishWithError(TranslationManager::uploadErrorGoogleFileIdMissing());
                 return;

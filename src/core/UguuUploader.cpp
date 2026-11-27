@@ -10,6 +10,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
+#include <QCoreApplication>
 
 namespace {
 QString sanitizedFileName(const QString &filePath)
@@ -91,7 +92,7 @@ void UguuUploader::upload()
 
     QNetworkRequest req(QUrl(QStringLiteral("https://uguu.se/upload?output=json")));
     req.setRawHeader("Accept", "application/json");
-    req.setRawHeader("User-Agent", "EShot/3.0");
+    req.setRawHeader("User-Agent", "EShot/" + QCoreApplication::applicationVersion().toLatin1());
     req.setTransferTimeout(60000);
 
     m_reply = nam()->post(req, m_multipart);

@@ -54,6 +54,50 @@ QString pluginName(qint64 pid)
     return QStringLiteral("eshot-activate-%1").arg(pid);
 }
 
+QString restoreScript(const QString &internalId)
+{
+    return QStringLiteral(
+        "(function () {\n"
+        "    var id = %1;\n"
+        "    var windows = typeof workspace.windowList === \"function\"\n"
+        "        ? workspace.windowList() : workspace.clientList();\n"
+        "    for (var i = 0; i < windows.length; ++i) {\n"
+        "        var window = windows[i];\n"
+        "        if (String(window.internalId) !== id)\n"
+        "            continue;\n"
+        "        if (window.minimized || window.deleted)\n"
+        "            break;\n"
+        "        if (\"activeWindow\" in workspace)\n"
+        "            workspace.activeWindow = window;\n"
+        "        else\n"
+        "            workspace.activeClient = window;\n"
+        "        break;\n"
+        "    }\n"
+        "})();\n").arg(LinuxKWinScript::jsString(internalId));
+}
+
+bool requestRestore(qint64 pid, const QString &internalId)
+{
+#if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
+    if (internalId.isEmpty())
+        return false;
+    const QString path = LinuxKWinScript::writeScriptFile(restoreScript(internalId));
+    if (path.isEmpty())
+        return false;
+    const QString plugin = QStringLiteral("eshot-restore-%1").arg(pid);
+    const bool ok = LinuxKWinScript::loadAndStartAsync(path, plugin);
+    QTimer::singleShot(5000, QCoreApplication::instance(), [path, plugin]() {
+        QFile::remove(path);
+        LinuxKWinScript::unloadAsync(plugin);
+    });
+    return ok;
+#else
+    Q_UNUSED(pid);
+    Q_UNUSED(internalId);
+    return false;
+#endif
+}
+
 bool requestActivation(qint64 pid, const QString &caption)
 {
 #if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)

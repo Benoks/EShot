@@ -361,6 +361,10 @@ private:
     AnnotationEngine::ShapeHandle shapeHandleAt(const QPoint &pos) const;
     void applyDrawModifiers(Qt::KeyboardModifiers modifiers);
     void showSelectToEditHint(QWidget *slider, bool blur);
+    // After the overlay closes, gives focus back to the window that was
+    // active before the capture, so Alt+Tab continues from that window.
+    void restorePreviousWindowFocus();
+    quintptr m_previousForegroundWindow = 0; // Windows HWND
     bool m_selectToEditHintShown = false;
     enum TextResizeHandle { TextResizeNone, TextResizeTopLeft, TextResizeTopRight,
                             TextResizeBottomLeft, TextResizeBottomRight };

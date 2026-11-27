@@ -29,14 +29,13 @@ UploadDialog::UploadDialog(QWidget *parent) : QDialog(parent)
                               static_cast<int>(ImageUploader::Provider::Catbox));
     m_providerCombo->addItem(TranslationManager::tr("uploadProviderUguu"),
                               static_cast<int>(ImageUploader::Provider::Uguu));
-    m_providerCombo->addItem(QStringLiteral("TmpFiles.org"),
+    m_providerCombo->addItem(TranslationManager::tr("uploadProviderTmpFiles"),
                               static_cast<int>(ImageUploader::Provider::TmpFiles));
-    m_providerCombo->addItem(QStringLiteral("temp.sh"),
+    m_providerCombo->addItem(TranslationManager::tr("uploadProviderTempSh"),
                               static_cast<int>(ImageUploader::Provider::TempSh));
     m_providerCombo->addItem(QStringLiteral("Allwebs"),
                               static_cast<int>(ImageUploader::Provider::Allwebs));
-    m_providerCombo->addItem(QStringLiteral("Radikal Cloud"),
-                              static_cast<int>(ImageUploader::Provider::RadikalCloud));
+    // Radikal Cloud is no longer listed: its domain stopped resolving in 2026.
     m_providerCombo->addItem(QStringLiteral("Yandex Disk"),
                               static_cast<int>(ImageUploader::Provider::YandexDisk));
     m_providerCombo->addItem(QStringLiteral("Google Drive"),

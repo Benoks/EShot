@@ -60,6 +60,7 @@ struct KWinWindowSnapshot {
     QString error;                    // set when the script caught an exception
     QString currentDesktop;
     QString currentActivity;
+    QString activeWindowId;           // internalId of the window active before the capture
     QVector<KWinOutputInfo> outputs;
     QVector<KWinWindowInfo> windows;  // topmost first
 };

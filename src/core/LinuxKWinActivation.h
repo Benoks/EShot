@@ -20,4 +20,12 @@ QString pluginName(qint64 pid);
 // when KWin is not reachable or refuses the script. KDE only.
 bool requestActivation(qint64 pid, const QString &caption);
 
+// Script that activates the window with this KWin internalId again, unless
+// it was closed or minimized meanwhile.
+QString restoreScript(const QString &internalId);
+
+// After a capture: gives focus back to the window that was active before it,
+// so Alt+Tab continues from there. Does not wait for KWin. KDE only.
+bool requestRestore(qint64 pid, const QString &internalId);
+
 }

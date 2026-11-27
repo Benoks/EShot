@@ -64,6 +64,8 @@
 #include <QAbstractSpinBox>
 #include <QSlider>
 #include <QComboBox>
+#include <QAbstractButton>
+#include <QAbstractSlider>
 #include <QCheckBox>
 #include <QButtonGroup>
 #include <QSignalBlocker>
@@ -89,6 +91,8 @@
 #ifdef Q_OS_WIN
 #include <windows.h>
 #endif
+
+static void applyPanelCursors(QWidget *panel);
 
 namespace {
 void addOverlayPanelSection(QVBoxLayout *layout, QWidget *parent,
@@ -696,6 +700,7 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
     m_annotationEngine = new AnnotationEngine(this);
 
     m_toolbar = new AnnotationToolbar(this);
+    m_toolbar->setCursor(Qt::ArrowCursor);
     m_toolbar->hide();
 
     connect(m_toolbar, &AnnotationToolbar::toolSelected, this, &CaptureOverlay::onToolSelected);
@@ -768,6 +773,7 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
     setupRecordingDrawer();
 
     m_actionPanel = new QWidget(this);
+    m_actionPanel->setCursor(Qt::ArrowCursor);
     m_actionPanel->setStyleSheet(R"(
         QWidget { background-color: #2d2d2d; border: 1px solid #404040; border-radius: 10px; }
     )");
@@ -1031,6 +1037,7 @@ void CaptureOverlay::setupToolSettingsDrawer()
                 m_annotationEngine->finishPropertyEdit();
         });
     }
+    applyPanelCursors(m_toolSettingsDrawer);
     m_toolSettingsDrawer->hide();
 
     const int drawerAnimationDurationMs = overlayPanelMetrics().drawerAnimationDurationMs;
@@ -1309,7 +1316,25 @@ void CaptureOverlay::setupRecordingDrawer()
     connect(advancedButton, &QPushButton::clicked, this, &CaptureOverlay::openRecordingSettings);
     connect(m_recordingStartButton, &QPushButton::clicked, this, &CaptureOverlay::startRecordingFromDrawer);
     connect(m_recordingCancelButton, &QPushButton::clicked, this, [this] { hideRecordingDrawer(); });
+    applyPanelCursors(m_recordingDrawer);
     m_recordingDrawer->hide();
+}
+
+static void applyPanelCursors(QWidget *panel)
+{
+    // Child widgets inherit the overlay's cursor (move or resize arrows over
+    // the selection). Panels get a plain arrow, their controls a pointer.
+    if (!panel)
+        return;
+    panel->setCursor(Qt::ArrowCursor);
+    const auto controls = panel->findChildren<QWidget *>();
+    for (QWidget *control : controls) {
+        if (control->testAttribute(Qt::WA_SetCursor))
+            continue;
+        if (qobject_cast<QAbstractButton *>(control) || qobject_cast<QComboBox *>(control)
+            || qobject_cast<QAbstractSlider *>(control))
+            control->setCursor(Qt::PointingHandCursor);
+    }
 }
 
 void CaptureOverlay::showRecordingDrawer(RecordingDrawerMode mode)
@@ -1559,6 +1584,7 @@ void CaptureOverlay::startRecordingFromDrawer()
     const QRect displayRect = selectedDisplayRect();
     hideRecordingDrawer(false);
     hide();
+    restorePreviousWindowFocus();
     m_selectionComplete = false;
     m_isSelecting = false;
     hideToolbar();
@@ -2095,6 +2121,15 @@ void CaptureOverlay::startCaptureInternal(CaptureSelectionMode selectionMode, bo
     }
     m_preselectGlobal = preselectGlobal;
     m_selectToEditHintShown = false;
+#ifdef Q_OS_WIN
+    {
+        HWND foreground = ::GetForegroundWindow();
+        DWORD processId = 0;
+        ::GetWindowThreadProcessId(foreground, &processId);
+        m_previousForegroundWindow = processId != ::GetCurrentProcessId()
+            ? reinterpret_cast<quintptr>(foreground) : 0;
+    }
+#endif
     releaseCaptureBuffers();
     ++m_captureGeneration;
     m_showHighlighterStraightHint = false;
@@ -4353,6 +4388,7 @@ void CaptureOverlay::finishCapture()
     if (shouldComposeCaptureResult(recordingMode))
         result = getSelectedPixmap();
     hide();
+    restorePreviousWindowFocus();
     m_selectionComplete = false;
     m_isSelecting = false;
     m_selectionAnchorScreenRect = QRect();
@@ -4383,9 +4419,34 @@ void CaptureOverlay::finishCapture()
     if (!result.isNull()) emit captureCompleted(result);
 }
 
+void CaptureOverlay::restorePreviousWindowFocus()
+{
+#ifdef Q_OS_WIN
+    HWND previous = reinterpret_cast<HWND>(m_previousForegroundWindow);
+    m_previousForegroundWindow = 0;
+    if (previous && ::IsWindow(previous) && !::IsIconic(previous))
+        ::SetForegroundWindow(previous);
+#elif defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
+    const QString previous = m_kdeWindowSnapshot.valid ? m_kdeWindowSnapshot.activeWindowId : QString();
+    m_kdeWindowSnapshot = KWinWindowSnapshot();
+    if (previous.isEmpty())
+        return;
+    // KWin hands the focus to some window once the overlay is unmapped; that
+    // can happen after a script sent right away, so wait for it first.
+    const quint64 generation = m_captureGeneration;
+    QTimer::singleShot(150, this, [this, previous, generation]() {
+        if (generation != m_captureGeneration || isVisible())
+            return; // a new capture started meanwhile
+        qInfo() << "[CaptureOverlay] giving the focus back to the window active before the capture" << previous;
+        LinuxKWinActivation::requestRestore(QCoreApplication::applicationPid(), previous);
+    });
+#endif
+}
+
 void CaptureOverlay::cancelCapture()
 {
     hide();
+    restorePreviousWindowFocus();
     m_selectionComplete = false;
     m_isSelecting = false;
     m_selectionAnchorScreenRect = QRect();
@@ -5159,7 +5220,10 @@ bool CaptureOverlay::manualSelectionAllowed() const
 #if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
 void CaptureOverlay::requestKdeWindowList()
 {
-    if (m_selectionMode != CaptureSelectionMode::Window || !windowCaptureSupported())
+    // Also asked for free selection: the reply names the window that was
+    // active, which gets the focus back when the capture ends.
+    m_kdeWindowSnapshot = KWinWindowSnapshot();
+    if (!windowCaptureSupported())
         return;
     if (!m_kwinWindowList) {
         m_kwinWindowList = new KWinWindowListClient(this);
@@ -5657,6 +5721,7 @@ void CaptureOverlay::onPinToDesktop()
     new PinnedWindow(result, screenPos, m_screenImages.isEmpty() ? 0.0 : outputScale);
 
     hide();
+    restorePreviousWindowFocus();
     m_selectionComplete = false;
     m_isSelecting = false;
     m_selectionAnchorScreenRect = QRect();
@@ -5729,7 +5794,9 @@ void CaptureOverlay::updateCursor(const QPoint &pos)
             setCursor(Qt::SizeHorCursor);
             break;
         case ResMove:
-            if (m_annotationEngine && m_annotationEngine->currentTool() == AnnotationEngine::None)
+            if (m_recordingDrawerMode != RecordingDrawerMode::None)
+                setCursor(Qt::ArrowCursor);
+            else if (m_annotationEngine && m_annotationEngine->currentTool() == AnnotationEngine::None)
                 setCursor(Qt::SizeAllCursor);
             else
                 setCursor(Qt::CrossCursor); // For drawing

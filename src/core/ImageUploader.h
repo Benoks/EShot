@@ -20,7 +20,7 @@ public:
         TmpFiles,
         TempSh,
         Allwebs,
-        RadikalCloud,
+        RadikalCloud, // service gone, not offered; kept so saved provider numbers stay valid
     };
 
     struct Result {
