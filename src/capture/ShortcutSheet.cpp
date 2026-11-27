@@ -132,15 +132,15 @@ int drawKeyChip(QPainter &painter, int x, int y, const QString &key)
     const int width = keyChipWidth(key);
     painter.setFont(font);
     if (isGesture(key)) {
-        painter.setPen(QColor(0xb3, 0xb5, 0xba));
+        painter.setPen(QColor(0xad, 0xad, 0xb0));
         painter.drawText(QRect(x, y, width, RowHeight), Qt::AlignCenter, key);
         return width;
     }
     const QRect chip(x, y + 5, width, RowHeight - 10);
-    painter.setPen(QPen(QColor(0x5a, 0x5c, 0x62), 1));
-    painter.setBrush(QColor(0x46, 0x48, 0x4e));
+    painter.setPen(QPen(QColor(0x48, 0x48, 0x4c), 1));
+    painter.setBrush(QColor(0x35, 0x35, 0x38));
     painter.drawRoundedRect(QRectF(chip).adjusted(0.5, 0.5, -0.5, -0.5), 3, 3);
-    painter.setPen(QColor(0xdc, 0xdd, 0xe0));
+    painter.setPen(QColor(0xd9, 0xd9, 0xdb));
     painter.drawText(chip, Qt::AlignCenter, key);
     return width;
 }
@@ -149,7 +149,7 @@ void drawSection(QPainter &painter, const Section &section, int x, int &y, int w
                  int keyColumnWidth)
 {
     painter.setFont(sheetFont(10, QFont::DemiBold));
-    painter.setPen(QColor(0xed, 0xed, 0xee));
+    painter.setPen(QColor(0xec, 0xec, 0xec));
     painter.drawText(QRect(x, y, width, SectionTitleHeight - 6),
                      Qt::AlignLeft | Qt::AlignVCenter, section.title);
     y += SectionTitleHeight;
@@ -167,13 +167,13 @@ void drawSection(QPainter &painter, const Section &section, int x, int &y, int w
 
         const QRect labelRect(x, y, width - keyColumnWidth - KeyLabelGap, RowHeight);
         painter.setFont(labelFont);
-        painter.setPen(QColor(0xed, 0xed, 0xee));
+        painter.setPen(QColor(0xec, 0xec, 0xec));
         painter.drawText(labelRect, Qt::AlignLeft | Qt::AlignVCenter,
                          QFontMetrics(labelFont).elidedText(row.label, Qt::ElideRight,
                                                             labelRect.width()));
         y += RowHeight;
         if (r + 1 < section.rows.size()) {
-            painter.setPen(QPen(QColor(0x44, 0x46, 0x4b), 1));
+            painter.setPen(QPen(QColor(0x34, 0x34, 0x37), 1));
             painter.drawLine(x, y, x + width, y);
         }
     }
@@ -322,14 +322,14 @@ void drawShortcutSheet(QPainter &painter, const QRect &monitorRect, bool windowS
     painter.setRenderHint(QPainter::Antialiasing, true);
     painter.setClipRect(card.adjusted(-2, -2, 2, 2));
 
-    // Overlay panel palette: #3b3d42 body, #505257 border, soft drop shadow.
+    // Overlay panel palette: #2a2a2c body, #3f3f42 border, soft drop shadow.
     painter.setPen(Qt::NoPen);
     for (int i = 1; i <= 6; ++i) {
         painter.setBrush(QColor(0, 0, 0, 22));
         painter.drawRoundedRect(card.adjusted(-i, -i + 4, i, i + 4), 8 + i, 8 + i);
     }
-    painter.setPen(QPen(QColor(0x50, 0x52, 0x57), 1));
-    painter.setBrush(QColor(0x3b, 0x3d, 0x42));
+    painter.setPen(QPen(QColor(0x3f, 0x3f, 0x42), 1));
+    painter.setBrush(QColor(0x2a, 0x2a, 0x2c));
     painter.drawRoundedRect(card, 8, 8);
 
     // Header: title on the left, how to close on the right.
@@ -337,12 +337,12 @@ void drawShortcutSheet(QPainter &painter, const QRect &monitorRect, bool windowS
     const int right = card.right() - Padding;
     const QRect headerRect(left, card.top() + Padding - 6, right - left, 30);
     painter.setFont(sheetFont(15, QFont::DemiBold));
-    painter.setPen(QColor(0xed, 0xed, 0xee));
+    painter.setPen(QColor(0xec, 0xec, 0xec));
     painter.drawText(headerRect, Qt::AlignLeft | Qt::AlignVCenter, title);
     painter.setFont(sheetFont(9, QFont::Normal));
-    painter.setPen(QColor(0xb3, 0xb5, 0xba));
+    painter.setPen(QColor(0xad, 0xad, 0xb0));
     painter.drawText(headerRect, Qt::AlignRight | Qt::AlignVCenter, closeHint);
-    painter.setPen(QPen(QColor(0x50, 0x52, 0x57), 1));
+    painter.setPen(QPen(QColor(0x3f, 0x3f, 0x42), 1));
     const int dividerY = headerRect.bottom() + 12;
     painter.drawLine(left, dividerY, right, dividerY);
 
@@ -366,10 +366,10 @@ void drawShortcutSheet(QPainter &painter, const QRect &monitorRect, bool windowS
 
     // Footer: point at the Quick Settings tab, the easiest thing to miss.
     const QRect footerRect(left, card.bottom() - footerHeight + 4, right - left, footerHeight - 10);
-    painter.setPen(QPen(QColor(0x44, 0x46, 0x4b), 1));
+    painter.setPen(QPen(QColor(0x34, 0x34, 0x37), 1));
     painter.drawLine(left, footerRect.top(), right, footerRect.top());
     painter.setFont(sheetFont(9, QFont::Normal));
-    painter.setPen(QColor(0xb3, 0xb5, 0xba));
+    painter.setPen(QColor(0xad, 0xad, 0xb0));
     painter.drawText(footerRect, Qt::AlignLeft | Qt::AlignVCenter,
                      QFontMetrics(painter.font()).elidedText(footer, Qt::ElideRight, footerRect.width()));
     painter.restore();

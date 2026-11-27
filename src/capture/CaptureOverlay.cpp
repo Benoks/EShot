@@ -539,12 +539,12 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
     m_textEditPanel->setObjectName(QStringLiteral("textEditPanel"));
     m_textEditPanel->setStyleSheet(R"(
         QWidget#textEditPanel {
-            background-color: rgba(59, 61, 66, 245);
+            background-color: rgba(42, 42, 44, 245);
             border: 1px solid #56585d;
             border-radius: 8px;
         }
         QToolButton {
-            background-color: #44464b;
+            background-color: #343437;
             color: white;
             border: 1px solid #505258;
             border-radius: 6px;
@@ -567,7 +567,7 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
         QFontComboBox { padding: 0px 8px; }
         QFontComboBox:hover, QSpinBox:hover {
             border-color: #6a6a6a;
-            background: #303237;
+            background: #202022;
         }
         QFontComboBox:focus, QSpinBox:focus {
             border-color: #0078d7;
@@ -576,10 +576,10 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
             subcontrol-origin: padding;
             subcontrol-position: top right;
             width: 28px;
-            border-left: 1px solid #55575d;
+            border-left: 1px solid #444448;
             border-top-right-radius: 6px;
             border-bottom-right-radius: 6px;
-            background: #44464b;
+            background: #343437;
         }
         QFontComboBox::down-arrow {
             image: url(:/icons/chevron_down.svg);
@@ -592,8 +592,8 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
         QSpinBox::up-button, QSpinBox::down-button {
             subcontrol-origin: border;
             width: 22px;
-            background: #44464b;
-            border-left: 1px solid #55575d;
+            background: #343437;
+            border-left: 1px solid #444448;
         }
         QSpinBox::up-button {
             subcontrol-position: top right;
@@ -604,7 +604,7 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
             border-bottom-right-radius: 6px;
         }
         QSpinBox::up-button:hover, QSpinBox::down-button:hover {
-            background: #46484e;
+            background: #353538;
         }
         QSpinBox::up-arrow {
             image: url(:/icons/chevron_up.svg);
@@ -775,7 +775,7 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
     m_actionPanel = new QWidget(this);
     m_actionPanel->setCursor(Qt::ArrowCursor);
     m_actionPanel->setStyleSheet(R"(
-        QWidget { background-color: #3b3d42; border: 1px solid #505257; border-radius: 10px; }
+        QWidget { background-color: #2a2a2c; border: 1px solid #3f3f42; border-radius: 10px; }
     )");
     QVBoxLayout *actionLayout = new QVBoxLayout(m_actionPanel);
     actionLayout->setContentsMargins(6, 8, 6, 8);
@@ -795,45 +795,45 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
         QPushButton *pinBtn = addBtn(":/icons/pin.svg", TranslationManager::actionPin(),
             [this]() { onPinToDesktop(); });
         pinBtn->setStyleSheet(R"(
-            QPushButton { background-color: #46484e; border: 1px solid #5a5c62; border-radius: 8px; }
-            QPushButton:hover { background-color: #505257; border-color: #64666c; }
-            QPushButton:pressed { background-color: #404247; }
+            QPushButton { background-color: #353538; border: 1px solid #48484c; border-radius: 8px; }
+            QPushButton:hover { background-color: #3f3f42; border-color: #545458; }
+            QPushButton:pressed { background-color: #2f2f31; }
         )");
         QPushButton *copyBtn = addBtn(":/icons/copy.svg", TranslationManager::actionCopy(),
             [this]() { onCopyToClipboard(); });
         copyBtn->setStyleSheet(R"(
-            QPushButton { background-color: #46484e; border: 1px solid #5a5c62; border-radius: 8px; }
-            QPushButton:hover { background-color: #505257; border-color: #64666c; }
-            QPushButton:pressed { background-color: #404247; }
+            QPushButton { background-color: #353538; border: 1px solid #48484c; border-radius: 8px; }
+            QPushButton:hover { background-color: #3f3f42; border-color: #545458; }
+            QPushButton:pressed { background-color: #2f2f31; }
         )");
         QPushButton *saveBtn = addBtn(":/icons/save.svg", TranslationManager::actionSave(),
             [this]() { onSave(); });
         saveBtn->setStyleSheet(R"(
-            QPushButton { background-color: #46484e; border: 1px solid #5a5c62; border-radius: 8px; }
-            QPushButton:hover { background-color: #505257; border-color: #64666c; }
-            QPushButton:pressed { background-color: #404247; }
+            QPushButton { background-color: #353538; border: 1px solid #48484c; border-radius: 8px; }
+            QPushButton:hover { background-color: #3f3f42; border-color: #545458; }
+            QPushButton:pressed { background-color: #2f2f31; }
         )");
         QPushButton *closeBtn = addBtn(":/icons/close.svg", TranslationManager::actionClose(),
             [this]() { onClose(); });
         closeBtn->setStyleSheet(R"(
-            QPushButton { background-color: #46484e; border: 1px solid #5a5c62; border-radius: 8px; }
-            QPushButton:hover { background-color: #505257; border-color: #64666c; }
-            QPushButton:pressed { background-color: #404247; }
+            QPushButton { background-color: #353538; border: 1px solid #48484c; border-radius: 8px; }
+            QPushButton:hover { background-color: #3f3f42; border-color: #545458; }
+            QPushButton:pressed { background-color: #2f2f31; }
         )");
         // Shortcut sheet, set apart at the bottom: it helps rather than acts.
         QFrame *helpSeparator = new QFrame(m_actionPanel);
         helpSeparator->setFixedHeight(1);
-        helpSeparator->setStyleSheet(QStringLiteral("background: #505257; border: none;"));
+        helpSeparator->setStyleSheet(QStringLiteral("background: #3f3f42; border: none;"));
         actionLayout->addSpacing(2);
         actionLayout->addWidget(helpSeparator);
         actionLayout->addSpacing(2);
         m_helpButton = addBtn(":/icons/help.svg", QString(), [this]() { toggleShortcutSheet(); });
-        m_helpButton->setToolTip(QStringLiteral("<b>%1</b>&nbsp;&nbsp;<span style='color:#b3b5ba'>? / F1</span>")
+        m_helpButton->setToolTip(QStringLiteral("<b>%1</b>&nbsp;&nbsp;<span style='color:#adadb0'>? / F1</span>")
                                      .arg(TranslationManager::tr("sheetTitle").toHtmlEscaped()));
         m_helpButton->setStyleSheet(R"(
-            QPushButton { background-color: #46484e; border: 1px solid #5a5c62; border-radius: 8px; }
-            QPushButton:hover { background-color: #505257; border-color: #64666c; }
-            QPushButton:pressed { background-color: #404247; }
+            QPushButton { background-color: #353538; border: 1px solid #48484c; border-radius: 8px; }
+            QPushButton:hover { background-color: #3f3f42; border-color: #545458; }
+            QPushButton:pressed { background-color: #2f2f31; }
         )");
 
     }
@@ -1990,7 +1990,7 @@ void CaptureOverlay::refreshUI()
         }
     }
     if (m_helpButton) {
-        m_helpButton->setToolTip(QStringLiteral("<b>%1</b>&nbsp;&nbsp;<span style='color:#b3b5ba'>? / F1</span>")
+        m_helpButton->setToolTip(QStringLiteral("<b>%1</b>&nbsp;&nbsp;<span style='color:#adadb0'>? / F1</span>")
                                      .arg(TranslationManager::tr("sheetTitle").toHtmlEscaped()));
     }
 }

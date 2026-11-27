@@ -14,7 +14,7 @@ class ApplicationThemeTests : public QObject {
 private slots:
     void createsExplicitPalettes()
     {
-        QCOMPARE(eshotApplicationPalette(true, false).color(QPalette::Window), QColor(0x3b, 0x3d, 0x42));
+        QCOMPARE(eshotApplicationPalette(true, false).color(QPalette::Window), QColor(0x2a, 0x2a, 0x2c));
         QCOMPARE(eshotApplicationPalette(false, false).color(QPalette::Base), QColor(Qt::white));
         QCOMPARE(eshotApplicationPalette(false, true).color(QPalette::Highlight), QColor(Qt::yellow));
     }
@@ -38,7 +38,7 @@ private slots:
         const QString dark = eshotTrayMenuStyleSheet(true, false);
         const QString light = eshotTrayMenuStyleSheet(false, false);
         const QString highContrast = eshotTrayMenuStyleSheet(true, true);
-        QVERIFY(dark.contains(QStringLiteral("background: #3b3d42")));
+        QVERIFY(dark.contains(QStringLiteral("background: #2a2a2c")));
         QVERIFY(light.contains(QStringLiteral("background: #f9f9f9")));
         QVERIFY(highContrast.contains(QStringLiteral("2px solid #ffffff")));
         QVERIFY(highContrast.contains(QStringLiteral("background: #ffff00")));
@@ -58,9 +58,9 @@ private slots:
     {
         using namespace ThemeColors;
         // Dark values follow the graphite design tokens.
-        QCOMPARE(css(Role::Muted, Theme::Dark), QStringLiteral("#b3b5ba"));
+        QCOMPARE(css(Role::Muted, Theme::Dark), QStringLiteral("#adadb0"));
         QCOMPARE(css(Role::Warning, Theme::Dark), QStringLiteral("#ff9800"));
-        QCOMPARE(css(Role::ListBackground, Theme::Dark), QStringLiteral("#303237"));
+        QCOMPARE(css(Role::ListBackground, Theme::Dark), QStringLiteral("#202022"));
 
         const auto contrast = [](const QColor &a, const QColor &b) {
             auto luminance = [](const QColor &c) {
@@ -108,7 +108,7 @@ private slots:
         QWidget window;
         QLabel label(&window);
         ThemeColors::setStyleSheet(&label, QStringLiteral("color: @hint;"));
-        QCOMPARE(label.styleSheet(), QStringLiteral("color: #a9abb0;"));
+        QCOMPARE(label.styleSheet(), QStringLiteral("color: #a6a6a9;"));
         // Qt delivers the palette change events from the event loop.
         applyEShotApplicationTheme(app, false, false);
         QTRY_COMPARE(label.styleSheet(), QStringLiteral("color: #595959;"));

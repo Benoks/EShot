@@ -5,19 +5,19 @@
 // sheet. High contrast keeps its own black/white/yellow values.
 namespace DesignTokens {
 
-inline constexpr const char *Panel = "#3b3d42";          // toolbar, panels, windows
-inline constexpr const char *PanelBorder = "#505257";
-inline constexpr const char *Field = "#303237";          // text fields, segmented track
-inline constexpr const char *Control = "#46484e";        // buttons, combo boxes
-inline constexpr const char *ControlHover = "#4f5157";
-inline constexpr const char *ControlPressed = "#404247";
-inline constexpr const char *ControlBorder = "#5a5c62";
-inline constexpr const char *ControlBorderHover = "#64666c";
-inline constexpr const char *Selected = "#55575d";       // checked segment, pressed toggle
-inline constexpr const char *Separator = "#44464b";
-inline constexpr const char *Text = "#ededee";
-inline constexpr const char *TextMuted = "#b3b5ba";      // 5.3:1 on Panel
-inline constexpr const char *TextDisabled = "#8a8c91";
+inline constexpr const char *Panel = "#2a2a2c";          // toolbar, panels, windows
+inline constexpr const char *PanelBorder = "#3f3f42";
+inline constexpr const char *Field = "#202022";          // text fields, segmented track
+inline constexpr const char *Control = "#353538";        // buttons, combo boxes
+inline constexpr const char *ControlHover = "#3e3e41";
+inline constexpr const char *ControlPressed = "#2f2f31";
+inline constexpr const char *ControlBorder = "#48484c";
+inline constexpr const char *ControlBorderHover = "#545458";
+inline constexpr const char *Selected = "#444448";       // checked segment, pressed toggle
+inline constexpr const char *Separator = "#343437";
+inline constexpr const char *Text = "#ececec";
+inline constexpr const char *TextMuted = "#adadb0";      // 6.4:1 on Panel
+inline constexpr const char *TextDisabled = "#87878a";
 inline constexpr const char *Accent = "#0078d7";         // selection frame, primary button
 inline constexpr const char *AccentHover = "#1a86dd";
 inline constexpr const char *AccentPressed = "#006abf";

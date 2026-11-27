@@ -44,7 +44,7 @@ QPalette eshotApplicationPalette(bool dark, bool highContrast)
         setDisabledText(p, QColor(150, 150, 150), QColor(200, 200, 200));
         p.setColor(QPalette::Disabled, QPalette::Highlight, QColor(90, 90, 90));
     } else if (dark) {
-        // Graphite, the same values as the capture overlay (DesignTokens.h).
+        // Charcoal, the same values as the capture overlay (DesignTokens.h).
         p.setColor(QPalette::Window, QColor(DesignTokens::Panel));
         p.setColor(QPalette::WindowText, QColor(DesignTokens::Text));
         p.setColor(QPalette::Base, QColor(DesignTokens::Field));
