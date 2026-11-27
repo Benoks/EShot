@@ -1527,8 +1527,7 @@ private:
     {
         m_updateManager = new UpdateManager(this);
         m_updateManager->setBusyCheck([this]() {
-            return isRecordingActive() || m_recordingStartPending
-                || (m_overlay && m_overlay->isVisible());
+            return recordingBusy() || (m_overlay && m_overlay->isVisible());
         });
         // Quit through the stop-and-save path in case a recording started
         // between the busy check and the installer launch.
@@ -1890,8 +1889,9 @@ private:
             QAction *fixPrintScreenAction = m_trayMenu->addAction(
                 trayIcon(":/icons/gear.svg"),
                 TranslationManager::printScreenConflictFix());
-            connect(fixPrintScreenAction, &QAction::triggered,
-                    this, &EShotApp::onFixPrintScreenConflict);
+            connect(fixPrintScreenAction, &QAction::triggered, this, [this]() {
+                QTimer::singleShot(0, this, &EShotApp::onFixPrintScreenConflict);
+            });
             m_trayMenu->addSeparator();
         }
 
@@ -1904,21 +1904,29 @@ private:
                 updateText);
             // Installing restarts EShot; not while a recording runs.
             updateAction->setEnabled((!m_updateManager || !m_updateManager->isBusy())
-                                     && !isRecordingActive() && !m_recordingStartPending);
-            connect(updateAction, &QAction::triggered, this, &EShotApp::onUpdateRequested);
+                                     && !recordingBusy());
+            connect(updateAction, &QAction::triggered, this, [this]() {
+                QTimer::singleShot(0, this, &EShotApp::onUpdateRequested);
+            });
             m_trayMenu->addSeparator();
         }
 
         QAction *settingsAction = m_trayMenu->addAction(trayIcon(":/icons/gear.svg"), TranslationManager::traySettings());
-        connect(settingsAction, &QAction::triggered, this, &EShotApp::onSettingsRequested);
+        connect(settingsAction, &QAction::triggered, this, [this]() {
+            QTimer::singleShot(0, this, &EShotApp::onSettingsRequested);
+        });
         QAction *aboutAction = m_trayMenu->addAction(trayIcon(":/icons/pen.svg"), TranslationManager::trayAbout());
-        connect(aboutAction, &QAction::triggered, this, &EShotApp::onAboutRequested);
+        connect(aboutAction, &QAction::triggered, this, [this]() {
+            QTimer::singleShot(0, this, &EShotApp::onAboutRequested);
+        });
         QAction *reportAction = m_trayMenu->addAction(trayIcon(":/icons/bug.svg"), TranslationManager::reportProblem());
         connect(reportAction, &QAction::triggered, this, []() {
             QDesktopServices::openUrl(bugReportUrl(currentBugReportInfo()));
         });
         QAction *quitAction = m_trayMenu->addAction(trayIcon(":/icons/close.svg"), TranslationManager::trayQuit());
-        connect(quitAction, &QAction::triggered, this, &EShotApp::onQuitAction);
+        connect(quitAction, &QAction::triggered, this, [this]() {
+            QTimer::singleShot(0, this, &EShotApp::onQuitAction);
+        });
 
         if (m_recordingTrayActive)
             updateRecordingTrayToolTip();
