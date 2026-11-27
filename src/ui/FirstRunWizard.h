@@ -13,6 +13,7 @@ class QKeySequenceEdit;
 class QLineEdit;
 class QPushButton;
 class QCheckBox;
+class QRadioButton;
 class QProcess;
 
 class FirstRunWizard : public QDialog {
@@ -61,6 +62,9 @@ private:
     QLabel *m_printScreenConflictLabel = nullptr;
     QPushButton *m_printScreenFixButton = nullptr;
     QLineEdit *m_savePathEdit = nullptr;
+    QCheckBox *m_autoStartCheck = nullptr;
+    QRadioButton *m_lightshotSelectionRadio = nullptr;
+    QRadioButton *m_lockedSelectionRadio = nullptr;
 #ifdef Q_OS_LINUX
     QCheckBox *m_linuxFfmpegCheck = nullptr;
     QCheckBox *m_linuxOcrCheck = nullptr;

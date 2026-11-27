@@ -1,6 +1,8 @@
 #include <QtTest>
 #include <QApplication>
+#include <QCheckBox>
 #include <QComboBox>
+#include <QRadioButton>
 #include <QGroupBox>
 #include <QPushButton>
 #include <QScreen>
@@ -14,6 +16,12 @@
 
 #include "core/TranslationManager.h"
 #include "ui/FirstRunWizard.h"
+#include "ui/SettingsDialog.h"
+
+// The wizard applies autostart through SettingsDialog; the layout tests must
+// not touch the real login entries.
+bool SettingsDialog::isAutoStartEnabled() { return false; }
+bool SettingsDialog::applyAutoStart(bool) { return true; }
 
 class FirstRunWizardLayoutTests : public QObject
 {
@@ -48,6 +56,42 @@ private slots:
             groupFound = groupFound || group->title() == TranslationManager::language();
         QVERIFY(groupFound);
         QCOMPARE(settings.value("language").toInt(), static_cast<int>(TranslationManager::English));
+    }
+
+    void startsAtLoginUnlessSetupWasToldNotTo()
+    {
+        QSettings settings("EShot", "EShot");
+        const QVariant installer = settings.value("installerAutoStart");
+        const QVariant locked = settings.value("autoLockSelection");
+        const auto restore = qScopeGuard([&] {
+            if (installer.isValid()) settings.setValue("installerAutoStart", installer);
+            else settings.remove("installerAutoStart");
+            if (locked.isValid()) settings.setValue("autoLockSelection", locked);
+            else settings.remove("autoLockSelection");
+        });
+        TranslationManager::setLanguage(TranslationManager::English, false);
+        const auto autoStartBox = [](FirstRunWizard &wizard) {
+            for (QCheckBox *check : wizard.findChildren<QCheckBox *>())
+                if (check->text() == TranslationManager::tr("wizardAutoStart")) return check;
+            return static_cast<QCheckBox *>(nullptr);
+        };
+        settings.remove("installerAutoStart");
+        settings.remove("autoLockSelection");
+        {
+            FirstRunWizard wizard;
+            QCheckBox *check = autoStartBox(wizard);
+            QVERIFY(check);
+            QVERIFY(check->isChecked());
+            int lightshotChecked = 0;
+            for (QRadioButton *radio : wizard.findChildren<QRadioButton *>())
+                lightshotChecked += radio->isChecked()
+                    && radio->text() == TranslationManager::tr("wizardSelectionLightshot");
+            QCOMPARE(lightshotChecked, 1);
+        }
+        settings.setValue("installerAutoStart", 0);
+        FirstRunWizard wizard;
+        QVERIFY(autoStartBox(wizard));
+        QVERIFY(!autoStartBox(wizard)->isChecked());
     }
 
     void systemLanguageFollowsTheLocale()

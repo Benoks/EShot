@@ -3708,6 +3708,17 @@ void SettingsDialog::refreshAutoStartEntryAtStartup()
 #endif
 }
 
+bool SettingsDialog::applyAutoStart(bool enabled)
+{
+    // "Start as administrator" owns the login start; Settings changes it.
+    if (WindowsElevatedStartup::isSupported()
+        && QSettings("EShot", "EShot").value("runElevated", false).toBool())
+        return true;
+    if (enabled == isAutoStartEnabled() && !(enabled && autoStartEntryTargetsOtherCopy()))
+        return true;
+    return setAutoStartEnabled(enabled);
+}
+
 bool SettingsDialog::eventFilter(QObject *watched, QEvent *event)
 {
     if (watched == m_searchEdit && event->type() == QEvent::KeyPress) {

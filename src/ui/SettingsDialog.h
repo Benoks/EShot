@@ -42,6 +42,10 @@ public:
     // background so opening Settings never waits for schtasks.
     static void refreshAutoStartEntryAtStartup();
     static void prefetchLegacyAutoStartTask();
+    // Turns starting at login on or off with the same entry Settings uses
+    // (Windows Run key, Linux autostart file); the first-run wizard calls it.
+    static bool applyAutoStart(bool enabled);
+    static bool isAutoStartEnabled();
 
 signals:
     void updateRequested();
@@ -97,8 +101,6 @@ private:
     void extractComponentArchive(const QString &archivePath, const QString &componentDir,
                                  const QString &exeName, const QString &statusPrefix);
     QString tessdataTargetDir() const;
-
-    static bool isAutoStartEnabled();
 
     // Settings search: one entry per label, check box, form row or group
     // title, built from the widgets when a search starts.

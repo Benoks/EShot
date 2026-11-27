@@ -3,6 +3,7 @@
 #include "../core/HotkeySequence.h"
 #include "../core/TranslationManager.h"
 #include "ThemeColors.h"
+#include "SettingsDialog.h"
 #ifdef Q_OS_LINUX
 #include "../core/LinuxDependencySelection.h"
 #include "../core/LinuxDesktopIntegration.h"
@@ -34,9 +35,10 @@
 #include <QScrollArea>
 #include <QStyle>
 #include <QSignalBlocker>
+#include <QCheckBox>
+#include <QRadioButton>
 #include <utility>
 #ifdef Q_OS_LINUX
-#include <QCheckBox>
 #include <QProcess>
 #include <QProcessEnvironment>
 #include <QCoreApplication>
@@ -285,6 +287,32 @@ void FirstRunWizard::setupUi()
     pathLayout->addWidget(browseBtn);
     mainLayout->addWidget(pathGroup);
 
+    // A tray app that does not start at login loses its hotkey after a reboot.
+    QGroupBox *startupGroup = new QGroupBox();
+    QVBoxLayout *startupLayout = new QVBoxLayout(startupGroup);
+    m_autoStartCheck = new QCheckBox();
+    addTranslatedText([this, startupGroup]() {
+        startupGroup->setTitle(TranslationManager::tr("wizardStartupTitle"));
+        m_autoStartCheck->setText(TranslationManager::tr("wizardAutoStart"));
+        m_autoStartCheck->setToolTip(TranslationManager::tr("wizardAutoStartTip"));
+    });
+    startupLayout->addWidget(m_autoStartCheck);
+    mainLayout->addWidget(startupGroup);
+
+    QGroupBox *selectionGroup = new QGroupBox();
+    QVBoxLayout *selectionLayout = new QVBoxLayout(selectionGroup);
+    m_lightshotSelectionRadio = new QRadioButton();
+    m_lockedSelectionRadio = new QRadioButton();
+    addTranslatedText([this, selectionGroup]() {
+        selectionGroup->setTitle(TranslationManager::tr("wizardSelectionTitle"));
+        m_lightshotSelectionRadio->setText(TranslationManager::tr("wizardSelectionLightshot"));
+        m_lockedSelectionRadio->setText(TranslationManager::tr("wizardSelectionLocked"));
+        m_lockedSelectionRadio->setToolTip(TranslationManager::tr("autoLockSelectionTip"));
+    });
+    selectionLayout->addWidget(m_lightshotSelectionRadio);
+    selectionLayout->addWidget(m_lockedSelectionRadio);
+    mainLayout->addWidget(selectionGroup);
+
 #ifdef Q_OS_LINUX
     QGroupBox *depsGroup = new QGroupBox();
     QVBoxLayout *depsLayout = new QVBoxLayout(depsGroup);
@@ -381,6 +409,13 @@ void FirstRunWizard::loadDefaults()
         defaultPath = QDir::homePath();
     defaultPath = QDir(defaultPath).filePath("EShot");
     m_savePathEdit->setText(s.value("savePath", defaultPath).toString());
+    // Setup records its "Auto-start" task (unchecked means the user said no);
+    // a portable copy or a Linux AppImage starts with the box checked.
+    m_autoStartCheck->setChecked(SettingsDialog::isAutoStartEnabled()
+                                 || s.value("installerAutoStart", true).toBool());
+    const bool locked = s.value("autoLockSelection", false).toBool();
+    m_lockedSelectionRadio->setChecked(locked);
+    m_lightshotSelectionRadio->setChecked(!locked);
 #ifdef Q_OS_LINUX
     m_linuxFfmpegCheck->setChecked(s.value("linuxSetupFfmpeg", true).toBool());
     m_linuxOcrCheck->setChecked(s.value("linuxSetupOcr", true).toBool());
@@ -624,6 +659,14 @@ void FirstRunWizard::onFinish()
     s.setValue("hotkeyModifiers", modifiers);
     s.setValue("hotkeyVKey", vkey);
     s.setValue("savePath", savePath);
+    s.setValue("autoLockSelection", m_lockedSelectionRadio->isChecked());
+    // The same entry Settings and Setup write, so they never start EShot twice.
+    if (SettingsDialog::applyAutoStart(m_autoStartCheck->isChecked())) {
+        s.setValue("autoStart", m_autoStartCheck->isChecked());
+        s.remove("installerAutoStart");
+    } else {
+        QMessageBox::warning(this, QStringLiteral("EShot"), TranslationManager::autoStartSaveFailed());
+    }
 #ifdef Q_OS_LINUX
     QStringList selectedLanguages;
     for (auto *check : m_linuxLanguageChecks) if (check->isChecked()) selectedLanguages << check->property("ocrCode").toString();
