@@ -156,6 +156,7 @@ QVector<OverlayShortcutDef> overlayShortcutDefaults()
         {"actionLock", TranslationManager::actionLock(), "K"},
         {"actionUndo", TranslationManager::toolUndo(), "Ctrl+Z"},
         {"actionRedo", TranslationManager::toolRedo(), "Ctrl+Shift+Z"},
+        {"actionDuplicate", TranslationManager::tr("actionDuplicate"), "Ctrl+D"},
         {"actionCopy", TranslationManager::actionCopy(), "Ctrl+C"},
         {"actionSave", TranslationManager::actionSave(), "Ctrl+S"},
         {"actionPin", TranslationManager::actionPin(), "Ctrl+P"},

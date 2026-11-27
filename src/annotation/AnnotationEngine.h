@@ -92,6 +92,12 @@ public:
     bool canRedo() const { return !m_redoStack.isEmpty(); }
 
     void setShiftHeld(bool held);
+    // Alt while drawing a box shape: the press point becomes its centre.
+    void setAltHeld(bool held) { m_altHeld = held; }
+
+    // New rectangles and ellipses are filled with their colour.
+    void setShapeFill(bool fill) { m_shapeFill = fill; }
+    bool shapeFill() const { return m_shapeFill; }
 
     void beginDraw(const QPoint &pos);
     void continueDraw(const QPoint &pos);
@@ -127,6 +133,7 @@ public:
     void endMove();
     bool isRotatable(int index) const;
     bool isTextAnnotation(int index) const;
+    Tool toolOf(int index) const;
     qreal rotationDegreesOf(int index) const;
     void rotateAnnotation(int index, qreal degrees);
     void beginRotate(int index);
@@ -134,6 +141,31 @@ public:
     void beginTextResize(int index);
     void resizeTextAnnotation(int index, const QRectF &bounds);
     void endTextResize();
+
+    // Handles that reshape a finished shape: corners and edges of boxes
+    // (rectangle, ellipse, semi rectangle, blur, pixelate), the two ends of
+    // lines and arrows and the tip of a counter's pointer. Text has its own.
+    enum class ShapeHandle { None, TopLeft, Top, TopRight, Right, BottomRight, Bottom,
+                             BottomLeft, Left, Start, End };
+    struct ShapeHandlePoint {
+        ShapeHandle handle;
+        QPointF position;
+    };
+    QVector<ShapeHandlePoint> shapeHandlesOf(int index) const;
+    void beginShapeResize(int index, ShapeHandle handle);
+    // keepRatio (Shift): boxes keep their proportions, line ends snap to 45°.
+    void resizeShape(const QPointF &pos, bool keepRatio);
+    void endShapeResize();
+
+    // Changing a finished annotation from the quick settings. Consecutive
+    // changes of one property fold into a single undo step until
+    // finishPropertyEdit() (end of a slider drag, another selection).
+    bool setAnnotationPenWidth(int index, int width);
+    bool setAnnotationBlurIntensity(int index, int intensity);
+    bool setAnnotationFilled(int index, bool filled);
+    void finishPropertyEdit() { m_propertyEditOpen = false; }
+    // Adds a copy shifted by offset and returns its index, or -1.
+    int duplicateAnnotation(int index, const QPoint &offset);
     void setSelectedIndex(int index);
     int selectedIndex() const { return m_selectedIndex; }
     QRect boundingRectOf(int index) const;
@@ -162,7 +194,7 @@ private:
         int counterValue = 0;
         // Circle size of a counter; points[1], when present, is its pointer target.
         int counterDiameter = CounterGeometry::DefaultDiameter;
-        bool shiftConstrained = false;
+        bool filled = false; // rectangle and ellipse only
         qreal rotationDegrees = 0.0;
         qreal textScaleX = 1.0;
         qreal textScaleY = 1.0;
@@ -175,6 +207,7 @@ private:
 
     struct HistoryAction {
         enum Type { Add, Remove, Rotate, Resize } type = Add;
+        int propertyEdit = 0; // PropertyEdit of a folded quick-settings change
         Annotation annotation;
         Annotation previousAnnotation;
         int index = -1;
@@ -182,6 +215,9 @@ private:
         qreal rotationDegrees = 0.0;
     };
 
+    enum PropertyEdit { NoPropertyEdit, PenWidthEdit, BlurIntensityEdit, FillEdit };
+    void editAnnotationProperty(int index, const Annotation &updated, PropertyEdit edit);
+    QVector<QPoint> shapePoints(const QPoint &pos) const;
     void drawAnnotation(QPainter *painter, const Annotation &ann, const QPoint &offset);
     void replaceAnnotation(int index, const Annotation &updated);
     void drawRedaction(QPainter *painter, Tool tool, const QRect &rect, const QPoint &offset,
@@ -209,6 +245,13 @@ private:
     int m_textFontSize;
     int m_blurIntensity;
     bool m_shiftHeld;
+    bool m_altHeld = false;
+    bool m_shapeFill = false;
+    QPoint m_drawAnchor;
+    bool m_propertyEditOpen = false;
+    int m_shapeResizeIndex = -1;
+    ShapeHandle m_shapeResizeHandle = ShapeHandle::None;
+    Annotation m_shapeResizeOriginal;
 
     QVector<Annotation> m_annotations;
     QVector<HistoryAction> m_undoStack;

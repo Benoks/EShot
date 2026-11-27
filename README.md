@@ -272,11 +272,16 @@ Instant capture, capture screen now, capture last region, GIF and video recordin
 | `Del` | Delete the selected object |
 | `Ctrl` + click | Move an object |
 | Arrow keys | Nudge the selected object |
-| `Shift` + drag | Straight line, square or circle |
+| `Shift` + drag | Straight pen line, 45° steps for lines and arrows, square or circle |
+| `Alt` + drag | Draw a rectangle or ellipse from its centre |
+| Drag a handle | Resize the selected shape or move a line end (`Shift`: keep proportions) |
+| `Ctrl+D` | Duplicate the selected object |
 | Double-click / `F2` | Edit a text object |
 | `Enter` / `Shift+Enter` | Finish text / new line |
 | `Ctrl+B` | Bold text |
 | `Ctrl` `+` / `Ctrl` `-` | Larger / smaller text |
+
+With an object selected, the width and blur sliders in Quick Settings change it too, and **Fill shapes** fills rectangles and ellipses with their colour.
 
 ## Command line
 

@@ -274,6 +274,7 @@ private:
     QPropertyAnimation *m_toolSettingsButtonAnimation = nullptr;
     QSlider *m_quickPenWidthSlider = nullptr;
     QSlider *m_quickBlurSlider = nullptr;
+    QCheckBox *m_quickShapeFillCheck = nullptr;
     QLabel *m_quickPenWidthValueLabel = nullptr;
     QLabel *m_quickBlurValueLabel = nullptr;
     // Counter tool options; only shown while the Counter tool is active.
@@ -355,6 +356,10 @@ private:
     qreal m_rotationDragStartAngle = 0.0;
     qreal m_rotationStartDegrees = 0.0;
     bool m_isResizingTextAnnotation = false;
+    bool m_isResizingShape = false;
+    // Resize handle of the selected shape under pos, or ShapeHandle::None.
+    AnnotationEngine::ShapeHandle shapeHandleAt(const QPoint &pos) const;
+    void applyDrawModifiers(Qt::KeyboardModifiers modifiers);
     enum TextResizeHandle { TextResizeNone, TextResizeTopLeft, TextResizeTopRight,
                             TextResizeBottomLeft, TextResizeBottomRight };
     TextResizeHandle m_textResizeHandle = TextResizeNone;

@@ -722,7 +722,13 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
     connect(m_toolbar, &AnnotationToolbar::modalDialogClosed,
             this, &CaptureOverlay::restoreAfterModalDialog);
     connect(m_toolbar, &AnnotationToolbar::penWidthChanged, [this](int w) {
-        if (m_annotationEngine) m_annotationEngine->setPenWidth(w);
+        if (m_annotationEngine) {
+            m_annotationEngine->setPenWidth(w);
+            if (m_annotationEngine->setAnnotationPenWidth(m_annotationEngine->selectedIndex(), w)) {
+                update();
+                updateUndoRedoState();
+            }
+        }
         if (m_quickPenWidthSlider) {
             QSignalBlocker blocker(m_quickPenWidthSlider);
             m_quickPenWidthSlider->setValue(w);
@@ -912,6 +918,10 @@ void CaptureOverlay::setupToolSettingsDrawer()
 
     addSliderRow(TranslationManager::quickPenWidth(), m_quickPenWidthSlider, m_quickPenWidthValueLabel, 1, 20, 3);
     addSliderRow(TranslationManager::quickBlurIntensity(), m_quickBlurSlider, m_quickBlurValueLabel, 4, 64, 16);
+    m_quickShapeFillCheck = new QCheckBox(TranslationManager::tr("quickShapeFill"), m_toolSettingsDrawer);
+    m_quickShapeFillCheck->setToolTip(TranslationManager::tr("quickShapeFillTip"));
+    drawerLayout->addWidget(m_quickShapeFillCheck);
+    m_quickShapeFillCheck->hide();
 
     // Counter options. The pointer thickness is the width slider above, like
     // the Arrow tool's.
@@ -958,12 +968,31 @@ void CaptureOverlay::setupToolSettingsDrawer()
         s.setValue("autoLockSelection", enabled);
     });
 
+    // With an object selected the sliders also change it; one drag is one undo step.
     connect(m_quickPenWidthSlider, &QSlider::valueChanged, this, [this](int value) {
         if (m_quickPenWidthValueLabel)
             m_quickPenWidthValueLabel->setText(QString::number(value));
-        if (m_annotationEngine) m_annotationEngine->setPenWidth(value);
+        if (m_annotationEngine) {
+            m_annotationEngine->setPenWidth(value);
+            if (m_annotationEngine->setAnnotationPenWidth(m_annotationEngine->selectedIndex(), value)) {
+                update();
+                updateUndoRedoState();
+            }
+        }
         if (m_settingsWriter)
             m_settingsWriter->schedule(QStringLiteral("annotationPenWidth"), value);
+    });
+    connect(m_quickShapeFillCheck, &QCheckBox::toggled, this, [this](bool fill) {
+        if (!m_annotationEngine)
+            return;
+        m_annotationEngine->setShapeFill(fill);
+        if (m_annotationEngine->setAnnotationFilled(m_annotationEngine->selectedIndex(), fill)) {
+            m_annotationEngine->finishPropertyEdit();
+            update();
+            updateUndoRedoState();
+        }
+        QSettings s("EShot", "EShot");
+        s.setValue("shapeFill", fill);
     });
     connect(m_quickCounterStartSpin, qOverload<int>(&QSpinBox::valueChanged), this, [this](int value) {
         if (m_annotationEngine) m_annotationEngine->setCounterStartValue(value);
@@ -980,10 +1009,22 @@ void CaptureOverlay::setupToolSettingsDrawer()
     connect(m_quickBlurSlider, &QSlider::valueChanged, this, [this](int value) {
         if (m_quickBlurValueLabel)
             m_quickBlurValueLabel->setText(QString::number(value));
-        if (m_annotationEngine) m_annotationEngine->setBlurIntensity(value);
+        if (m_annotationEngine) {
+            m_annotationEngine->setBlurIntensity(value);
+            if (m_annotationEngine->setAnnotationBlurIntensity(m_annotationEngine->selectedIndex(), value)) {
+                update();
+                updateUndoRedoState();
+            }
+        }
         if (m_settingsWriter)
             m_settingsWriter->schedule(QStringLiteral("blurIntensity"), value);
     });
+    for (QSlider *slider : {m_quickPenWidthSlider, m_quickBlurSlider}) {
+        connect(slider, &QSlider::sliderReleased, this, [this]() {
+            if (m_annotationEngine)
+                m_annotationEngine->finishPropertyEdit();
+        });
+    }
     m_toolSettingsDrawer->hide();
 
     const int drawerAnimationDurationMs = overlayPanelMetrics().drawerAnimationDurationMs;
@@ -1646,9 +1687,21 @@ void CaptureOverlay::updateCounterQuickSettings()
             m_quickCounterSizeValueLabel->setText(QString::number(value));
     }
     const bool counterActive = m_annotationEngine->currentTool() == AnnotationEngine::Counter;
-    if (m_quickCounterOptions->isHidden() != counterActive)
+    const auto fillable = [](AnnotationEngine::Tool tool) {
+        return tool == AnnotationEngine::Rectangle || tool == AnnotationEngine::Circle;
+    };
+    const bool fillActive = fillable(m_annotationEngine->currentTool())
+        || fillable(m_annotationEngine->toolOf(m_annotationEngine->selectedIndex()));
+    if (m_quickShapeFillCheck) {
+        QSignalBlocker blocker(m_quickShapeFillCheck);
+        m_quickShapeFillCheck->setChecked(m_annotationEngine->shapeFill());
+    }
+    if (m_quickCounterOptions->isHidden() != counterActive
+        && (!m_quickShapeFillCheck || m_quickShapeFillCheck->isHidden() != fillActive))
         return;
     m_quickCounterOptions->setVisible(counterActive);
+    if (m_quickShapeFillCheck)
+        m_quickShapeFillCheck->setVisible(fillActive);
     // An open drawer grows or shrinks in place for the new tool.
     if (m_toolSettingsDrawer && m_toolSettingsDrawer->isVisible())
         updateToolSettingsDrawerPosition();
@@ -2128,6 +2181,7 @@ void CaptureOverlay::startCaptureInternal(CaptureSelectionMode selectionMode, bo
         m_annotationEngine->setCounterStartValue(s.value("counterStartValue", CounterGeometry::MinStartValue).toInt());
         m_annotationEngine->setCounterDiameter(s.value("counterSize", CounterGeometry::DefaultDiameter).toInt());
         m_annotationEngine->setCounterDragDistance(QApplication::startDragDistance());
+        m_annotationEngine->setShapeFill(s.value("shapeFill", false).toBool());
     }
     if (m_quickPenWidthSlider && m_annotationEngine) m_quickPenWidthSlider->setValue(m_annotationEngine->penWidth());
     setToolSettingsDrawerVisible(false);
@@ -2724,6 +2778,23 @@ void CaptureOverlay::paintEvent(QPaintEvent *event)
                         }
                     }
 
+                    // Shape handles sit on the shape itself (rotated with it):
+                    // squares for box corners and edges, dots for line ends.
+                    const auto shapeHandles = m_annotationEngine->shapeHandlesOf(selectedIndex);
+                    if (!shapeHandles.isEmpty()) {
+                        painter.setPen(QPen(QColor(179, 102, 255), 1));
+                        painter.setBrush(QColor(250, 250, 252));
+                        for (const auto &handle : shapeHandles) {
+                            const bool endHandle = handle.handle == AnnotationEngine::ShapeHandle::Start
+                                || handle.handle == AnnotationEngine::ShapeHandle::End;
+                            const QRectF handleRect(handle.position - QPointF(5, 5), QSizeF(10, 10));
+                            if (endHandle)
+                                painter.drawEllipse(handleRect);
+                            else
+                                painter.drawRect(handleRect);
+                        }
+                    }
+
                     if (m_annotationEngine->isRotatable(selectedIndex)) {
                         const QPointF handleCenter = AnnotationRotationGeometry::handleCenter(annotationRect);
                         const QPointF connectorStart(annotationRect.center().x(), annotationRect.bottom());
@@ -2984,6 +3055,13 @@ void CaptureOverlay::mousePressEvent(QMouseEvent *event)
                     }
                 }
             }
+            const AnnotationEngine::ShapeHandle shapeHandle = shapeHandleAt(event->pos());
+            if (shapeHandle != AnnotationEngine::ShapeHandle::None) {
+                m_isResizingShape = true;
+                m_annotationEngine->beginShapeResize(selectedIndex, shapeHandle);
+                event->accept();
+                return;
+            }
             if (m_annotationEngine->isRotatable(selectedIndex)) {
                 const QRect annotationRect = m_annotationEngine->boundingRectOf(selectedIndex)
                                                  .adjusted(-4, -4, 4, 4);
@@ -3027,6 +3105,7 @@ void CaptureOverlay::mousePressEvent(QMouseEvent *event)
                     if (handleAnnotationPress(rel, event->modifiers()))
                         return;
                     m_annotationEngine->setSelectedIndex(-1);
+                    applyDrawModifiers(event->modifiers());
                     m_annotationEngine->beginDraw(rel);
                     update();
                 }
@@ -3156,7 +3235,27 @@ void CaptureOverlay::startAnnotationMove(int index, const QPoint &pos)
     m_annotationEngine->setSelectedIndex(index);
     m_annotationEngine->beginMove(index);
     setCursor(Qt::SizeAllCursor);
+    updateCounterQuickSettings(); // the fill option follows the selection
     update();
+}
+
+AnnotationEngine::ShapeHandle CaptureOverlay::shapeHandleAt(const QPoint &pos) const
+{
+    if (!m_annotationEngine || !m_selectionComplete)
+        return AnnotationEngine::ShapeHandle::None;
+    for (const auto &handle : m_annotationEngine->shapeHandlesOf(m_annotationEngine->selectedIndex())) {
+        if (QLineF(pos, handle.position).length() <= 8.0)
+            return handle.handle;
+    }
+    return AnnotationEngine::ShapeHandle::None;
+}
+
+void CaptureOverlay::applyDrawModifiers(Qt::KeyboardModifiers modifiers)
+{
+    if (!m_annotationEngine)
+        return;
+    m_annotationEngine->setShiftHeld(modifiers.testFlag(Qt::ShiftModifier));
+    m_annotationEngine->setAltHeld(modifiers.testFlag(Qt::AltModifier));
 }
 
 bool CaptureOverlay::handleAnnotationPress(const QPoint &pos, Qt::KeyboardModifiers modifiers)
@@ -3408,6 +3507,12 @@ void CaptureOverlay::mouseMoveEvent(QMouseEvent *event)
         return;
     }
 
+    if (m_isResizingShape && m_annotationEngine) {
+        m_annotationEngine->resizeShape(event->pos(), event->modifiers().testFlag(Qt::ShiftModifier));
+        update();
+        return;
+    }
+
     // Annotation rotation
     if (m_isRotatingAnnotation && m_annotationEngine && m_annotationEngine->selectedIndex() >= 0) {
         const qreal currentAngle = AnnotationRotationGeometry::angleAt(m_rotationCenter, event->pos());
@@ -3502,6 +3607,8 @@ void CaptureOverlay::mouseMoveEvent(QMouseEvent *event)
             previousSelection, normalizedSelectionRect(), rect()));
     } else if (m_selectionComplete && m_annotationEngine &&
                m_annotationEngine->currentTool() != AnnotationEngine::None) {
+        if (!(event->buttons() & Qt::LeftButton))
+            updateCursor(event->pos());
         QRect selRect = normalizedSelectionRect();
         if (selRect.contains(event->pos())) {
             QPoint rel = event->pos();
@@ -3509,6 +3616,7 @@ void CaptureOverlay::mouseMoveEvent(QMouseEvent *event)
                 if ((event->buttons() & Qt::LeftButton) && m_annotationEngine->eraseAnnotationAt(rel))
                     update();
             } else {
+                applyDrawModifiers(event->modifiers());
                 m_annotationEngine->continueDraw(rel);
                 update();
             }
@@ -3569,6 +3677,16 @@ void CaptureOverlay::mouseReleaseEvent(QMouseEvent *event)
             return;
         }
 
+        if (m_isResizingShape) {
+            m_isResizingShape = false;
+            if (m_annotationEngine)
+                m_annotationEngine->endShapeResize();
+            updateCursor(event->pos());
+            updateUndoRedoState();
+            update();
+            return;
+        }
+
         // Annotation rotation end
         if (m_isRotatingAnnotation) {
             if (m_annotationEngine)
@@ -3621,6 +3739,7 @@ void CaptureOverlay::mouseReleaseEvent(QMouseEvent *event)
             } else if (m_annotationEngine) {
                 // Counters also end here: the press placed the counter, and a
                 // drag to this point gives it a pointer.
+                applyDrawModifiers(event->modifiers());
                 m_annotationEngine->endDraw(rel);
                 update();
                 updateUndoRedoState();
@@ -3695,6 +3814,16 @@ void CaptureOverlay::keyPressEvent(QKeyEvent *event)
         if (m_annotationEngine) { m_annotationEngine->undo(); update(); updateUndoRedoState(); }
     } else if (matchesOverlayShortcut(event, QStringLiteral("actionRedo"), QStringLiteral("Ctrl+Shift+Z"))) {
         if (m_annotationEngine) { m_annotationEngine->redo(); update(); updateUndoRedoState(); }
+    } else if (m_selectionComplete && m_annotationEngine && m_annotationEngine->selectedIndex() >= 0
+               && (!m_textEdit || !m_textEdit->isVisible())
+               && matchesOverlayShortcut(event, QStringLiteral("actionDuplicate"), QStringLiteral("Ctrl+D"))) {
+        const int copy = m_annotationEngine->duplicateAnnotation(m_annotationEngine->selectedIndex(),
+                                                                 QPoint(16, 16));
+        if (copy >= 0) {
+            m_annotationEngine->setSelectedIndex(copy);
+            update();
+            updateUndoRedoState();
+        }
     } else if (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter) {
         // If text edit is open and Shift is held, insert newline
         if (m_textEdit && m_textEdit->isVisible()) {
@@ -5508,6 +5637,16 @@ void CaptureOverlay::updateCursor(const QPoint &pos)
     if (!m_selectionComplete) {
         setCursor(Qt::CrossCursor);
         return;
+    }
+
+    using SH = AnnotationEngine::ShapeHandle;
+    switch (shapeHandleAt(pos)) {
+    case SH::TopLeft: case SH::BottomRight: setCursor(Qt::SizeFDiagCursor); return;
+    case SH::TopRight: case SH::BottomLeft: setCursor(Qt::SizeBDiagCursor); return;
+    case SH::Top: case SH::Bottom: setCursor(Qt::SizeVerCursor); return;
+    case SH::Left: case SH::Right: setCursor(Qt::SizeHorCursor); return;
+    case SH::Start: case SH::End: setCursor(Qt::SizeAllCursor); return;
+    case SH::None: break;
     }
 
     if (m_annotationEngine && m_annotationEngine->currentTool() != AnnotationEngine::None) {

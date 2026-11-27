@@ -42,7 +42,33 @@ private slots:
     void counterPointerMovesAndUndoesWithTheCounter();
     void counterPointerRendersInTheExportedImage();
     void counterSizeIsStoredPerCounter();
+    void shiftSnapsLinesAndArrowsTo45Degrees();
+    void shiftTurnsAPenStrokeIntoAStraightLine();
+    void altDrawsBoxesFromTheirCenter();
+    void resizingABoxKeepsTheOppositeCornerAndUndoes();
+    void resizingARotatedBoxKeepsTheOppositeCornerOnScreen();
+    void lineEndsFollowTheMouseAlsoWhenRotated();
+    void counterPointerTipCanBeDragged();
+    void propertyEditsFoldIntoOneUndoStepPerDrag();
+    void filledShapesAreHitInside();
+    void duplicatesAreShiftedAndContinueCounterNumbers();
 };
+
+namespace {
+QPointF handlePosition(const AnnotationEngine &engine, int index, AnnotationEngine::ShapeHandle handle)
+{
+    for (const AnnotationEngine::ShapeHandlePoint &point : engine.shapeHandlesOf(index)) {
+        if (point.handle == handle)
+            return point.position;
+    }
+    return QPointF(-1000, -1000);
+}
+
+bool near(const QPointF &a, const QPointF &b, qreal tolerance = 1.01)
+{
+    return QLineF(a, b).length() <= tolerance;
+}
+}
 
 void AnnotationEngineTests::rotatesRectangleAroundItsCenter()
 {
@@ -690,5 +716,216 @@ void AnnotationEngineTests::counterSizeIsStoredPerCounter()
 }
 
 QTEST_MAIN(AnnotationEngineTests)
+
+void AnnotationEngineTests::shiftSnapsLinesAndArrowsTo45Degrees()
+{
+    using H = AnnotationEngine::ShapeHandle;
+    AnnotationEngine engine;
+    engine.setShiftHeld(true);
+    engine.setCurrentTool(AnnotationEngine::Line);
+    engine.beginDraw(QPoint(0, 0));
+    engine.endDraw(QPoint(100, 8));
+    QVERIFY(near(handlePosition(engine, 0, H::End), QPointF(100, 0)));
+
+    engine.setCurrentTool(AnnotationEngine::Arrow);
+    engine.beginDraw(QPoint(0, 0));
+    engine.continueDraw(QPoint(30, 20));
+    engine.endDraw(QPoint(50, 48));
+    const QPointF end = handlePosition(engine, 1, H::End);
+    QVERIFY(qAbs(end.x() - end.y()) <= 1.0);
+}
+
+void AnnotationEngineTests::shiftTurnsAPenStrokeIntoAStraightLine()
+{
+    AnnotationEngine engine;
+    engine.setCurrentTool(AnnotationEngine::Pen);
+    engine.setShiftHeld(true);
+    engine.beginDraw(QPoint(10, 10));
+    engine.continueDraw(QPoint(40, 14));
+    engine.continueDraw(QPoint(70, 6));
+    engine.endDraw(QPoint(90, 13));
+
+    QCOMPARE(engine.rotatedBoundingRectOf(0), QRectF(10, 10, 81, 1));
+}
+
+void AnnotationEngineTests::altDrawsBoxesFromTheirCenter()
+{
+    AnnotationEngine engine;
+    engine.setCurrentTool(AnnotationEngine::Rectangle);
+    engine.setAltHeld(true);
+    engine.beginDraw(QPoint(50, 50));
+    engine.endDraw(QPoint(70, 60));
+    QCOMPARE(engine.rotatedBoundingRectOf(0), QRectF(30, 40, 41, 21));
+
+    // Shift and Alt together: a square around the press point.
+    engine.setCurrentTool(AnnotationEngine::Circle);
+    engine.setShiftHeld(true);
+    engine.beginDraw(QPoint(100, 100));
+    engine.endDraw(QPoint(130, 110));
+    QCOMPARE(engine.rotatedBoundingRectOf(1), QRectF(90, 90, 21, 21));
+}
+
+void AnnotationEngineTests::resizingABoxKeepsTheOppositeCornerAndUndoes()
+{
+    using H = AnnotationEngine::ShapeHandle;
+    AnnotationEngine engine;
+    engine.setCurrentTool(AnnotationEngine::Rectangle);
+    engine.beginDraw(QPoint(10, 10));
+    engine.endDraw(QPoint(50, 30));
+    QCOMPARE(engine.shapeHandlesOf(0).size(), 6); // 20 px tall: no left/right edge handles
+
+    engine.beginShapeResize(0, H::BottomRight);
+    engine.resizeShape(QPointF(80, 60), false);
+    engine.endShapeResize();
+    QCOMPARE(engine.rotatedBoundingRectOf(0), QRectF(10, 10, 71, 51));
+
+    engine.beginShapeResize(0, H::Top);
+    engine.resizeShape(QPointF(999, 0), false);
+    engine.endShapeResize();
+    QCOMPARE(engine.rotatedBoundingRectOf(0), QRectF(10, 0, 71, 61));
+
+    engine.undo();
+    engine.undo();
+    QCOMPARE(engine.rotatedBoundingRectOf(0), QRectF(10, 10, 41, 21));
+    engine.redo();
+    QCOMPARE(engine.rotatedBoundingRectOf(0), QRectF(10, 10, 71, 51));
+
+    // Shift on a corner keeps the proportions.
+    engine.beginShapeResize(0, H::BottomRight);
+    engine.resizeShape(QPointF(150, 70), true);
+    engine.endShapeResize();
+    const QRectF ratio = engine.rotatedBoundingRectOf(0);
+    QVERIFY(qAbs(ratio.width() / ratio.height() - 71.0 / 51.0) < 0.05);
+}
+
+void AnnotationEngineTests::resizingARotatedBoxKeepsTheOppositeCornerOnScreen()
+{
+    using H = AnnotationEngine::ShapeHandle;
+    AnnotationEngine engine;
+    engine.setCurrentTool(AnnotationEngine::Rectangle);
+    engine.beginDraw(QPoint(100, 100));
+    engine.endDraw(QPoint(160, 140));
+    engine.rotateAnnotation(0, 30.0);
+
+    const QPointF fixedCorner = handlePosition(engine, 0, H::TopLeft);
+    const QPointF dragged = handlePosition(engine, 0, H::BottomRight);
+    engine.beginShapeResize(0, H::BottomRight);
+    engine.resizeShape(dragged + QPointF(25, 15), false);
+    engine.endShapeResize();
+
+    QVERIFY(near(handlePosition(engine, 0, H::TopLeft), fixedCorner, 1.5));
+    QVERIFY(near(handlePosition(engine, 0, H::BottomRight), dragged + QPointF(25, 15), 1.5));
+    QCOMPARE(engine.rotationDegreesOf(0), 30.0);
+}
+
+void AnnotationEngineTests::lineEndsFollowTheMouseAlsoWhenRotated()
+{
+    using H = AnnotationEngine::ShapeHandle;
+    AnnotationEngine engine;
+    engine.setCurrentTool(AnnotationEngine::Line);
+    engine.beginDraw(QPoint(0, 0));
+    engine.endDraw(QPoint(40, 0));
+    engine.rotateAnnotation(0, 90.0);
+    QVERIFY(near(handlePosition(engine, 0, H::Start), QPointF(20, -20)));
+    QVERIFY(near(handlePosition(engine, 0, H::End), QPointF(20, 20)));
+
+    engine.beginShapeResize(0, H::End);
+    engine.resizeShape(QPointF(60, 20), false);
+    engine.endShapeResize();
+    QVERIFY(near(handlePosition(engine, 0, H::Start), QPointF(20, -20)));
+    QVERIFY(near(handlePosition(engine, 0, H::End), QPointF(60, 20)));
+
+    engine.undo();
+    QVERIFY(near(handlePosition(engine, 0, H::End), QPointF(20, 20)));
+    QCOMPARE(engine.rotationDegreesOf(0), 90.0);
+}
+
+void AnnotationEngineTests::counterPointerTipCanBeDragged()
+{
+    using H = AnnotationEngine::ShapeHandle;
+    AnnotationEngine engine;
+    engine.setCurrentTool(AnnotationEngine::Counter);
+    engine.beginDraw(QPoint(50, 50));
+    engine.endDraw(QPoint(50, 50));
+    QVERIFY(engine.shapeHandlesOf(0).isEmpty()); // no pointer, nothing to drag
+
+    engine.beginDraw(QPoint(100, 100));
+    engine.endDraw(QPoint(180, 100));
+    engine.beginShapeResize(1, H::End);
+    engine.resizeShape(QPointF(100, 190), false);
+    engine.endShapeResize();
+    QVERIFY(near(handlePosition(engine, 1, H::End), QPointF(100, 190)));
+}
+
+void AnnotationEngineTests::propertyEditsFoldIntoOneUndoStepPerDrag()
+{
+    AnnotationEngine engine;
+    engine.setCurrentTool(AnnotationEngine::Rectangle);
+    engine.beginDraw(QPoint(10, 10));
+    engine.endDraw(QPoint(50, 50));
+    const QRectF thin = engine.rotatedBoundingRectOf(0);
+
+    QVERIFY(engine.setAnnotationPenWidth(0, 5));
+    QVERIFY(engine.setAnnotationPenWidth(0, 8));
+    engine.finishPropertyEdit();
+    QVERIFY(engine.setAnnotationPenWidth(0, 12));
+    engine.undo();
+    engine.undo();
+    QVERIFY(engine.canUndo()); // only the drawing is left
+    engine.undo();
+    QVERIFY(!engine.canUndo());
+    engine.redo();
+    QCOMPARE(engine.rotatedBoundingRectOf(0), thin);
+
+    QVERIFY(!engine.setAnnotationBlurIntensity(0, 30)); // not a blur
+    engine.setCurrentTool(AnnotationEngine::Blur);
+    engine.beginDraw(QPoint(60, 60));
+    engine.endDraw(QPoint(90, 90));
+    QVERIFY(engine.setAnnotationBlurIntensity(1, 30));
+    QVERIFY(!engine.setAnnotationPenWidth(1, 9)); // blur has no outline
+}
+
+void AnnotationEngineTests::filledShapesAreHitInside()
+{
+    AnnotationEngine engine;
+    engine.setCurrentTool(AnnotationEngine::Rectangle);
+    engine.beginDraw(QPoint(10, 10));
+    engine.endDraw(QPoint(110, 110));
+    QCOMPARE(engine.findAnnotationAt(QPoint(60, 60)), -1);
+
+    QVERIFY(engine.setAnnotationFilled(0, true));
+    QCOMPARE(engine.findAnnotationAt(QPoint(60, 60)), 0);
+
+    engine.setShapeFill(true);
+    engine.setCurrentTool(AnnotationEngine::Circle);
+    engine.beginDraw(QPoint(200, 200));
+    engine.endDraw(QPoint(300, 300));
+    QCOMPARE(engine.findAnnotationAt(QPoint(250, 250)), 1);
+
+    engine.setCurrentTool(AnnotationEngine::Line);
+    engine.beginDraw(QPoint(0, 400));
+    engine.endDraw(QPoint(100, 400));
+    QVERIFY(!engine.setAnnotationFilled(2, false)); // lines cannot be filled
+}
+
+void AnnotationEngineTests::duplicatesAreShiftedAndContinueCounterNumbers()
+{
+    AnnotationEngine engine;
+    engine.setCurrentTool(AnnotationEngine::Rectangle);
+    engine.beginDraw(QPoint(10, 10));
+    engine.endDraw(QPoint(50, 30));
+    QCOMPARE(engine.duplicateAnnotation(0, QPoint(12, 12)), 1);
+    QCOMPARE(engine.rotatedBoundingRectOf(1), QRectF(22, 22, 41, 21));
+
+    engine.setCurrentTool(AnnotationEngine::Counter);
+    engine.beginDraw(QPoint(200, 200));
+    engine.endDraw(QPoint(200, 200));
+    const int copy = engine.duplicateAnnotation(2, QPoint(12, 12));
+    QCOMPARE(engine.counterValueOf(copy), engine.counterValueOf(2) + 1);
+
+    engine.undo();
+    QCOMPARE(engine.duplicateAnnotation(99, QPoint(1, 1)), -1);
+    QCOMPARE(engine.nextCounterValue(), engine.counterValueOf(2) + 1);
+}
 
 #include "AnnotationEngineTests.moc"

@@ -32,6 +32,54 @@ QPoint constrainedHighlighterPoint(const QPoint &start, const QPoint &pos)
         : QPoint(start.x(), pos.y());
 }
 
+// Shift with lines, arrows and the pen: the nearest multiple of 45 degrees.
+QPoint snappedToAngle(const QPoint &from, const QPoint &to)
+{
+    const QPointF delta = to - from;
+    const qreal length = qSqrt(delta.x() * delta.x() + delta.y() * delta.y());
+    if (length < 0.5)
+        return to;
+    const qreal step = M_PI / 4.0;
+    const qreal angle = qRound(qAtan2(delta.y(), delta.x()) / step) * step;
+    return from + QPointF(qCos(angle) * length, qSin(angle) * length).toPoint();
+}
+
+bool isBoxTool(AnnotationEngine::Tool tool)
+{
+    return tool == AnnotationEngine::Rectangle || tool == AnnotationEngine::Circle
+        || tool == AnnotationEngine::SemiRect || tool == AnnotationEngine::Blur
+        || tool == AnnotationEngine::Pixelate;
+}
+
+bool supportsFill(AnnotationEngine::Tool tool)
+{
+    return tool == AnnotationEngine::Rectangle || tool == AnnotationEngine::Circle;
+}
+
+// Direction of a box handle from the centre: -1, 0 or 1 per axis.
+QPoint boxHandleSign(AnnotationEngine::ShapeHandle handle)
+{
+    using H = AnnotationEngine::ShapeHandle;
+    switch (handle) {
+    case H::TopLeft: return QPoint(-1, -1);
+    case H::Top: return QPoint(0, -1);
+    case H::TopRight: return QPoint(1, -1);
+    case H::Right: return QPoint(1, 0);
+    case H::BottomRight: return QPoint(1, 1);
+    case H::Bottom: return QPoint(0, 1);
+    case H::BottomLeft: return QPoint(-1, 1);
+    case H::Left: return QPoint(-1, 0);
+    default: return QPoint();
+    }
+}
+
+QPointF rotatedVector(const QPointF &vector, qreal degrees)
+{
+    const qreal radians = qDegreesToRadians(degrees);
+    return QPointF(vector.x() * qCos(radians) - vector.y() * qSin(radians),
+                   vector.x() * qSin(radians) + vector.y() * qCos(radians));
+}
+
 // Skip pen/highlighter samples closer than ~2 px to keep the point lists small.
 bool pointTooClose(const QPoint &a, const QPoint &b)
 {
@@ -113,7 +161,9 @@ void AnnotationEngine::beginDraw(const QPoint &pos)
     m_currentAnnotation.color = m_color;
     m_currentAnnotation.penWidth = m_penWidth;
     m_currentAnnotation.blurIntensity = m_blurIntensity;
+    m_currentAnnotation.filled = m_shapeFill && supportsFill(m_currentTool);
     m_currentAnnotation.points.append(pos);
+    m_drawAnchor = pos;
 
     if (m_currentTool == Counter) {
         // The counter sits at the press point; dragging adds a pointer.
@@ -129,10 +179,11 @@ void AnnotationEngine::continueDraw(const QPoint &pos)
 {
     if (!m_isDrawing || m_currentTool == None) return;
 
-    m_currentAnnotation.shiftConstrained = m_shiftHeld;
-
     if (m_currentTool == Counter) {
         updateCounterPointer(pos);
+    } else if (m_currentTool == Pen && m_shiftHeld) {
+        // Shift turns the stroke into a straight line from the press point.
+        m_currentAnnotation.points = { m_drawAnchor, snappedToAngle(m_drawAnchor, pos) };
     } else if (m_currentTool == Pen || m_currentTool == Highlighter) {
         const QPoint drawPoint = m_currentTool == Highlighter && m_shiftHeld
             ? constrainedHighlighterPoint(m_currentAnnotation.points.first(), pos)
@@ -140,11 +191,27 @@ void AnnotationEngine::continueDraw(const QPoint &pos)
         if (!pointTooClose(m_currentAnnotation.points.last(), drawPoint))
             m_currentAnnotation.points.append(drawPoint);
     } else {
-        if (m_currentAnnotation.points.size() < 2)
-            m_currentAnnotation.points.append(pos);
-        else
-            m_currentAnnotation.points.last() = pos;
+        m_currentAnnotation.points = shapePoints(pos);
     }
+}
+
+QVector<QPoint> AnnotationEngine::shapePoints(const QPoint &pos) const
+{
+    const QPoint anchor = m_drawAnchor;
+    if (m_currentTool == Line || m_currentTool == Arrow)
+        return { anchor, m_shiftHeld ? snappedToAngle(anchor, pos) : pos };
+    if (!isBoxTool(m_currentTool))
+        return { anchor, pos };
+    // The constraints are stored in the points, so a finished box can be
+    // resized freely later.
+    QPoint delta = pos - anchor;
+    if (m_shiftHeld && m_currentTool != Blur && m_currentTool != Pixelate) {
+        const int side = qMin(qAbs(delta.x()), qAbs(delta.y()));
+        delta = QPoint(delta.x() < 0 ? -side : side, delta.y() < 0 ? -side : side);
+    }
+    if (m_altHeld)
+        return { anchor - delta, anchor + delta };
+    return { anchor, anchor + delta };
 }
 
 void AnnotationEngine::updateCounterPointer(const QPoint &pos)
@@ -171,19 +238,16 @@ void AnnotationEngine::endDraw(const QPoint &pos)
         return;
     }
 
-    m_currentAnnotation.shiftConstrained = m_shiftHeld;
-
-    if (m_currentTool == Pen || m_currentTool == Highlighter) {
+    if (m_currentTool == Pen && m_shiftHeld) {
+        m_currentAnnotation.points = { m_drawAnchor, snappedToAngle(m_drawAnchor, pos) };
+    } else if (m_currentTool == Pen || m_currentTool == Highlighter) {
         const QPoint drawPoint = m_currentTool == Highlighter && m_shiftHeld
             ? constrainedHighlighterPoint(m_currentAnnotation.points.first(), pos)
             : pos;
         if (!pointTooClose(m_currentAnnotation.points.last(), drawPoint))
             m_currentAnnotation.points.append(drawPoint);
     } else {
-        if (m_currentAnnotation.points.size() < 2)
-            m_currentAnnotation.points.append(pos);
-        else
-            m_currentAnnotation.points.last() = pos;
+        m_currentAnnotation.points = shapePoints(pos);
     }
 
     // Bounding rect
@@ -268,14 +332,9 @@ void AnnotationEngine::drawAnnotation(QPainter *painter, const Annotation &ann, 
         QPoint start = ann.points.first() + offset;
         QPoint end = ann.points.last() + offset;
         QRect r(start, end);
-        if (ann.shiftConstrained) {
-            int side = qMin(qAbs(r.width()), qAbs(r.height()));
-            r.setWidth(r.width() < 0 ? -side : side);
-            r.setHeight(r.height() < 0 ? -side : side);
-        }
         QPen pen(ann.color, ann.penWidth);
         painter->setPen(pen);
-        painter->setBrush(Qt::NoBrush);
+        painter->setBrush(ann.filled ? QBrush(ann.color) : QBrush(Qt::NoBrush));
         painter->drawRect(r.normalized());
         break;
     }
@@ -284,14 +343,9 @@ void AnnotationEngine::drawAnnotation(QPainter *painter, const Annotation &ann, 
         QPoint start = ann.points.first() + offset;
         QPoint end = ann.points.last() + offset;
         QRect r(start, end);
-        if (ann.shiftConstrained) {
-            int side = qMin(qAbs(r.width()), qAbs(r.height()));
-            r.setWidth(r.width() < 0 ? -side : side);
-            r.setHeight(r.height() < 0 ? -side : side);
-        }
         QPen pen(ann.color, ann.penWidth);
         painter->setPen(pen);
-        painter->setBrush(Qt::NoBrush);
+        painter->setBrush(ann.filled ? QBrush(ann.color) : QBrush(Qt::NoBrush));
         painter->drawEllipse(r.normalized());
         break;
     }
@@ -410,11 +464,6 @@ void AnnotationEngine::drawAnnotation(QPainter *painter, const Annotation &ann, 
         QPoint start = ann.points.first() + offset;
         QPoint end = ann.points.last() + offset;
         QRect r(start, end);
-        if (ann.shiftConstrained) {
-            int side = qMin(qAbs(r.width()), qAbs(r.height()));
-            r.setWidth(r.width() < 0 ? -side : side);
-            r.setHeight(r.height() < 0 ? -side : side);
-        }
         QColor fillColor = ann.color;
         fillColor.setAlpha(80);
         painter->setPen(QPen(ann.color, ann.penWidth));
@@ -731,6 +780,11 @@ bool AnnotationEngine::isTextAnnotation(int index) const
         && m_annotations[index].tool == Text;
 }
 
+AnnotationEngine::Tool AnnotationEngine::toolOf(int index) const
+{
+    return index >= 0 && index < m_annotations.size() ? m_annotations[index].tool : None;
+}
+
 qreal AnnotationEngine::rotationDegreesOf(int index) const
 {
     return index >= 0 && index < m_annotations.size()
@@ -872,8 +926,224 @@ void AnnotationEngine::endTextResize()
     m_textResizeIndex = -1;
 }
 
+QVector<AnnotationEngine::ShapeHandlePoint> AnnotationEngine::shapeHandlesOf(int index) const
+{
+    QVector<ShapeHandlePoint> handles;
+    if (index < 0 || index >= m_annotations.size())
+        return handles;
+    const Annotation &ann = m_annotations[index];
+    if (ann.points.size() < 2)
+        return handles;
+
+    if (ann.tool == Counter) {
+        handles.append({ShapeHandle::End, QPointF(ann.points[1])});
+        return handles;
+    }
+
+    // Shapes rotate around the centre of their unrotated bounds.
+    const QPointF center = rawAnnotationBounds(ann, 0).center();
+    const auto onScreen = [&](const QPointF &point) {
+        return center + rotatedVector(point - center, ann.rotationDegrees);
+    };
+    if (ann.tool == Line || ann.tool == Arrow) {
+        handles.append({ShapeHandle::Start, onScreen(ann.points.first())});
+        handles.append({ShapeHandle::End, onScreen(ann.points.last())});
+        return handles;
+    }
+    if (!isBoxTool(ann.tool))
+        return handles;
+
+    const QRectF box = QRectF(QPointF(ann.points.first()), QPointF(ann.points.last())).normalized();
+    // Edge handles only where the side is long enough to tell them apart.
+    constexpr qreal MinEdgeHandleSide = 30.0;
+    using H = ShapeHandle;
+    for (H handle : {H::TopLeft, H::Top, H::TopRight, H::Right, H::BottomRight, H::Bottom,
+                     H::BottomLeft, H::Left}) {
+        const QPoint sign = boxHandleSign(handle);
+        if ((sign.x() == 0 && box.width() < MinEdgeHandleSide)
+            || (sign.y() == 0 && box.height() < MinEdgeHandleSide))
+            continue;
+        const QPointF local(box.center().x() + sign.x() * box.width() / 2.0,
+                            box.center().y() + sign.y() * box.height() / 2.0);
+        handles.append({handle, onScreen(local)});
+    }
+    return handles;
+}
+
+void AnnotationEngine::beginShapeResize(int index, ShapeHandle handle)
+{
+    if (index < 0 || index >= m_annotations.size() || handle == ShapeHandle::None)
+        return;
+    m_shapeResizeIndex = index;
+    m_shapeResizeHandle = handle;
+    m_shapeResizeOriginal = m_annotations[index];
+
+    Annotation &ann = m_annotations[index];
+    if ((ann.tool == Line || ann.tool == Arrow) && !qFuzzyIsNull(ann.rotationDegrees)
+        && ann.points.size() >= 2) {
+        // A rotated line is the same line with rotated ends; storing it that
+        // way lets each end follow the mouse directly.
+        const QPointF center = rawAnnotationBounds(ann, 0).center();
+        for (QPoint &point : ann.points)
+            point = (center + rotatedVector(point - center, ann.rotationDegrees)).toPoint();
+        ann.rotationDegrees = 0.0;
+    }
+}
+
+void AnnotationEngine::resizeShape(const QPointF &pos, bool keepRatio)
+{
+    if (m_shapeResizeIndex < 0 || m_shapeResizeIndex >= m_annotations.size())
+        return;
+    Annotation &ann = m_annotations[m_shapeResizeIndex];
+    if (ann.points.size() < 2)
+        return;
+
+    if (ann.tool == Counter) {
+        const QPoint target = pos.toPoint();
+        if (CounterGeometry::hasVisiblePointer(ann.points.first(), ann.counterDiameter / 2.0, target))
+            ann.points[1] = target;
+        return;
+    }
+    if (ann.tool == Line || ann.tool == Arrow) {
+        const bool start = m_shapeResizeHandle == ShapeHandle::Start;
+        const QPoint fixed = start ? ann.points.last() : ann.points.first();
+        const QPoint moved = keepRatio ? snappedToAngle(fixed, pos.toPoint()) : pos.toPoint();
+        if (start)
+            ann.points.first() = moved;
+        else
+            ann.points.last() = moved;
+        return;
+    }
+    if (!isBoxTool(ann.tool))
+        return;
+
+    // Work in the box's own axes: the handle opposite the dragged one stays
+    // where it is on screen, also when the box is rotated.
+    const Annotation &original = m_shapeResizeOriginal;
+    const QRectF box = QRectF(QPointF(original.points.first()),
+                              QPointF(original.points.last())).normalized();
+    const qreal angle = original.rotationDegrees;
+    const QPointF center = box.center();
+    const QPoint sign = boxHandleSign(m_shapeResizeHandle);
+    const QPointF anchorLocal(-sign.x() * box.width() / 2.0, -sign.y() * box.height() / 2.0);
+    const QPointF anchor = center + rotatedVector(anchorLocal, angle);
+    const QPointF reach = rotatedVector(pos - anchor, -angle);
+
+    constexpr qreal MinSide = 4.0;
+    qreal width = sign.x() != 0 ? qMax(MinSide, sign.x() * reach.x()) : box.width();
+    qreal height = sign.y() != 0 ? qMax(MinSide, sign.y() * reach.y()) : box.height();
+    if (keepRatio && sign.x() != 0 && sign.y() != 0 && box.width() > 0.0 && box.height() > 0.0) {
+        const qreal scale = qMax(width / box.width(), height / box.height());
+        width = qMax(MinSide, box.width() * scale);
+        height = qMax(MinSide, box.height() * scale);
+    }
+    const QPointF centerOffset(sign.x() * width / 2.0, sign.y() * height / 2.0);
+    const QPointF newCenter = anchor + rotatedVector(centerOffset, angle);
+    ann.points.first() = QPointF(newCenter.x() - width / 2.0, newCenter.y() - height / 2.0).toPoint();
+    ann.points.last() = QPointF(newCenter.x() + width / 2.0, newCenter.y() + height / 2.0).toPoint();
+}
+
+void AnnotationEngine::endShapeResize()
+{
+    if (m_shapeResizeIndex < 0 || m_shapeResizeIndex >= m_annotations.size()) {
+        m_shapeResizeIndex = -1;
+        return;
+    }
+    const Annotation &resized = m_annotations[m_shapeResizeIndex];
+    if (resized.points != m_shapeResizeOriginal.points
+        || !qFuzzyCompare(resized.rotationDegrees + 1.0, m_shapeResizeOriginal.rotationDegrees + 1.0)) {
+        HistoryAction action;
+        action.type = HistoryAction::Resize;
+        action.index = m_shapeResizeIndex;
+        action.previousAnnotation = m_shapeResizeOriginal;
+        action.annotation = resized;
+        appendHistoryAction(action);
+        m_redoStack.clear();
+    }
+    m_shapeResizeIndex = -1;
+    m_shapeResizeHandle = ShapeHandle::None;
+}
+
+void AnnotationEngine::editAnnotationProperty(int index, const Annotation &updated, PropertyEdit edit)
+{
+    if (m_propertyEditOpen && !m_undoStack.isEmpty()) {
+        HistoryAction &last = m_undoStack.last();
+        if (last.type == HistoryAction::Resize && last.index == index && last.propertyEdit == edit) {
+            last.annotation = updated;
+            m_annotations[index] = updated;
+            m_redoStack.clear();
+            return;
+        }
+    }
+    replaceAnnotation(index, updated);
+    m_undoStack.last().propertyEdit = edit;
+    m_propertyEditOpen = true;
+}
+
+bool AnnotationEngine::setAnnotationPenWidth(int index, int width)
+{
+    if (index < 0 || index >= m_annotations.size())
+        return false;
+    const Tool tool = m_annotations[index].tool;
+    // Text has a font size; blur and pixelate have no outline.
+    if (tool == Text || tool == Blur || tool == Pixelate)
+        return false;
+    width = qBound(1, width, 20);
+    if (m_annotations[index].penWidth == width)
+        return false;
+    Annotation updated = m_annotations[index];
+    updated.penWidth = width;
+    editAnnotationProperty(index, updated, PenWidthEdit);
+    return true;
+}
+
+bool AnnotationEngine::setAnnotationBlurIntensity(int index, int intensity)
+{
+    if (index < 0 || index >= m_annotations.size())
+        return false;
+    const Tool tool = m_annotations[index].tool;
+    intensity = qBound(4, intensity, 64);
+    if ((tool != Blur && tool != Pixelate) || m_annotations[index].blurIntensity == intensity)
+        return false;
+    Annotation updated = m_annotations[index];
+    updated.blurIntensity = intensity;
+    editAnnotationProperty(index, updated, BlurIntensityEdit);
+    return true;
+}
+
+bool AnnotationEngine::setAnnotationFilled(int index, bool filled)
+{
+    if (index < 0 || index >= m_annotations.size()
+        || !supportsFill(m_annotations[index].tool) || m_annotations[index].filled == filled)
+        return false;
+    Annotation updated = m_annotations[index];
+    updated.filled = filled;
+    editAnnotationProperty(index, updated, FillEdit);
+    return true;
+}
+
+int AnnotationEngine::duplicateAnnotation(int index, const QPoint &offset)
+{
+    if (index < 0 || index >= m_annotations.size())
+        return -1;
+    Annotation copy = m_annotations[index];
+    for (QPoint &point : copy.points)
+        point += offset;
+    // A copied counter continues the numbering instead of repeating it.
+    if (copy.tool == Counter) {
+        copy.counterValue = nextCounterValue();
+        m_counterValue = copy.counterValue;
+    }
+    m_annotations.append(copy);
+    pushHistory(HistoryAction::Add, copy, m_annotations.size() - 1);
+    emit annotationAdded();
+    return m_annotations.size() - 1;
+}
+
 void AnnotationEngine::setSelectedIndex(int index)
 {
+    if (index != m_selectedIndex)
+        m_propertyEditOpen = false;
     m_selectedIndex = index;
 }
 
@@ -907,14 +1177,7 @@ QRect AnnotationEngine::rawAnnotationBounds(const Annotation &ann, int padding) 
         if (ann.points.size() < 2)
             bounds = QRect(ann.points.first(), QSize(1, 1));
         else {
-            QRect shapeBounds(ann.points.first(), ann.points.last());
-            if (ann.shiftConstrained
-                && (ann.tool == SemiRect || ann.tool == Rectangle || ann.tool == Circle)) {
-                const int side = qMin(qAbs(shapeBounds.width()), qAbs(shapeBounds.height()));
-                shapeBounds.setWidth(shapeBounds.width() < 0 ? -side : side);
-                shapeBounds.setHeight(shapeBounds.height() < 0 ? -side : side);
-            }
-            bounds = shapeBounds.normalized();
+            bounds = QRect(ann.points.first(), ann.points.last()).normalized();
         }
     } else if (ann.points.size() == 1) {
         bounds = QRect(ann.points.first(), QSize(1, 1));
@@ -1021,16 +1284,11 @@ bool AnnotationEngine::annotationContainsPoint(const Annotation &ann, const QPoi
     case Rectangle: {
         if (ann.points.size() < 2)
             return rawAnnotationBounds(ann, tolerance).contains(hitPos);
-        QRect r = QRect(ann.points.first(), ann.points.last());
-        if (ann.shiftConstrained) {
-            // Match drawAnnotation's shift-constrained geometry.
-            const int side = qMin(qAbs(r.width()), qAbs(r.height()));
-            r.setWidth(r.width() < 0 ? -side : side);
-            r.setHeight(r.height() < 0 ? -side : side);
-        }
-        r = r.normalized();
+        const QRect r = QRect(ann.points.first(), ann.points.last()).normalized();
         if (!r.adjusted(-tolerance, -tolerance, tolerance, tolerance).contains(hitPos))
             return false;
+        if (ann.filled)
+            return true;
         const int left = qAbs(hitPos.x() - r.left());
         const int right = qAbs(hitPos.x() - r.right());
         const int top = qAbs(hitPos.y() - r.top());
@@ -1040,14 +1298,7 @@ bool AnnotationEngine::annotationContainsPoint(const Annotation &ann, const QPoi
     case Circle: {
         if (ann.points.size() < 2)
             return rawAnnotationBounds(ann, tolerance).contains(hitPos);
-        QRect r = QRect(ann.points.first(), ann.points.last());
-        if (ann.shiftConstrained) {
-            // Match drawAnnotation's shift-constrained geometry.
-            const int side = qMin(qAbs(r.width()), qAbs(r.height()));
-            r.setWidth(r.width() < 0 ? -side : side);
-            r.setHeight(r.height() < 0 ? -side : side);
-        }
-        r = r.normalized();
+        const QRect r = QRect(ann.points.first(), ann.points.last()).normalized();
         if (r.width() <= 0 || r.height() <= 0)
             return rawAnnotationBounds(ann, tolerance).contains(hitPos);
         if (!r.adjusted(-tolerance, -tolerance, tolerance, tolerance).contains(hitPos))
@@ -1059,6 +1310,8 @@ bool AnnotationEngine::annotationContainsPoint(const Annotation &ann, const QPoi
         const double ny = (hitPos.y() - center.y()) / ry;
         const double edge = qSqrt(nx * nx + ny * ny);
         const double normalizedTolerance = tolerance / qMax(1.0, qMin(rx, ry));
+        if (ann.filled)
+            return edge <= 1.0 + normalizedTolerance;
         return qAbs(edge - 1.0) <= normalizedTolerance;
     }
     case Text:
@@ -1161,6 +1414,10 @@ void AnnotationEngine::resetGestureState()
     m_moveGestureOriginal = Annotation();
     m_moveGestureHistoryStarted = false;
     m_moveHistorySize = -1;
+    m_shapeResizeIndex = -1;
+    m_shapeResizeHandle = ShapeHandle::None;
+    m_shapeResizeOriginal = Annotation();
+    m_propertyEditOpen = false;
 }
 
 void AnnotationEngine::setScreenSnapshot(const QPixmap &snapshot)

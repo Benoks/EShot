@@ -256,6 +256,9 @@ void drawShortcutSheet(QPainter &painter, const QRect &monitorRect, bool windowS
     editing.rows.append({{TM::tr("keyCtrlClick")}, TM::tr("sheetMoveObject")});
     editing.rows.append({{arrows}, TM::tr("sheetNudgeObject")});
     editing.rows.append({{TM::tr("keyShiftDrag")}, TM::tr("sheetStraight")});
+    editing.rows.append({{TM::tr("keyAltDrag")}, TM::tr("sheetFromCenter")});
+    editing.rows.append({{TM::tr("keyDragHandle")}, TM::tr("sheetResizeObject")});
+    addShortcut(editing.rows, "actionDuplicate", "Ctrl+D", TM::tr("actionDuplicate"));
     editing.rows.append({{TM::tr("keyDrag")}, TM::tr("sheetCounterPointer")});
     editing.rows.append({{TM::tr("keyDoubleClick"), QStringLiteral("F2")}, TM::tr("sheetEditText")});
 
@@ -266,7 +269,8 @@ void drawShortcutSheet(QPainter &painter, const QRect &monitorRect, bool windowS
         {{QStringLiteral("Ctrl +"), QStringLiteral("Ctrl −")}, TM::tr("sheetTextSize")},
     }};
 
-    const QList<QList<Section>> columns = {{selection, more}, {tools}, {editing, typing}};
+    // Balanced so the card still fits a 768 px tall screen with every optional row.
+    const QList<QList<Section>> columns = {{selection}, {tools, typing}, {editing, more}};
 
     const QString title = TM::tr("sheetTitle");
     const QString closeHint = TM::tr("sheetClose");
