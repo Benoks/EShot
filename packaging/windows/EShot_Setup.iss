@@ -94,6 +94,7 @@ turkish.GroupComment=Ekran görüntüsü aracı
 turkish.UninstallEntry=Kaldır {#MyAppName}
 turkish.LaunchAfterInstall={#MyAppName}'ı başlat
 turkish.AlreadyInstalled=zaten yüklü
+turkish.EShotStillSaving=EShot hâlâ bir kaydı kaydediyor. Beklemeye devam edilsin mi?%n%nHayır derseniz EShot hemen kapatılır ve kayıt kaybolabilir.
 
 english.CreateDesktopShortcut=Create desktop shortcut
 english.AutoStartWithWindows=Auto-start with Windows
@@ -119,6 +120,7 @@ english.GroupComment=Screenshot tool
 english.UninstallEntry=Uninstall {#MyAppName}
 english.LaunchAfterInstall=Launch {#MyAppName}
 english.AlreadyInstalled=already installed
+english.EShotStillSaving=EShot is still saving a recording. Keep waiting?%n%nIf you choose No, EShot is closed now and the recording may be lost.
 
 [Tasks]
 Name: "desktopicon";  Description: "{cm:CreateDesktopShortcut}"; GroupDescription: "{cm:AdditionalIcons}"
@@ -271,17 +273,36 @@ end;
 
 // Ask the running EShot to quit through its single-instance channel so it can
 // finish a recording and write pending settings, then force it only if needed.
+// Saving a long recording can take many minutes (EShot's own quit watchdog
+// grows with the recording), so wait for it: the user may give up, unattended
+// Setup forces it after half an hour.
 procedure CloseRunningEShot;
 var
   ResultCode: Integer;
+  Waited: Integer;
+  Silent: Boolean;
   AppExe: String;
 begin
   if not IsEShotRunning then
     Exit;
   AppExe := ExpandConstant('{app}\{#MyAppExeName}');
-  if FileExists(AppExe) then
-    Exec(AppExe, '--quit', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-  if WaitForEShotExit(5000) then
+  if FileExists(AppExe) and
+     Exec(AppExe, '--quit', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then begin
+    if IsUninstaller then
+      Silent := UninstallSilent
+    else
+      Silent := WizardSilent;
+    Waited := 0;
+    while not WaitForEShotExit(120000) do begin
+      Waited := Waited + 120000;
+      if Silent then begin
+        if Waited >= 1800000 then
+          Break;
+      end else if MsgBox(CustomMessage('EShotStillSaving'), mbConfirmation, MB_YESNO) = IDNO then
+        Break;
+    end;
+  end;
+  if not IsEShotRunning then
     Exit;
   Exec(ExpandConstant('{cmd}'), '/C taskkill /F /IM {#MyAppExeName}', '', SW_HIDE,
        ewWaitUntilTerminated, ResultCode);
