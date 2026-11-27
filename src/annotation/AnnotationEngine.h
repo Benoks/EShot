@@ -11,7 +11,11 @@
 #include <QString>
 #include <QFont>
 
+#include <memory>
+
 #include "CounterGeometry.h"
+
+class QTextDocument;
 
 class AnnotationEngine : public QObject {
     Q_OBJECT
@@ -232,6 +236,7 @@ private:
     void drawRedaction(QPainter *painter, Tool tool, const QRect &rect, const QPoint &offset,
                        int intensity);
     QPixmap redactedSnapshotRegion(Tool tool, const QRect &physicalRect, int intensity) const;
+    std::shared_ptr<QTextDocument> textDocument(const Annotation &ann, const QColor &color) const;
     QRect textBaseBackgroundRect(const Annotation &ann) const;
     QRect textBackgroundRect(const Annotation &ann) const;
     QRect paintedBounds(const Annotation &ann) const;
@@ -290,6 +295,9 @@ private:
     // Blurring is expensive and paintEvent runs on every mouse move; reuse
     // results until the snapshot changes.
     mutable QHash<QString, QPixmap> m_redactionCache;
+    // Laying out a label is slow and paint, hit tests and bounds all ask for
+    // it; documents are keyed by text, font and colour, so edits miss.
+    mutable QHash<QString, std::shared_ptr<QTextDocument>> m_textDocuments;
 };
 
 #endif

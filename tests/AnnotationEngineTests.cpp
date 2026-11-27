@@ -56,6 +56,7 @@ private slots:
     void boxesDraggedUpOrLeftKeepTheirSize();
     void undoDuringAShapeResizeEndsTheGesture();
     void paintedBoundsCoverEverythingAnAnnotationDraws();
+    void textBoundsFollowEditsOfTheLabel();
 };
 
 namespace {
@@ -1043,4 +1044,21 @@ void AnnotationEngineTests::paintedBoundsCoverEverythingAnAnnotationDraws()
         QVERIFY(!engine.paintedBoundsOf(0).isEmpty());
         QVERIFY2(drawsOnlyInside(engine, engine.paintedBoundsOf(0)), qPrintable(QString::number(c.tool)));
     }
+}
+
+void AnnotationEngineTests::textBoundsFollowEditsOfTheLabel()
+{
+    // Laid-out labels are cached, so edits must still change the bounds.
+    AnnotationEngine engine;
+    engine.addTextAnnotation(QPoint(20, 20), QStringLiteral("ab"));
+    const QRect shortBounds = engine.boundingRectOf(0);
+    AnnotationEngine::TextStyle style = engine.textStyleOf(0);
+    QVERIFY(engine.updateTextAnnotation(0, QStringLiteral("ab and a lot more"), style));
+    QVERIFY(engine.boundingRectOf(0).width() > shortBounds.width());
+    style.fontSize = 48;
+    QVERIFY(engine.updateTextAnnotation(0, QStringLiteral("ab"), style));
+    QVERIFY(engine.boundingRectOf(0).height() > shortBounds.height());
+    engine.undo();
+    engine.undo();
+    QCOMPARE(engine.boundingRectOf(0), shortBounds);
 }

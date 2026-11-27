@@ -389,20 +389,8 @@ void AnnotationEngine::drawAnnotation(QPainter *painter, const Annotation &ann, 
     }
     case Text: {
         if (ann.text.isEmpty() || ann.points.isEmpty()) break;
-        QFont font(ann.fontFamily.isEmpty() ? QStringLiteral("Segoe UI") : ann.fontFamily,
-                   qBound(8, ann.fontSize, 72));
-        font.setBold(ann.textBold);
         QPoint tp = ann.points.first() + offset;
-
-        QTextDocument doc;
-        doc.setDefaultFont(font);
-        doc.setPlainText(ann.text);
-        QTextCursor cursor(&doc);
-        cursor.select(QTextCursor::Document);
-        QTextCharFormat fmt;
-        fmt.setForeground(ann.color);
-        cursor.mergeCharFormat(fmt);
-        QSizeF docSize = doc.size();
+        const std::shared_ptr<QTextDocument> doc = textDocument(ann, ann.color);
 
         const QRect bg = textBaseBackgroundRect(ann).translated(offset);
         painter->setPen(Qt::NoPen);
@@ -417,26 +405,19 @@ void AnnotationEngine::drawAnnotation(QPainter *painter, const Annotation &ann, 
         if (ann.textBackground == TextOutline) {
             // A dark copy drawn around the text keeps it readable on light
             // and dark screenshots without covering them with a box.
-            QTextDocument outline;
-            outline.setDefaultFont(font);
-            outline.setPlainText(ann.text);
-            QTextCursor outlineCursor(&outline);
-            outlineCursor.select(QTextCursor::Document);
-            QTextCharFormat outlineFormat;
-            outlineFormat.setForeground(QColor(0, 0, 0, 220));
-            outlineCursor.mergeCharFormat(outlineFormat);
-            const qreal w = qMax<qreal>(1.5, font.pointSizeF() / 12.0);
+            const std::shared_ptr<QTextDocument> outline = textDocument(ann, QColor(0, 0, 0, 220));
+            const qreal w = qMax<qreal>(1.5, doc->defaultFont().pointSizeF() / 12.0);
             for (int dx = -1; dx <= 1; ++dx) {
                 for (int dy = -1; dy <= 1; ++dy) {
                     if (dx == 0 && dy == 0)
                         continue;
                     painter->translate(dx * w, dy * w);
-                    outline.drawContents(painter);
+                    outline->drawContents(painter);
                     painter->translate(-dx * w, -dy * w);
                 }
             }
         }
-        doc.drawContents(painter);
+        doc->drawContents(painter);
         painter->restore();
         break;
     }
@@ -1225,14 +1206,38 @@ QRect AnnotationEngine::textBaseBackgroundRect(const Annotation &ann) const
     if (ann.tool != Text || ann.points.isEmpty() || ann.text.isEmpty())
         return QRect();
 
-    QFont font(ann.fontFamily.isEmpty() ? QStringLiteral("Segoe UI") : ann.fontFamily,
-               qBound(8, ann.fontSize, 72));
-    font.setBold(ann.textBold);
-    QTextDocument doc;
-    doc.setDefaultFont(font);
-    doc.setPlainText(ann.text);
-    const QSize documentSize = doc.size().toSize();
+    // The colour does not change the layout, so the painted document is reused.
+    const QSize documentSize = textDocument(ann, ann.color)->size().toSize();
     return QRect(ann.points.first() - QPoint(4, 4), documentSize + QSize(8, 8));
+}
+
+std::shared_ptr<QTextDocument> AnnotationEngine::textDocument(const Annotation &ann,
+                                                              const QColor &color) const
+{
+    const QString family = ann.fontFamily.isEmpty() ? QStringLiteral("Segoe UI") : ann.fontFamily;
+    const int size = qBound(8, ann.fontSize, 72);
+    const QChar sep(0x1f);
+    const QString key = family + sep + QString::number(size) + sep + QString::number(ann.textBold)
+        + sep + color.name(QColor::HexArgb) + sep + ann.text;
+    if (const auto cached = m_textDocuments.constFind(key); cached != m_textDocuments.constEnd())
+        return cached.value();
+
+    QFont font(family, size);
+    font.setBold(ann.textBold);
+    auto doc = std::make_shared<QTextDocument>();
+    doc->setDefaultFont(font);
+    doc->setPlainText(ann.text);
+    QTextCursor cursor(doc.get());
+    cursor.select(QTextCursor::Document);
+    QTextCharFormat fmt;
+    fmt.setForeground(color);
+    cursor.mergeCharFormat(fmt);
+    doc->size(); // lay it out once here, not on the next paint
+
+    if (m_textDocuments.size() > 64)
+        m_textDocuments.clear();
+    m_textDocuments.insert(key, doc);
+    return doc;
 }
 
 QRect AnnotationEngine::textBackgroundRect(const Annotation &ann) const
@@ -1465,6 +1470,7 @@ void AnnotationEngine::releaseScreenSnapshot()
 {
     m_screenSnapshot = QPixmap();
     m_redactionCache.clear();
+    m_textDocuments.clear();
 }
 
 namespace {
