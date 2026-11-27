@@ -55,6 +55,7 @@ private slots:
     void labelBeingEditedFollowsRemovalsAndUndo();
     void boxesDraggedUpOrLeftKeepTheirSize();
     void undoDuringAShapeResizeEndsTheGesture();
+    void paintedBoundsCoverEverythingAnAnnotationDraws();
 };
 
 namespace {
@@ -999,3 +1000,47 @@ void AnnotationEngineTests::undoDuringAShapeResizeEndsTheGesture()
 }
 
 #include "AnnotationEngineTests.moc"
+
+void AnnotationEngineTests::paintedBoundsCoverEverythingAnAnnotationDraws()
+{
+    // Partial repaints rely on these bounds; nothing may be drawn outside.
+    struct Case { AnnotationEngine::Tool tool; int penWidth; QPoint from; QPoint to; qreal rotation; };
+    const QList<Case> cases = {
+        {AnnotationEngine::Pen, 20, QPoint(100, 100), QPoint(200, 140), 0.0},
+        {AnnotationEngine::Highlighter, 20, QPoint(100, 150), QPoint(260, 150), 0.0},
+        {AnnotationEngine::Arrow, 1, QPoint(100, 100), QPoint(220, 160), 0.0},
+        {AnnotationEngine::Arrow, 20, QPoint(100, 100), QPoint(220, 160), 0.0},
+        {AnnotationEngine::Line, 20, QPoint(100, 100), QPoint(220, 100), 0.0},
+        {AnnotationEngine::Rectangle, 20, QPoint(100, 100), QPoint(220, 160), 30.0},
+        {AnnotationEngine::Circle, 20, QPoint(100, 100), QPoint(220, 160), 0.0},
+        {AnnotationEngine::Counter, 20, QPoint(150, 150), QPoint(260, 220), 0.0},
+    };
+    const auto drawsOnlyInside = [](AnnotationEngine &engine, const QRect &bounds) {
+        QPixmap canvas(420, 420);
+        canvas.fill(Qt::white);
+        const QImage image = renderEngine(engine, canvas);
+        for (int y = 0; y < image.height(); ++y) {
+            for (int x = 0; x < image.width(); ++x) {
+                if (image.pixel(x, y) != qRgb(255, 255, 255) && !bounds.contains(x, y))
+                    return false;
+            }
+        }
+        return true;
+    };
+    for (const Case &c : cases) {
+        AnnotationEngine engine;
+        engine.setColor(Qt::red);
+        engine.setPenWidth(c.penWidth);
+        engine.setCurrentTool(c.tool);
+        engine.beginDraw(c.from);
+        engine.continueDraw((c.from + c.to) / 2 + QPoint(0, 20));
+        engine.continueDraw(c.to);
+        QVERIFY2(drawsOnlyInside(engine, engine.currentPaintedBounds()), qPrintable(QString::number(c.tool)));
+        engine.endDraw(c.to);
+        QVERIFY(engine.currentPaintedBounds().isEmpty());
+        if (!qFuzzyIsNull(c.rotation))
+            engine.rotateAnnotation(0, c.rotation);
+        QVERIFY(!engine.paintedBoundsOf(0).isEmpty());
+        QVERIFY2(drawsOnlyInside(engine, engine.paintedBoundsOf(0)), qPrintable(QString::number(c.tool)));
+    }
+}

@@ -143,6 +143,8 @@ private:
     void applyKdeWindowList();
 #endif
     void updateOverlayRegion(const QRegion &region);
+    void updateAnnotationRegion(const QRect &before, const QRect &after);
+    void updateAnnotationEdit(int index, const QRect &before);
     void resetGestureState();
     void undoOrRedoAnnotation(bool redo);
     void resetSelection();

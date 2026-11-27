@@ -175,6 +175,10 @@ public:
     int selectedIndex() const { return m_selectedIndex; }
     QRect boundingRectOf(int index) const;
     QRectF rotatedBoundingRectOf(int index) const;
+    // Area an annotation (or the one being drawn) can paint into, for
+    // partial repaints; empty when there is none.
+    QRect paintedBoundsOf(int index) const;
+    QRect currentPaintedBounds() const;
 
     void setScreenSnapshot(const QPixmap &snapshot);
     void releaseScreenSnapshot();
@@ -230,6 +234,7 @@ private:
     QPixmap redactedSnapshotRegion(Tool tool, const QRect &physicalRect, int intensity) const;
     QRect textBaseBackgroundRect(const Annotation &ann) const;
     QRect textBackgroundRect(const Annotation &ann) const;
+    QRect paintedBounds(const Annotation &ann) const;
     QRect rawAnnotationBounds(const Annotation &ann, int padding = 10) const;
     QRectF rotatedAnnotationBounds(const Annotation &ann, int padding = 10) const;
     bool annotationContainsPoint(const Annotation &ann, const QPoint &pos, int padding = 8) const;

@@ -3614,6 +3614,29 @@ void CaptureOverlay::updateOverlayRegion(const QRegion &region)
         update();
 }
 
+// before/after are AnnotationEngine painted bounds, which already cover the
+// pen, the selection outline and its handles; the rotation handle hangs up to
+// 47 px below the annotation, so the bottom is widened for it.
+void CaptureOverlay::updateAnnotationRegion(const QRect &before, const QRect &after)
+{
+    QRegion dirty;
+    for (const QRect &bounds : {before, after}) {
+        if (!bounds.isEmpty())
+            dirty += bounds.adjusted(0, 0, 0, 32).intersected(rect());
+    }
+    if (!dirty.isEmpty())
+        updateOverlayRegion(dirty);
+}
+
+void CaptureOverlay::updateAnnotationEdit(int index, const QRect &before)
+{
+    // A scaled text outline can reach past the label's bounds.
+    if (m_annotationEngine->isTextAnnotation(index))
+        update();
+    else
+        updateAnnotationRegion(before, m_annotationEngine->paintedBoundsOf(index));
+}
+
 void CaptureOverlay::mouseMoveEvent(QMouseEvent *event)
 {
     noteCaptureInput();
@@ -3730,8 +3753,11 @@ void CaptureOverlay::mouseMoveEvent(QMouseEvent *event)
     }
 
     if (m_isResizingShape && m_annotationEngine) {
+        // The shape being resized is the selected one (see mousePressEvent).
+        const int index = m_annotationEngine->selectedIndex();
+        const QRect before = m_annotationEngine->paintedBoundsOf(index);
         m_annotationEngine->resizeShape(event->pos(), event->modifiers().testFlag(Qt::ShiftModifier));
-        update();
+        updateAnnotationEdit(index, before);
         return;
     }
 
@@ -3741,8 +3767,10 @@ void CaptureOverlay::mouseMoveEvent(QMouseEvent *event)
         qreal rotation = m_rotationStartDegrees + currentAngle - m_rotationDragStartAngle;
         rotation = AnnotationRotationGeometry::snappedAngle(
             rotation, QApplication::keyboardModifiers().testFlag(Qt::ShiftModifier));
-        m_annotationEngine->rotateAnnotation(m_annotationEngine->selectedIndex(), rotation);
-        update();
+        const int index = m_annotationEngine->selectedIndex();
+        const QRect before = m_annotationEngine->paintedBoundsOf(index);
+        m_annotationEngine->rotateAnnotation(index, rotation);
+        updateAnnotationEdit(index, before);
         return;
     }
 
@@ -3752,9 +3780,11 @@ void CaptureOverlay::mouseMoveEvent(QMouseEvent *event)
         QPoint rel = event->pos();
         QPoint delta = rel - m_dragAnnotationStart;
         if (!delta.isNull()) {
-            m_annotationEngine->moveAnnotation(m_annotationEngine->selectedIndex(), delta);
+            const int index = m_annotationEngine->selectedIndex();
+            const QRect before = m_annotationEngine->paintedBoundsOf(index);
+            m_annotationEngine->moveAnnotation(index, delta);
             m_dragAnnotationStart = rel;
-            update();
+            updateAnnotationEdit(index, before);
         }
         return;
     }
@@ -3838,9 +3868,10 @@ void CaptureOverlay::mouseMoveEvent(QMouseEvent *event)
                 if ((event->buttons() & Qt::LeftButton) && m_annotationEngine->eraseAnnotationAt(rel))
                     update();
             } else {
+                const QRect before = m_annotationEngine->currentPaintedBounds();
                 applyDrawModifiers(event->modifiers());
                 m_annotationEngine->continueDraw(rel);
-                update();
+                updateAnnotationRegion(before, m_annotationEngine->currentPaintedBounds());
             }
         }
     } else if (!m_selectionComplete) {

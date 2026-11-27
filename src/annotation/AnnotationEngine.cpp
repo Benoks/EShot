@@ -1164,6 +1164,28 @@ QRectF AnnotationEngine::rotatedBoundingRectOf(int index) const
     return rotatedAnnotationBounds(m_annotations[index], 0);
 }
 
+QRect AnnotationEngine::paintedBoundsOf(int index) const
+{
+    if (index < 0 || index >= m_annotations.size())
+        return QRect();
+    return paintedBounds(m_annotations[index]);
+}
+
+QRect AnnotationEngine::currentPaintedBounds() const
+{
+    return m_isDrawing ? paintedBounds(m_currentAnnotation) : QRect();
+}
+
+QRect AnnotationEngine::paintedBounds(const Annotation &ann) const
+{
+    if (ann.points.isEmpty())
+        return QRect();
+    // Room for half the widest stroke (a highlighter is five pens wide), arrow
+    // heads reaching sideways and antialiasing.
+    const int margin = ann.penWidth * 5 + 16;
+    return rotatedAnnotationBounds(ann, margin).toAlignedRect();
+}
+
 QRect AnnotationEngine::rawAnnotationBounds(const Annotation &ann, int padding) const
 {
     if (ann.points.isEmpty()) return QRect();
