@@ -4504,13 +4504,13 @@ void CaptureOverlay::hideToolbar()
     if (m_textFocusProxy) m_textFocusProxy->hide();
 }
 
-void CaptureOverlay::finishCapture()
+void CaptureOverlay::finishCapture(const QPixmap &composed)
 {
     QRect selRect = normalizedSelectionRect();
     const bool recordingMode = m_captureMode == ModeRecording;
     QPixmap result;
     if (shouldComposeCaptureResult(recordingMode))
-        result = getSelectedPixmap();
+        result = composed.isNull() ? getSelectedPixmap() : composed;
     hide();
     restorePreviousWindowFocus();
     m_selectionComplete = false;
@@ -5477,9 +5477,11 @@ void CaptureOverlay::completeSelection(const QRect &selectionRect)
     }
 
     if (m_instantCopyAfterSelection) {
-        onCopyToClipboard();
-        if (isVisible())
-            finishCapture();
+        // Copy and finish here so the result is composed only once.
+        const QPixmap result = getSelectedPixmap();
+        if (!result.isNull())
+            QGuiApplication::clipboard()->setPixmap(result);
+        finishCapture(result);
         return;
     }
 
@@ -5736,7 +5738,7 @@ void CaptureOverlay::onCopyToClipboard()
 
     // Close overlay if closeAfterCopy is enabled
     if (m_closeAfterCopy) {
-        finishCapture();
+        finishCapture(result);
     }
 }
 
@@ -5753,7 +5755,7 @@ void CaptureOverlay::onSave()
                                                       m_lastFailedSavePath, result, error);
         return;
     }
-    finishCapture();
+    finishCapture(result);
 }
 
 bool CaptureOverlay::saveScreenshotFile(const QPixmap &result, bool useCliPath, QString *error)

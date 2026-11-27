@@ -120,7 +120,8 @@ private:
                               const QRect &preselectGlobal = QRect());
     void showToolbar();
     void hideToolbar();
-    void finishCapture();
+    // composed: the result a caller already built, so it is not composed twice.
+    void finishCapture(const QPixmap &composed = QPixmap());
     void cancelCapture();
     void releaseCaptureBuffers();
     QRect normalizedSelectionRect() const;
