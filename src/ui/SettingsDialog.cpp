@@ -7,6 +7,7 @@
 #include "../core/WindowsElevatedStartup.h"
 #include "SettingsHotkeyPolicy.h"
 #include "SettingsLayoutPolicy.h"
+#include "SettingsSearch.h"
 #include "ApplicationTheme.h"
 #include "../core/HotkeyManager.h"
 #include "../core/WindowCaptureSupport.h"
@@ -65,7 +66,16 @@
 #include <QTabBar>
 #include <QStyle>
 #include <QToolButton>
+#include <QAbstractSpinBox>
+#include <QAbstractSlider>
+#include <QScrollBar>
+#include <QKeyEvent>
+#include <QPainter>
+#include <QShortcut>
+#include <QStyleOptionGroupBox>
+#include <QTextDocumentFragment>
 #include <algorithm>
+#include <functional>
 
 #ifdef Q_OS_WIN
 #include <windows.h>
@@ -174,6 +184,79 @@ QString cleanToolLabel(const QString &label)
     if (space > 0 && !label.at(0).isLetterOrNumber())
         return label.mid(space + 1);
     return label;
+}
+
+
+// Paints search highlights over a widget without changing its layout; mouse
+// events pass through to the controls underneath.
+class SearchOverlay : public QWidget
+{
+public:
+    SearchOverlay(QWidget *host, std::function<void(QPainter &, QWidget *)> paint)
+        : QWidget(host), m_paint(std::move(paint))
+    {
+        setAttribute(Qt::WA_TransparentForMouseEvents);
+        setFocusPolicy(Qt::NoFocus);
+        host->installEventFilter(this);
+        setGeometry(host->rect());
+        hide();
+    }
+
+    // Repaints when a highlighted widget moves, resizes or is shown/hidden.
+    void watch(QWidget *widget)
+    {
+        if (widget && !m_watched.contains(widget)) {
+            m_watched.append(widget);
+            widget->installEventFilter(this);
+        }
+    }
+
+protected:
+    bool eventFilter(QObject *watched, QEvent *event) override
+    {
+        switch (event->type()) {
+        case QEvent::Resize:
+            if (watched == parentWidget())
+                setGeometry(parentWidget()->rect());
+            Q_FALLTHROUGH();
+        case QEvent::Move:
+        case QEvent::Show:
+        case QEvent::Hide:
+        case QEvent::LayoutRequest:
+            if (isVisible())
+                update();
+            break;
+        default:
+            break;
+        }
+        return false;
+    }
+
+    void paintEvent(QPaintEvent *) override
+    {
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing);
+        m_paint(painter, parentWidget());
+    }
+
+private:
+    std::function<void(QPainter &, QWidget *)> m_paint;
+    QList<QPointer<QWidget>> m_watched;
+};
+
+// Text of a label without markup.
+QString plainLabelText(const QLabel *label)
+{
+    const QString text = label->text();
+    return Qt::mightBeRichText(text) ? QTextDocumentFragment::fromHtml(text).toPlainText() : text;
+}
+
+// Input widgets have no text of their own; a label in front of one names it.
+bool isSearchField(const QWidget *widget)
+{
+    return qobject_cast<const QLineEdit *>(widget) || qobject_cast<const QAbstractSpinBox *>(widget)
+        || qobject_cast<const QComboBox *>(widget) || qobject_cast<const QAbstractSlider *>(widget)
+        || qobject_cast<const QKeySequenceEdit *>(widget) || qobject_cast<const QAbstractItemView *>(widget);
 }
 
 }
@@ -537,7 +620,29 @@ void SettingsDialog::setupUI()
     QLabel *titleLabel = new QLabel(TranslationManager::settingsTitle());
     QFont tf = titleLabel->font(); tf.setPointSize(16); tf.setBold(true);
     titleLabel->setFont(tf);
-    mainLayout->addWidget(titleLabel);
+    QHBoxLayout *titleRow = new QHBoxLayout();
+    titleRow->addWidget(titleLabel);
+    titleRow->addStretch();
+
+    m_searchCountLabel = new QLabel(this);
+    ThemeColors::setStyleSheet(m_searchCountLabel, "color: @muted; font-size: 12px;");
+    titleRow->addWidget(m_searchCountLabel);
+    m_searchEdit = new QLineEdit(this);
+    m_searchEdit->setPlaceholderText(TranslationManager::tr("settingsSearchPlaceholder"));
+    m_searchEdit->setAccessibleName(m_searchEdit->placeholderText());
+    m_searchEdit->setToolTip(TranslationManager::tr("settingsSearchTip"));
+    m_searchEdit->setClearButtonEnabled(true);
+    m_searchEdit->setMinimumWidth(220);
+    m_searchEdit->installEventFilter(this);
+    connect(m_searchEdit, &QLineEdit::textChanged, this, &SettingsDialog::applySearch);
+    titleRow->addWidget(m_searchEdit);
+    mainLayout->addLayout(titleRow);
+
+    auto *findShortcut = new QShortcut(QKeySequence::Find, this);
+    connect(findShortcut, &QShortcut::activated, this, [this]() {
+        m_searchEdit->setFocus(Qt::ShortcutFocusReason);
+        m_searchEdit->selectAll();
+    });
 
     QTabWidget *tabs = new QTabWidget(this);
     m_tabs = tabs;
@@ -550,6 +655,39 @@ void SettingsDialog::setupUI()
     tabs->addTab(createInterfaceTab(),   TranslationManager::tabInterface());
     tabs->addTab(createHotkeyTab(),      TranslationManager::tabHotkey());
     mainLayout->addWidget(tabs);
+
+    // Search marks: one overlay per tab content and one over the tab bar.
+    for (int tab = 0; tab < tabs->count(); ++tab) {
+        QWidget *page = tabs->widget(tab);
+        auto *scroll = page->findChild<QScrollArea *>();
+        QWidget *host = scroll && scroll->widget() ? scroll->widget() : page;
+        m_searchOverlays.append(new SearchOverlay(host, [this, tab](QPainter &painter, QWidget *content) {
+            paintSearchMarks(painter, tab, content);
+        }));
+    }
+    m_searchTabBarOverlay = new SearchOverlay(tabs->tabBar(), [this](QPainter &painter, QWidget *tabBar) {
+        auto *bar = static_cast<QTabBar *>(tabBar);
+        QColor shade = bar->palette().color(QPalette::Window);
+        shade.setAlpha(150);
+        for (int tab = 0; tab < bar->count() && tab < m_searchTabDimmed.size(); ++tab) {
+            if (m_searchTabDimmed[tab])
+                painter.fillRect(bar->tabRect(tab), shade);
+        }
+    });
+    connect(tabs, &QTabWidget::currentChanged, this, [this](int tab) {
+        // Picking a tab by hand while searching jumps to its first match.
+        if (m_searchMatches.isEmpty())
+            return;
+        if (m_currentSearchMatch >= 0 && m_searchEntries[m_searchMatches[m_currentSearchMatch]].tab == tab)
+            return;
+        for (int i = 0; i < m_searchMatches.size(); ++i) {
+            if (m_searchEntries[m_searchMatches[i]].tab == tab) {
+                m_currentSearchMatch = i;
+                showCurrentSearchMatch();
+                return;
+            }
+        }
+    });
 
     const QMargins margins = mainLayout->contentsMargins();
     const int frameWidth = tabs->style()->pixelMetric(QStyle::PM_DefaultFrameWidth, nullptr, tabs) * 2;
@@ -1264,6 +1402,7 @@ QWidget* SettingsDialog::createRecordingTab()
 
     videoForm->addRow(advanced);
     advanced->setVisible(false);
+    m_videoAdvanced = advanced;
     connect(advancedToggle, &QToolButton::toggled, this, [advanced, advancedToggle](bool open) {
         advanced->setVisible(open);
         advancedToggle->setArrowType(open ? Qt::DownArrow : Qt::RightArrow);
@@ -3567,4 +3706,379 @@ void SettingsDialog::refreshAutoStartEntryAtStartup()
 #else
     prefetchLegacyAutoStartTask();
 #endif
+}
+
+bool SettingsDialog::eventFilter(QObject *watched, QEvent *event)
+{
+    if (watched == m_searchEdit && event->type() == QEvent::KeyPress) {
+        const auto *key = static_cast<QKeyEvent *>(event);
+        // Esc clears a search before it closes the dialog; Enter steps
+        // through the matches instead of pressing Save.
+        if (key->key() == Qt::Key_Escape && !m_searchEdit->text().isEmpty()) {
+            m_searchEdit->clear();
+            return true;
+        }
+        if ((key->key() == Qt::Key_Return || key->key() == Qt::Key_Enter)
+            && !m_searchEdit->text().trimmed().isEmpty()) {
+            stepSearchMatch(key->modifiers() & Qt::ShiftModifier ? -1 : 1);
+            return true;
+        }
+    }
+    return QDialog::eventFilter(watched, event);
+}
+
+void SettingsDialog::buildSearchIndex()
+{
+    m_searchEntries.clear();
+    m_searchTabTitles.clear();
+    m_searchTabFolded.clear();
+    m_searchIndexLanguage = static_cast<int>(TranslationManager::currentLanguage());
+    const QHash<QString, QString> english = SettingsSearch::englishIndex(m_searchIndexLanguage);
+    auto foldWithEnglish = [&english](const QString &text) {
+        const QString en = SettingsSearch::englishFor(english, text);
+        const QString folded = SettingsSearch::fold(text);
+        return en.isEmpty() ? folded : folded + QLatin1Char('\n') + en;
+    };
+    for (int tab = 0; tab < m_tabs->count(); ++tab) {
+        m_searchTabTitles << m_tabs->tabText(tab);
+        m_searchTabFolded << foldWithEnglish(m_tabs->tabText(tab));
+        indexSearchWidget(m_tabs->widget(tab), tab, -1);
+    }
+
+    // A tip shared by many controls (every overlay shortcut field) says
+    // nothing about any one of them, so it would only add noise.
+    QHash<QString, int> tipUses;
+    for (SearchEntry &entry : m_searchEntries) {
+        entry.tips.removeDuplicates();
+        for (const QString &tip : std::as_const(entry.tips))
+            ++tipUses[tip];
+    }
+    for (SearchEntry &entry : m_searchEntries) {
+        QStringList parts;
+        for (const QString &text : std::as_const(entry.texts))
+            parts << foldWithEnglish(text);
+        for (const QString &tip : std::as_const(entry.tips)) {
+            if (tipUses.value(tip) <= 2)
+                parts << foldWithEnglish(tip);
+        }
+        entry.folded = parts.join(QLatin1Char('\n'));
+        auto *overlay = static_cast<SearchOverlay *>(m_searchOverlays.value(entry.tab));
+        for (const auto &widget : std::as_const(entry.widgets))
+            overlay->watch(widget);
+    }
+}
+
+// Adds the texts of a widget to the form row being indexed (row >= 0) or
+// as an entry of its own, then walks its children in layout order.
+void SettingsDialog::indexSearchWidget(QWidget *widget, int tab, int row)
+{
+    if (!widget)
+        return;
+    QStringList texts;
+    QStringList tips;
+    if (!widget->toolTip().isEmpty())
+        tips << widget->toolTip();
+    if (auto *group = qobject_cast<QGroupBox *>(widget)) {
+        if (!group->title().isEmpty()) {
+            SearchEntry entry;
+            entry.tab = tab;
+            entry.widgets = {group};
+            entry.texts = {group->title()};
+            entry.tips = tips;
+            entry.groupTitle = true;
+            m_searchEntries.append(entry);
+        }
+        if (group->layout())
+            indexSearchLayout(group->layout(), tab, -1);
+        return;
+    }
+    if (auto *label = qobject_cast<QLabel *>(widget)) {
+        texts << plainLabelText(label);
+    } else if (auto *button = qobject_cast<QAbstractButton *>(widget)) {
+        texts << button->text();
+    } else if (auto *combo = qobject_cast<QComboBox *>(widget)) {
+        for (int i = 0; i < combo->count(); ++i)
+            texts << combo->itemText(i);
+    } else if (auto *list = qobject_cast<QListWidget *>(widget)) {
+        for (int i = 0; i < list->count(); ++i)
+            texts << list->item(i)->text();
+    } else if (auto *edit = qobject_cast<QLineEdit *>(widget)) {
+        if (!edit->placeholderText().isEmpty())
+            tips << edit->placeholderText();
+    }
+    texts.removeAll(QString());
+    if (!texts.isEmpty() || !tips.isEmpty()) {
+        if (row >= 0) {
+            m_searchEntries[row].texts += texts;
+            m_searchEntries[row].tips += tips;
+        } else {
+            SearchEntry entry;
+            entry.tab = tab;
+            entry.widgets = {widget};
+            entry.texts = texts;
+            entry.tips = tips;
+            m_searchEntries.append(entry);
+        }
+    }
+    if (auto *scroll = qobject_cast<QScrollArea *>(widget))
+        indexSearchWidget(scroll->widget(), tab, row);
+    else if (widget->layout())
+        indexSearchLayout(widget->layout(), tab, row);
+}
+
+void SettingsDialog::indexSearchLayout(QLayout *layout, int tab, int row)
+{
+    // A label and its field form one row: "Delay:" finds the spin box too.
+    auto startRow = [this, tab](QLabel *label) {
+        indexSearchWidget(label, tab, -1);
+        return int(m_searchEntries.size()) - 1;
+    };
+    if (auto *form = qobject_cast<QFormLayout *>(layout)) {
+        for (int r = 0; r < form->rowCount(); ++r) {
+            QLayoutItem *labelItem = form->itemAt(r, QFormLayout::LabelRole);
+            auto *label = labelItem ? qobject_cast<QLabel *>(labelItem->widget()) : nullptr;
+            int fieldRow = row;
+            if (label && row < 0 && !plainLabelText(label).isEmpty())
+                fieldRow = startRow(label);
+            else if (labelItem)
+                indexSearchWidget(labelItem->widget(), tab, row);
+            for (auto role : {QFormLayout::FieldRole, QFormLayout::SpanningRole}) {
+                QLayoutItem *item = form->itemAt(r, role);
+                if (!item)
+                    continue;
+                if (fieldRow != row) {
+                    if (item->widget()) {
+                        m_searchEntries[fieldRow].widgets << item->widget();
+                    } else if (QLayout *fieldLayout = item->layout()) {
+                        for (int i = 0; i < fieldLayout->count(); ++i) {
+                            if (QWidget *part = fieldLayout->itemAt(i)->widget())
+                                m_searchEntries[fieldRow].widgets << part;
+                        }
+                    }
+                }
+                if (item->widget())
+                    indexSearchWidget(item->widget(), tab, fieldRow);
+                else if (item->layout())
+                    indexSearchLayout(item->layout(), tab, fieldRow);
+            }
+        }
+        return;
+    }
+    for (int i = 0; i < layout->count(); ++i) {
+        QLayoutItem *item = layout->itemAt(i);
+        if (QLayout *child = item->layout()) {
+            indexSearchLayout(child, tab, row);
+            continue;
+        }
+        QWidget *widget = item->widget();
+        auto *label = qobject_cast<QLabel *>(widget);
+        QLayoutItem *next = i + 1 < layout->count() ? layout->itemAt(i + 1) : nullptr;
+        QWidget *field = next ? next->widget() : nullptr;
+        if (label && row < 0 && field && isSearchField(field) && !plainLabelText(label).isEmpty()) {
+            const int pairRow = startRow(label);
+            m_searchEntries[pairRow].widgets << field;
+            indexSearchWidget(field, tab, pairRow);
+            ++i;
+            continue;
+        }
+        indexSearchWidget(widget, tab, row);
+    }
+}
+
+// False for settings hidden on this system or in this state (the update
+// box, platform rows); the collapsed advanced video options still count
+// because the search opens them.
+bool SettingsDialog::searchEntryShown(const SearchEntry &entry) const
+{
+    QWidget *page = m_tabs->widget(entry.tab);
+    QWidget *widget = entry.widgets.value(0);
+    if (!widget)
+        return false;
+    for (QWidget *w = widget; w && w != page; w = w->parentWidget()) {
+        if (w->isHidden() && w != m_videoAdvanced)
+            return false;
+    }
+    return true;
+}
+
+QRect SettingsDialog::searchEntryRect(const SearchEntry &entry, QWidget *host) const
+{
+    QRect rect;
+    for (const auto &widget : entry.widgets) {
+        if (!widget || !widget->isVisibleTo(host))
+            continue;
+        QRect part(widget->mapTo(host, QPoint(0, 0)), widget->size());
+        if (entry.groupTitle) {
+            // Only the title of a group, not the whole box.
+            auto *group = static_cast<QGroupBox *>(widget.data());
+            QStyleOptionGroupBox option;
+            option.initFrom(group);
+            option.text = group->title();
+            option.lineWidth = 1;
+            option.textAlignment = group->alignment();
+            option.subControls = QStyle::SC_GroupBoxFrame | QStyle::SC_GroupBoxLabel;
+            const QRect title = group->style()->subControlRect(
+                QStyle::CC_GroupBox, &option, QStyle::SC_GroupBoxLabel, group);
+            if (title.isValid())
+                part = title.translated(part.topLeft());
+        }
+        rect = rect.united(part);
+    }
+    return rect;
+}
+
+void SettingsDialog::paintSearchMarks(QPainter &painter, int tab, QWidget *host) const
+{
+    const QPalette palette = host->palette();
+    QColor shade = palette.color(QPalette::Window);
+    shade.setAlpha(150);
+    for (const auto &group : m_searchDimmedGroups.value(tab)) {
+        if (group && group->isVisibleTo(host))
+            painter.fillRect(QRect(group->mapTo(host, QPoint(0, 0)), group->size()), shade);
+    }
+    const QColor accent = palette.color(QPalette::Highlight);
+    const QRectF bounds = QRectF(host->rect()).adjusted(1, 1, -1, -1);
+    for (int i = 0; i < m_searchMatches.size(); ++i) {
+        const SearchEntry &entry = m_searchEntries[m_searchMatches[i]];
+        if (entry.tab != tab)
+            continue;
+        const QRect rect = searchEntryRect(entry, host);
+        if (rect.isEmpty())
+            continue;
+        const bool current = i == m_currentSearchMatch;
+        QColor fill = accent;
+        fill.setAlpha(current ? 56 : 26);
+        QColor line = accent;
+        line.setAlpha(current ? 255 : 140);
+        painter.setPen(QPen(line, current ? 2.0 : 1.0));
+        painter.setBrush(fill);
+        painter.drawRoundedRect(QRectF(rect).adjusted(-4.5, -2.5, 4.5, 2.5).intersected(bounds), 4, 4);
+    }
+}
+
+void SettingsDialog::applySearch(const QString &query)
+{
+    const QStringList terms = SettingsSearch::terms(query);
+    const bool active = !terms.isEmpty();
+    const bool starting = active && m_searchTabDimmed.isEmpty();
+    if (starting || (active && m_searchIndexLanguage != static_cast<int>(TranslationManager::currentLanguage())))
+        buildSearchIndex();
+
+    m_searchMatches.clear();
+    QVector<int> counts(m_tabs->count(), 0);
+    if (active) {
+        for (int i = 0; i < m_searchEntries.size(); ++i) {
+            const SearchEntry &entry = m_searchEntries[i];
+            if (SettingsSearch::matches(entry.folded, terms) && searchEntryShown(entry)) {
+                m_searchMatches.append(i);
+                ++counts[entry.tab];
+            }
+        }
+    }
+
+    // Open the collapsed advanced video options while they hold a match and
+    // close them again afterwards if the search opened them.
+    bool advancedMatch = false;
+    for (int i : std::as_const(m_searchMatches)) {
+        QWidget *widget = m_searchEntries[i].widgets.value(0);
+        advancedMatch = advancedMatch || (widget && m_videoAdvanced && m_videoAdvanced->isAncestorOf(widget));
+    }
+    if (m_videoAdvancedToggle) {
+        if (advancedMatch && !m_videoAdvancedToggle->isChecked()) {
+            m_videoAdvancedToggle->setChecked(true);
+            m_searchOpenedVideoAdvanced = true;
+        } else if (!advancedMatch && m_searchOpenedVideoAdvanced) {
+            m_videoAdvancedToggle->setChecked(false);
+            m_searchOpenedVideoAdvanced = false;
+        }
+    }
+
+    m_searchTabDimmed = QVector<bool>(active ? m_tabs->count() : 0, false);
+    m_searchDimmedGroups = QVector<QVector<QPointer<QWidget>>>(active ? m_tabs->count() : 0);
+    for (int tab = 0; tab < m_tabs->count() && tab < m_searchTabTitles.size(); ++tab) {
+        const QString &title = m_searchTabTitles[tab];
+        m_tabs->setTabText(tab, counts[tab] > 0 ? QStringLiteral("%1 (%2)").arg(title).arg(counts[tab]) : title);
+        if (!active)
+            continue;
+        m_searchTabDimmed[tab] = counts[tab] == 0 && !SettingsSearch::matches(m_searchTabFolded.value(tab), terms);
+        if (counts[tab] == 0)
+            continue;
+        // Dim the groups without a match so the matching ones stand out.
+        QVector<QPointer<QWidget>> &dimmed = m_searchDimmedGroups[tab];
+        const auto groups = m_tabs->widget(tab)->findChildren<QGroupBox *>();
+        for (QGroupBox *group : groups) {
+            bool keep = false;
+            for (int i : std::as_const(m_searchMatches)) {
+                const SearchEntry &entry = m_searchEntries[i];
+                QWidget *widget = entry.widgets.value(0);
+                if (entry.tab == tab && widget
+                    && (widget == group || group->isAncestorOf(widget)
+                        || (entry.groupTitle && widget->isAncestorOf(group)))) {
+                    keep = true;
+                    break;
+                }
+            }
+            for (const auto &outer : std::as_const(dimmed))
+                keep = keep || (outer && outer->isAncestorOf(group));
+            if (!keep)
+                dimmed << group;
+        }
+    }
+    if (!active) {
+        m_searchTabDimmed.clear();
+        m_searchDimmedGroups.clear();
+    }
+
+    m_currentSearchMatch = -1;
+    for (int i = 0; i < m_searchMatches.size() && m_currentSearchMatch < 0; ++i) {
+        if (m_searchEntries[m_searchMatches[i]].tab == m_tabs->currentIndex())
+            m_currentSearchMatch = i;
+    }
+    if (m_currentSearchMatch < 0 && !m_searchMatches.isEmpty())
+        m_currentSearchMatch = 0;
+
+    m_searchCountLabel->setText(active && m_searchMatches.isEmpty()
+                                    ? TranslationManager::tr("settingsSearchNoResults") : QString());
+    for (QWidget *overlay : std::as_const(m_searchOverlays)) {
+        overlay->setVisible(active);
+        overlay->raise();
+        overlay->update();
+    }
+    m_searchTabBarOverlay->setVisible(active);
+    m_searchTabBarOverlay->raise();
+    m_searchTabBarOverlay->update();
+    showCurrentSearchMatch();
+}
+
+void SettingsDialog::stepSearchMatch(int delta)
+{
+    if (m_searchMatches.isEmpty())
+        return;
+    const int count = m_searchMatches.size();
+    m_currentSearchMatch = ((m_currentSearchMatch + delta) % count + count) % count;
+    showCurrentSearchMatch();
+}
+
+void SettingsDialog::showCurrentSearchMatch()
+{
+    if (m_currentSearchMatch < 0 || m_currentSearchMatch >= m_searchMatches.size())
+        return;
+    const SearchEntry &entry = m_searchEntries[m_searchMatches[m_currentSearchMatch]];
+    if (m_tabs->currentIndex() != entry.tab)
+        m_tabs->setCurrentIndex(entry.tab);
+    m_searchCountLabel->setText(QStringLiteral("%1/%2").arg(m_currentSearchMatch + 1).arg(m_searchMatches.size()));
+    for (QWidget *overlay : std::as_const(m_searchOverlays))
+        overlay->update();
+    // Scroll once the layouts settle (a tab just shown, options just opened)
+    // and bring a match that is out of view to the middle.
+    QTimer::singleShot(0, this, [this, entry]() {
+        auto *scroll = m_tabs->currentWidget()->findChild<QScrollArea *>();
+        if (!scroll || !scroll->widget())
+            return;
+        const QRect rect = searchEntryRect(entry, scroll->widget());
+        QScrollBar *bar = scroll->verticalScrollBar();
+        const QRect shown(0, bar->value() + 8, scroll->widget()->width(), scroll->viewport()->height() - 16);
+        if (rect.isValid() && !shown.contains(rect))
+            bar->setValue(rect.center().y() - scroll->viewport()->height() / 2);
+    });
 }

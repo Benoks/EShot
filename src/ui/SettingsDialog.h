@@ -15,6 +15,8 @@
 #include <QKeySequenceEdit>
 #include <QPushButton>
 #include <QMap>
+#include <QPointer>
+#include <QVector>
 #include "../core/PlatformHotkey.h"
 
 class QNetworkAccessManager;
@@ -22,6 +24,8 @@ class QNetworkReply;
 class QGroupBox;
 class QFile;
 class QProcess;
+class QLayout;
+class QPainter;
 
 class SettingsDialog : public QDialog {
     Q_OBJECT
@@ -66,6 +70,7 @@ private slots:
 
 private:
     void done(int result) override;
+    bool eventFilter(QObject *watched, QEvent *event) override;
     void loadSettings();
     void setupUI();
     QWidget* createGeneralTab();
@@ -95,8 +100,41 @@ private:
 
     static bool isAutoStartEnabled();
 
+    // Settings search: one entry per label, check box, form row or group
+    // title, built from the widgets when a search starts.
+    struct SearchEntry {
+        int tab = 0;
+        QVector<QPointer<QWidget>> widgets; // highlighted together (a form row)
+        QStringList texts;                  // labels and item texts
+        QStringList tips;                   // tool tips and placeholders
+        QString folded;                     // what the query is matched against
+        bool groupTitle = false;
+    };
+    void buildSearchIndex();
+    void indexSearchWidget(QWidget *widget, int tab, int row);
+    void indexSearchLayout(QLayout *layout, int tab, int row);
+    bool searchEntryShown(const SearchEntry &entry) const;
+    QRect searchEntryRect(const SearchEntry &entry, QWidget *host) const;
+    void applySearch(const QString &query);
+    void stepSearchMatch(int delta);
+    void showCurrentSearchMatch();
+    void paintSearchMarks(QPainter &painter, int tab, QWidget *host) const;
+
     QSettings *m_settings = nullptr;
     QTabWidget *m_tabs = nullptr;
+    QLineEdit *m_searchEdit = nullptr;
+    QLabel *m_searchCountLabel = nullptr;
+    QVector<SearchEntry> m_searchEntries;
+    QStringList m_searchTabTitles;
+    QStringList m_searchTabFolded;
+    QVector<QWidget *> m_searchOverlays;      // one per tab, over its content
+    QWidget *m_searchTabBarOverlay = nullptr; // dims tabs without matches
+    QVector<int> m_searchMatches;             // indexes into m_searchEntries
+    QVector<bool> m_searchTabDimmed;
+    QVector<QVector<QPointer<QWidget>>> m_searchDimmedGroups; // per tab
+    int m_currentSearchMatch = -1;
+    int m_searchIndexLanguage = -1;
+    bool m_searchOpenedVideoAdvanced = false;
     QWidget *m_recordingTab = nullptr;
 
     // General
@@ -208,6 +246,7 @@ private:
     bool m_gifQualityCustomChosen = false;
     bool m_videoQualityCustomChosen = false;
     QToolButton *m_videoAdvancedToggle = nullptr;
+    QWidget *m_videoAdvanced = nullptr;
     QCheckBox *m_videoHardwareEncodingCheck = nullptr;
     QComboBox *m_videoDesktopAudioDeviceCombo = nullptr;
     QSpinBox *m_recordingFpsSpin = nullptr;

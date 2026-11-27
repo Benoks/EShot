@@ -1206,6 +1206,10 @@ private:
         {"keyClick", {"Tık", "Click", "Klick", "Clic", "Clic", "クリック", "单击", "Щелчок"}},
         {"sheetSelectWindow", {"Fare altındaki pencereyi seç", "Select the window under the mouse", "Fenster unter dem Mauszeiger auswählen", "Sélectionner la fenêtre sous la souris", "Seleccionar la ventana bajo el ratón", "マウスの下のウィンドウを選択", "选择鼠标下方的窗口", "Выбрать окно под курсором"}},
         // ─── end of KDE Plasma window capture ───
+        // ─── Settings search ───
+        {"settingsSearchPlaceholder", {"Ayarlarda ara", "Search settings", "Einstellungen durchsuchen", "Rechercher dans les paramètres", "Buscar en los ajustes", "設定を検索", "搜索设置", "Поиск по настройкам"}},
+        {"settingsSearchTip", {"Ctrl+F: ara · Enter / Shift+Enter: sonraki / önceki eşleşme · Esc: temizle", "Ctrl+F: search · Enter / Shift+Enter: next / previous match · Esc: clear", "Strg+F: suchen · Enter / Umschalt+Enter: nächster / vorheriger Treffer · Esc: leeren", "Ctrl+F : rechercher · Entrée / Maj+Entrée : résultat suivant / précédent · Échap : effacer", "Ctrl+F: buscar · Intro / Mayús+Intro: resultado siguiente / anterior · Esc: borrar", "Ctrl+F: 検索 · Enter / Shift+Enter: 次 / 前の一致 · Esc: クリア", "Ctrl+F：搜索 · Enter / Shift+Enter：下一个 / 上一个匹配 · Esc：清除", "Ctrl+F: поиск · Enter / Shift+Enter: следующее / предыдущее совпадение · Esc: очистить"}},
+        {"settingsSearchNoResults", {"Sonuç yok", "No results", "Keine Treffer", "Aucun résultat", "Sin resultados", "見つかりません", "无结果", "Ничего не найдено"}},
     };
 
     static constexpr int s_transCount = sizeof(s_trans) / sizeof(s_trans[0]);

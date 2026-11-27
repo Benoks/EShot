@@ -91,6 +91,7 @@ set(SOURCES
     src/ui/SettingsDialog.cpp
     src/ui/SettingsHotkeyPolicy.cpp
     src/ui/SettingsLayoutPolicy.cpp
+    src/ui/SettingsSearch.cpp
     src/ui/AboutDialog.cpp
     src/ui/ControlCenterDialog.cpp
     src/ui/FirstRunWizard.cpp
@@ -185,6 +186,7 @@ set(HEADERS
     src/ui/SettingsDialog.h
     src/ui/SettingsHotkeyPolicy.h
     src/ui/SettingsLayoutPolicy.h
+    src/ui/SettingsSearch.h
     src/ui/AboutDialog.h
     src/ui/ControlCenterDialog.h
     src/ui/FirstRunWizard.h
@@ -570,6 +572,14 @@ if(BUILD_TESTING)
             ${CMAKE_CURRENT_SOURCE_DIR}/tests/SettingsLayoutPolicyTests.cpp
             ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/SettingsLayoutPolicy.cpp
             ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/SettingsLayoutPolicy.h
+        LIBS Qt6::Core
+    )
+
+    eshot_add_test(eshot_settings_search_tests settings_search
+        SOURCES
+            tests/SettingsSearchTests.cpp
+            src/ui/SettingsSearch.cpp
+            src/ui/SettingsSearch.h
         LIBS Qt6::Core
     )
 

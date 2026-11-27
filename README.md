@@ -50,6 +50,7 @@ EShot keeps the complete screenshot workflow in one compact tray application: se
 - Real microphone-device selection on Linux and Windows
 - Global capture and direct screenshot/GIF/video hotkeys
 - Configurable pause, stop, and cancel recording shortcuts
+- Searchable settings (`Ctrl+F` in Settings; English words work in every language)
 - Settings import/export and automatic release checks
 - Self-update support for installed AppImages
 
