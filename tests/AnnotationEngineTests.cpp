@@ -895,8 +895,10 @@ void AnnotationEngineTests::filledShapesAreHitInside()
     engine.beginDraw(QPoint(10, 10));
     engine.endDraw(QPoint(110, 110));
     QCOMPARE(engine.findAnnotationAt(QPoint(60, 60)), -1);
+    QVERIFY(!engine.isFilled(0));
 
     QVERIFY(engine.setAnnotationFilled(0, true));
+    QVERIFY(engine.isFilled(0));
     QCOMPARE(engine.findAnnotationAt(QPoint(60, 60)), 0);
 
     engine.setShapeFill(true);

@@ -1122,6 +1122,11 @@ bool AnnotationEngine::setAnnotationFilled(int index, bool filled)
     return true;
 }
 
+bool AnnotationEngine::isFilled(int index) const
+{
+    return index >= 0 && index < m_annotations.size() && m_annotations[index].filled;
+}
+
 int AnnotationEngine::duplicateAnnotation(int index, const QPoint &offset)
 {
     if (index < 0 || index >= m_annotations.size())

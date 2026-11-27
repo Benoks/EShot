@@ -166,6 +166,8 @@ public:
     bool setAnnotationPenWidth(int index, int width);
     bool setAnnotationBlurIntensity(int index, int intensity);
     bool setAnnotationFilled(int index, bool filled);
+    // False for anything but a filled rectangle or ellipse.
+    bool isFilled(int index) const;
     void finishPropertyEdit() { m_propertyEditOpen = false; }
     // Adds a copy shifted by offset and returns its index, or -1.
     int duplicateAnnotation(int index, const QPoint &offset);

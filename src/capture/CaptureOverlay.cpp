@@ -1794,11 +1794,14 @@ void CaptureOverlay::updateCounterQuickSettings()
     const auto fillable = [](AnnotationEngine::Tool tool) {
         return tool == AnnotationEngine::Rectangle || tool == AnnotationEngine::Circle;
     };
-    const bool fillActive = fillable(m_annotationEngine->currentTool())
-        || fillable(m_annotationEngine->toolOf(m_annotationEngine->selectedIndex()));
+    const int selected = m_annotationEngine->selectedIndex();
+    const bool selectedFillable = fillable(m_annotationEngine->toolOf(selected));
+    const bool fillActive = fillable(m_annotationEngine->currentTool()) || selectedFillable;
     if (m_quickShapeFillCheck) {
+        // A selected shape shows its own fill; otherwise the one new shapes get.
         QSignalBlocker blocker(m_quickShapeFillCheck);
-        m_quickShapeFillCheck->setChecked(m_annotationEngine->shapeFill());
+        m_quickShapeFillCheck->setChecked(selectedFillable ? m_annotationEngine->isFilled(selected)
+                                                           : m_annotationEngine->shapeFill());
     }
     if (m_quickCounterOptions->isHidden() != counterActive
         && (!m_quickShapeFillCheck || m_quickShapeFillCheck->isHidden() != fillActive))
