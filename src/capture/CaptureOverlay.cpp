@@ -3233,6 +3233,17 @@ void CaptureOverlay::mousePressEvent(QMouseEvent *event)
             update();
             return;
         }
+        // Like Esc, a right click first closes an open panel.
+        const bool recordingOpen = m_recordingDrawer && m_recordingDrawer->isVisible();
+        const bool quickSettingsOpen = m_toolSettingsDrawer && m_toolSettingsDrawer->isVisible()
+            && !m_toolSettingsDrawer->property("closing").toBool();
+        if (escapeClosesOverlayMenu(recordingOpen, quickSettingsOpen)) {
+            if (recordingOpen)
+                hideRecordingDrawer();
+            if (quickSettingsOpen)
+                setToolSettingsDrawerVisible(false);
+            return;
+        }
         // Step back one level per right click: put the drawing tool away,
         // then drop the selected object, then clear the region.
         if (m_selectionComplete && m_annotationEngine && m_resizeMode == ResNone

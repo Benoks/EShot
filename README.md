@@ -224,7 +224,7 @@ Instant capture, capture screen now, capture last region, GIF and video recordin
 | Arrow keys | Move the selection (`Shift`: 10 px) |
 | `Ctrl` + arrow keys | Resize the selection (`Shift`: 10 px) |
 | `Esc` | Cancel or close |
-| Right-click | Put the drawing tool away, then deselect the object, then clear the selection |
+| Right-click | Close an open panel, put the drawing tool away, deselect the object, then clear the selection |
 | `?` / `F1` | Show or hide the shortcut sheet |
 
 ### Pinned images
