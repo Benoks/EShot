@@ -468,6 +468,8 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
     if (qEnvironmentVariableIntValue("ESHOT_WAYLAND_XWAYLAND_OVERLAY") == 1)
         setWindowFlag(Qt::X11BypassWindowManagerHint, true);
     setAttribute(Qt::WA_TranslucentBackground, false);
+    // paintEvent covers every pixel opaquely; skip Qt's background fill.
+    setAttribute(Qt::WA_OpaquePaintEvent, true);
     setAttribute(Qt::WA_DeleteOnClose, false);
     setAttribute(Qt::WA_AlwaysShowToolTips, true);
     setFocusPolicy(Qt::StrongFocus);
@@ -2849,7 +2851,7 @@ void CaptureOverlay::paintEvent(QPaintEvent *event)
         m_screenSnapshot.size() == (QSizeF(width(), height()) * paintScale).toSize();
     painter.setRenderHint(QPainter::SmoothPixmapTransform, !snapshotOneToOne);
 
-    if (m_screenImages.isEmpty())
+    if (m_screenImages.isEmpty() && !m_screenSnapshot.isNull())
         painter.drawPixmap(0, 0, width(), height(), m_screenSnapshot);
     else {
         painter.fillRect(rect(), Qt::black);
