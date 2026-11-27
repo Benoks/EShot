@@ -1624,7 +1624,12 @@ void CaptureOverlay::openRecordingSettings()
     hideForModalDialog();
     // The receiver shows the Settings dialog modally and returns once it
     // closes; then the drawer comes back with the saved values.
+    const quint64 generation = m_captureGeneration;
     emit recordingSettingsRequested();
+    // A capture hotkey pressed meanwhile hides Settings and starts a new
+    // capture on this overlay; restoring the old one would cover it.
+    if (generation != m_captureGeneration)
+        return;
     restoreAfterModalDialog();
     if (m_selectionComplete && mode != RecordingDrawerMode::None)
         showRecordingDrawer(mode);
