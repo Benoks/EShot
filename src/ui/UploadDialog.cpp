@@ -333,6 +333,7 @@ void UploadDialog::onSucceeded(const QString &url, const QString &deleteUrl)
     m_deleteEdit->setVisible(!deleteUrl.isEmpty());
     m_copyLinkBtn->setEnabled(true);
     m_openLinkBtn->setEnabled(true);
+    m_uploadBtn->setText(TranslationManager::tr("uploadAgain"));
     onCopyLink();
 
     UploadHistory::Entry entry;
@@ -404,7 +405,7 @@ void UploadDialog::refreshHistory()
         // The combo text is translated and names the expiry, e.g. "Uguu.se (3 hours)".
         const int comboIndex = m_providerCombo->findData(e.provider);
         QString text = QStringLiteral("%1 · %2 · %3×%4\n%5")
-                           .arg(QLocale().toString(e.time.toLocalTime(), QLocale::ShortFormat),
+                           .arg(QLocale(TranslationManager::langCode()).toString(e.time.toLocalTime(), QLocale::ShortFormat),
                                 comboIndex >= 0 ? m_providerCombo->itemText(comboIndex) : e.providerName)
                            .arg(e.imageSize.width())
                            .arg(e.imageSize.height())
