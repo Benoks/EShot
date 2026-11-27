@@ -23,10 +23,11 @@ struct Section {
     QList<Row> rows;
 };
 
-constexpr int RowHeight = 27;
+constexpr int RowHeight = 25;
 constexpr int SectionTitleHeight = 26;
-constexpr int SectionGap = 14;
-constexpr int ColumnGap = 34;
+constexpr int SectionGap = 12;
+constexpr int ColumnGap = 12;
+constexpr int SectionPadding = 12;   // inside each section card
 constexpr int KeyLabelGap = 12;
 constexpr int Padding = 26;
 
@@ -61,7 +62,7 @@ QFont sheetFont(int pointSize, QFont::Weight weight)
 
 int sectionHeight(const Section &section)
 {
-    return SectionTitleHeight + section.rows.size() * RowHeight;
+    return SectionTitleHeight + section.rows.size() * RowHeight + 2 * SectionPadding;
 }
 
 int columnHeight(const QList<Section> &column)
@@ -136,11 +137,15 @@ int drawKeyChip(QPainter &painter, int x, int y, const QString &key)
         painter.drawText(QRect(x, y, width, RowHeight), Qt::AlignCenter, key);
         return width;
     }
-    const QRect chip(x, y + 5, width, RowHeight - 10);
-    painter.setPen(QPen(QColor(0x57, 0x53, 0x4f), 1));
-    painter.setBrush(QColor(0x3a, 0x38, 0x36));
-    painter.drawRoundedRect(QRectF(chip).adjusted(0.5, 0.5, -0.5, -0.5), 3, 3);
-    painter.setPen(QColor(0xd3, 0xd0, 0xcb));
+    // A small keycap: filled, with a slightly heavier bottom edge.
+    const QRect chip(x, y + 3, width, RowHeight - 7);
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(QColor(0x23, 0x22, 0x20));
+    painter.drawRoundedRect(QRectF(chip).adjusted(0, 1.5, 0, 1.5), 4, 4);
+    painter.setPen(QPen(QColor(0x66, 0x62, 0x5d), 1));
+    painter.setBrush(QColor(0x4a, 0x47, 0x43));
+    painter.drawRoundedRect(QRectF(chip).adjusted(0.5, 0.5, -0.5, -0.5), 4, 4);
+    painter.setPen(QColor(0xe2, 0xdf, 0xda));
     painter.drawText(chip, Qt::AlignCenter, key);
     return width;
 }
@@ -148,6 +153,13 @@ int drawKeyChip(QPainter &painter, int x, int y, const QString &key)
 void drawSection(QPainter &painter, const Section &section, int x, int &y, int width,
                  int keyColumnWidth)
 {
+    // Each section is its own card, like the toolbar groups.
+    const QRectF card(x, y, width + 2 * SectionPadding, sectionHeight(section));
+    painter.setPen(QPen(QColor(0x42, 0x40, 0x3d), 1));
+    painter.setBrush(QColor(0x33, 0x31, 0x2f));
+    painter.drawRoundedRect(card.adjusted(0.5, 0.5, -0.5, -0.5), 6, 6);
+    x += SectionPadding;
+    y += SectionPadding;
     painter.setFont(sheetFont(10, QFont::DemiBold));
     painter.setPen(QColor(0xe2, 0xdf, 0xda));
     painter.drawText(QRect(x, y, width, SectionTitleHeight - 6),
@@ -173,10 +185,11 @@ void drawSection(QPainter &painter, const Section &section, int x, int &y, int w
                                                             labelRect.width()));
         y += RowHeight;
         if (r + 1 < section.rows.size()) {
-            painter.setPen(QPen(QColor(0x38, 0x36, 0x33), 1));
+            painter.setPen(QPen(QColor(0x3e, 0x3c, 0x39), 1));
             painter.drawLine(x, y, x + width, y);
         }
     }
+    y += SectionPadding;
 }
 
 } // namespace
@@ -295,7 +308,7 @@ void drawShortcutSheet(QPainter &painter, const QRect &monitorRect, bool windowS
     }};
 
     // Balanced so the card still fits a 768 px tall screen with every optional row.
-    const QList<QList<Section>> columns = {{selection, typing}, {tools}, {editing, more}};
+    const QList<QList<Section>> columns = {{selection, more}, {tools}, {editing, typing}};
 
     const QString title = TM::tr("sheetTitle");
     const QString closeHint = TM::tr("sheetClose");
@@ -306,7 +319,8 @@ void drawShortcutSheet(QPainter &painter, const QRect &monitorRect, bool windowS
     int contentHeight = 0;
     for (const auto &column : columns) {
         layouts.append(measureColumn(column));
-        contentWidth += layouts.last().keyWidth + KeyLabelGap + layouts.last().labelWidth;
+        contentWidth += layouts.last().keyWidth + KeyLabelGap + layouts.last().labelWidth
+            + 2 * SectionPadding;
         contentHeight = qMax(contentHeight, columnHeight(column));
     }
     const int headerHeight = 50;
@@ -361,7 +375,7 @@ void drawShortcutSheet(QPainter &painter, const QRect &monitorRect, bool windowS
                 y += SectionGap;
             drawSection(painter, columns[c][s], x, y, width, layouts[c].keyWidth);
         }
-        x += width + ColumnGap;
+        x += width + 2 * SectionPadding + ColumnGap;
     }
 
     // Footer: point at the Quick Settings tab, the easiest thing to miss.
