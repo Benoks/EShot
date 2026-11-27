@@ -200,7 +200,7 @@ void AnnotationToolbar::setUndoEnabled(bool enabled)
         if (m_undoButton->styleSheet().isEmpty()) {
             m_undoButton->setStyleSheet(R"(
                 QPushButton {
-                    background-color: transparent;
+                    background-color: #383633;
                     border: 1px solid transparent;
                     border-radius: 4px;
                 }
@@ -209,7 +209,7 @@ void AnnotationToolbar::setUndoEnabled(bool enabled)
                     border-color: transparent;
                 }
                 QPushButton:pressed {
-                    background-color: #33312f;
+                    background-color: #292826;
                 }
                 QPushButton:disabled {
                     background-color: transparent;
@@ -227,7 +227,7 @@ void AnnotationToolbar::setRedoEnabled(bool enabled)
         if (m_redoButton->styleSheet().isEmpty()) {
             m_redoButton->setStyleSheet(R"(
                 QPushButton {
-                    background-color: transparent;
+                    background-color: #383633;
                     border: 1px solid transparent;
                     border-radius: 4px;
                 }
@@ -236,7 +236,7 @@ void AnnotationToolbar::setRedoEnabled(bool enabled)
                     border-color: transparent;
                 }
                 QPushButton:pressed {
-                    background-color: #33312f;
+                    background-color: #292826;
                 }
                 QPushButton:disabled {
                     background-color: transparent;
@@ -307,7 +307,7 @@ void AnnotationToolbar::setupUI()
     m_eyedropperButton->setIconSize(QSize(18, 18));
     m_eyedropperButton->setStyleSheet(R"(
         QPushButton {
-            background-color: transparent;
+            background-color: #383633;
             border: 1px solid transparent;
             border-radius: 4px;
         }
@@ -316,7 +316,7 @@ void AnnotationToolbar::setupUI()
             border-color: transparent;
         }
         QPushButton:pressed {
-            background-color: #33312f;
+            background-color: #292826;
         }
     )");
     connect(m_eyedropperButton, &QPushButton::clicked, this, &AnnotationToolbar::onEyedropperClicked);
@@ -333,7 +333,7 @@ void AnnotationToolbar::setupUI()
     m_lockButton->setCheckable(true);
     m_lockButton->setStyleSheet(R"(
         QPushButton {
-            background-color: transparent;
+            background-color: #383633;
             border: 1px solid transparent;
             border-radius: 4px;
         }
@@ -342,7 +342,7 @@ void AnnotationToolbar::setupUI()
             border-color: transparent;
         }
         QPushButton:pressed {
-            background-color: #33312f;
+            background-color: #292826;
         }
         QPushButton:checked {
             background-color: #625d57;
@@ -402,7 +402,7 @@ void AnnotationToolbar::setupUI()
     m_ocrButton->setProperty("action", "ocr");
     m_ocrButton->setStyleSheet(R"(
         QPushButton {
-            background-color: transparent;
+            background-color: #383633;
             border: 1px solid transparent;
             border-radius: 4px;
         }
@@ -425,7 +425,7 @@ void AnnotationToolbar::setupUI()
     m_uploadButton->setProperty("action", "upload");
     m_uploadButton->setStyleSheet(R"(
         QPushButton {
-            background-color: transparent;
+            background-color: #383633;
             border: 1px solid transparent;
             border-radius: 4px;
         }
@@ -461,7 +461,7 @@ void AnnotationToolbar::setupUI()
     m_videoButton->setProperty("action", "record");
     m_videoButton->setStyleSheet(R"(
         QPushButton {
-            background-color: transparent;
+            background-color: #383633;
             border: 1px solid transparent;
             border-radius: 4px;
         }
@@ -607,7 +607,7 @@ QPushButton* AnnotationToolbar::createToolButton(const QString &iconPath, const 
     btn->setIconSize(QSize(18, 18));
     btn->setStyleSheet(R"(
         QPushButton {
-            background-color: transparent;
+            background-color: #383633;
             border: 1px solid transparent;
             border-radius: 4px;
         }
@@ -616,7 +616,7 @@ QPushButton* AnnotationToolbar::createToolButton(const QString &iconPath, const 
             border-color: transparent;
         }
         QPushButton:pressed {
-            background-color: #33312f;
+            background-color: #292826;
         }
         QPushButton[selected="true"] {
             background-color: #625d57;
@@ -641,7 +641,7 @@ QPushButton* AnnotationToolbar::createActionButton(const QString &iconPath, cons
 
     btn->setStyleSheet(R"(
         QPushButton {
-            background-color: transparent;
+            background-color: #383633;
             border: 1px solid transparent;
             border-radius: 4px;
         }
@@ -650,7 +650,7 @@ QPushButton* AnnotationToolbar::createActionButton(const QString &iconPath, cons
             border-color: transparent;
         }
         QPushButton:pressed {
-            background-color: #33312f;
+            background-color: #292826;
         }
     )");
 

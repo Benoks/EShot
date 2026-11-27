@@ -503,9 +503,13 @@ QString overlayPanelStyleSheet(bool highContrast)
             min-height: 30px;
             max-height: 30px;
             padding: 0;
-            background: transparent;
+            background: #383633;
             border: none;
             border-radius: 4px;
+        }
+        QWidget#recordingDrawer QToolButton:pressed,
+        QPushButton[panelAction="icon"]:pressed {
+            background: #292826;
         }
         QWidget#recordingDrawer QToolButton:hover,
         QPushButton[panelAction="icon"]:hover {

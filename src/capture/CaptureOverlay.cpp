@@ -796,30 +796,30 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
         QPushButton *pinBtn = addBtn(":/icons/pin.svg", TranslationManager::actionPin(),
             [this]() { onPinToDesktop(); });
         pinBtn->setStyleSheet(R"(
-            QPushButton { background-color: transparent; border: 1px solid transparent; border-radius: 4px; }
+            QPushButton { background-color: #383633; border: 1px solid transparent; border-radius: 4px; }
             QPushButton:hover { background-color: #45433f; border-color: transparent; }
-            QPushButton:pressed { background-color: #33312f; }
+            QPushButton:pressed { background-color: #292826; }
         )");
         QPushButton *copyBtn = addBtn(":/icons/copy.svg", TranslationManager::actionCopy(),
             [this]() { onCopyToClipboard(); });
         copyBtn->setStyleSheet(R"(
-            QPushButton { background-color: transparent; border: 1px solid transparent; border-radius: 4px; }
+            QPushButton { background-color: #383633; border: 1px solid transparent; border-radius: 4px; }
             QPushButton:hover { background-color: #45433f; border-color: transparent; }
-            QPushButton:pressed { background-color: #33312f; }
+            QPushButton:pressed { background-color: #292826; }
         )");
         QPushButton *saveBtn = addBtn(":/icons/save.svg", TranslationManager::actionSave(),
             [this]() { onSave(); });
         saveBtn->setStyleSheet(R"(
-            QPushButton { background-color: transparent; border: 1px solid transparent; border-radius: 4px; }
+            QPushButton { background-color: #383633; border: 1px solid transparent; border-radius: 4px; }
             QPushButton:hover { background-color: #45433f; border-color: transparent; }
-            QPushButton:pressed { background-color: #33312f; }
+            QPushButton:pressed { background-color: #292826; }
         )");
         QPushButton *closeBtn = addBtn(":/icons/close.svg", TranslationManager::actionClose(),
             [this]() { onClose(); });
         closeBtn->setStyleSheet(R"(
-            QPushButton { background-color: transparent; border: 1px solid transparent; border-radius: 4px; }
+            QPushButton { background-color: #383633; border: 1px solid transparent; border-radius: 4px; }
             QPushButton:hover { background-color: #45433f; border-color: transparent; }
-            QPushButton:pressed { background-color: #33312f; }
+            QPushButton:pressed { background-color: #292826; }
         )");
         // Shortcut sheet, set apart at the bottom: it helps rather than acts.
         QFrame *helpSeparator = new QFrame(m_actionPanel);
@@ -832,9 +832,9 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
         m_helpButton->setToolTip(QStringLiteral("<b>%1</b>&nbsp;&nbsp;<span style='color:#b1ada8'>? / F1</span>")
                                      .arg(TranslationManager::tr("sheetTitle").toHtmlEscaped()));
         m_helpButton->setStyleSheet(R"(
-            QPushButton { background-color: transparent; border: 1px solid transparent; border-radius: 4px; }
+            QPushButton { background-color: #383633; border: 1px solid transparent; border-radius: 4px; }
             QPushButton:hover { background-color: #45433f; border-color: transparent; }
-            QPushButton:pressed { background-color: #33312f; }
+            QPushButton:pressed { background-color: #292826; }
         )");
 
     }
