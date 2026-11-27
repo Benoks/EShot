@@ -3915,6 +3915,7 @@ void CaptureOverlay::mouseReleaseEvent(QMouseEvent *event)
 
         if (m_isSelecting) {
             m_isSelecting = false;
+            m_resizeMode = ResNone; // also when the region was too small
             m_selectionEnd = event->pos();
             QRect selRect = normalizedSelectionRect();
             if (selRect.width() > 10 && selRect.height() > 10) {
@@ -5445,6 +5446,9 @@ void CaptureOverlay::completeSelection(const QRect &selectionRect)
 
     m_isSelecting = false;
     m_selectionComplete = true;
+    // Drawing the region set ResNewSelection; keyboard nudges and the
+    // right-click step back need ResNone.
+    m_resizeMode = ResNone;
     m_windowSnapClickPending = false;
     setHoveredWindowRect(QRect());
     m_pressedWindowRect = QRect();
