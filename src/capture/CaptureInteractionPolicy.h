@@ -124,6 +124,9 @@ SelectionResizeHandle selectionResizeHandleAt(const QRect &selection,
 QRect resizedSelectionForHandle(const QRect &selection,
                                 SelectionResizeHandle handle,
                                 const QPoint &position);
+// Rectangle spanning two corner points given in any order. QRect(a, b).normalized()
+// is two pixels smaller when a lies right of or below b.
+QRect rectFromCorners(const QPoint &a, const QPoint &b);
 SelectionFrameSegments selectionFrameSegments(const QRect &selection, qreal devicePixelRatio);
 QPointF selectionFrameHandleCenter(const QRect &selection, SelectionResizeHandle handle,
                                    qreal devicePixelRatio);

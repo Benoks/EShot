@@ -282,6 +282,17 @@ private slots:
         QCOMPARE(resizedSelectionForHandle(selection, SelectionResizeHandle::Left,
                                            QPoint(70, 230)),
                  QRect(70, 200, 110, 60));
+        // Dragging an edge past the opposite one keeps the full span.
+        QCOMPARE(resizedSelectionForHandle(selection, SelectionResizeHandle::Right,
+                                           QPoint(60, 230)),
+                 QRect(60, 200, 41, 60));
+    }
+
+    void selectionDraggedUpOrLeftKeepsItsSize()
+    {
+        QCOMPARE(rectFromCorners(QPoint(10, 20), QPoint(50, 60)), QRect(10, 20, 41, 41));
+        QCOMPARE(rectFromCorners(QPoint(50, 60), QPoint(10, 20)), QRect(10, 20, 41, 41));
+        QCOMPARE(rectFromCorners(QPoint(50, 20), QPoint(10, 60)), QRect(10, 20, 41, 41));
     }
 
     void selectionFrameSharesPixelAlignedHandleCentersAtFractionalScale()

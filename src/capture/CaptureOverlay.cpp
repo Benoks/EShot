@@ -5218,7 +5218,7 @@ void CaptureOverlay::onVideoRequested()
 
 QRect CaptureOverlay::normalizedSelectionRect() const
 {
-    return QRect(m_selectionStart, m_selectionEnd).normalized();
+    return rectFromCorners(m_selectionStart, m_selectionEnd);
 }
 
 QRect CaptureOverlay::selectedCaptureRect() const

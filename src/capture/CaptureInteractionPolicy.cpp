@@ -331,7 +331,13 @@ QRect resizedSelectionForHandle(const QRect &selection,
     default:
         break;
     }
-    return result.normalized();
+    return rectFromCorners(result.topLeft(), result.bottomRight());
+}
+
+QRect rectFromCorners(const QPoint &a, const QPoint &b)
+{
+    return QRect(QPoint(qMin(a.x(), b.x()), qMin(a.y(), b.y())),
+                 QPoint(qMax(a.x(), b.x()), qMax(a.y(), b.y())));
 }
 
 namespace {

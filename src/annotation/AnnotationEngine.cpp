@@ -44,6 +44,14 @@ QPoint snappedToAngle(const QPoint &from, const QPoint &to)
     return from + QPointF(qCos(angle) * length, qSin(angle) * length).toPoint();
 }
 
+// Box spanning two corners in any order; QRect(a, b).normalized() is two
+// pixels smaller when the box was dragged up or to the left.
+QRect boxFromCorners(const QPoint &a, const QPoint &b)
+{
+    return QRect(QPoint(qMin(a.x(), b.x()), qMin(a.y(), b.y())),
+                 QPoint(qMax(a.x(), b.x()), qMax(a.y(), b.y())));
+}
+
 bool isBoxTool(AnnotationEngine::Tool tool)
 {
     return tool == AnnotationEngine::Rectangle || tool == AnnotationEngine::Circle
@@ -329,24 +337,20 @@ void AnnotationEngine::drawAnnotation(QPainter *painter, const Annotation &ann, 
     }
     case Rectangle: {
         if (ann.points.size() < 2) break;
-        QPoint start = ann.points.first() + offset;
-        QPoint end = ann.points.last() + offset;
-        QRect r(start, end);
+        const QRect r = boxFromCorners(ann.points.first(), ann.points.last()).translated(offset);
         QPen pen(ann.color, ann.penWidth);
         painter->setPen(pen);
         painter->setBrush(ann.filled ? QBrush(ann.color) : QBrush(Qt::NoBrush));
-        painter->drawRect(r.normalized());
+        painter->drawRect(r);
         break;
     }
     case Circle: {
         if (ann.points.size() < 2) break;
-        QPoint start = ann.points.first() + offset;
-        QPoint end = ann.points.last() + offset;
-        QRect r(start, end);
+        const QRect r = boxFromCorners(ann.points.first(), ann.points.last()).translated(offset);
         QPen pen(ann.color, ann.penWidth);
         painter->setPen(pen);
         painter->setBrush(ann.filled ? QBrush(ann.color) : QBrush(Qt::NoBrush));
-        painter->drawEllipse(r.normalized());
+        painter->drawEllipse(r);
         break;
     }
     case Line: {
@@ -379,7 +383,7 @@ void AnnotationEngine::drawAnnotation(QPainter *painter, const Annotation &ann, 
     case Blur:
     case Pixelate: {
         if (ann.points.size() < 2) break;
-        QRect r = QRect(ann.points.first(), ann.points.last()).normalized();
+        const QRect r = boxFromCorners(ann.points.first(), ann.points.last());
         drawRedaction(painter, ann.tool, r, offset, ann.blurIntensity);
         break;
     }
@@ -461,14 +465,12 @@ void AnnotationEngine::drawAnnotation(QPainter *painter, const Annotation &ann, 
     }
     case SemiRect: {
         if (ann.points.size() < 2) break;
-        QPoint start = ann.points.first() + offset;
-        QPoint end = ann.points.last() + offset;
-        QRect r(start, end);
+        const QRect r = boxFromCorners(ann.points.first(), ann.points.last()).translated(offset);
         QColor fillColor = ann.color;
         fillColor.setAlpha(80);
         painter->setPen(QPen(ann.color, ann.penWidth));
         painter->setBrush(fillColor);
-        painter->drawRect(r.normalized());
+        painter->drawRect(r);
         break;
     }
     default: break;
@@ -1177,7 +1179,7 @@ QRect AnnotationEngine::rawAnnotationBounds(const Annotation &ann, int padding) 
         if (ann.points.size() < 2)
             bounds = QRect(ann.points.first(), QSize(1, 1));
         else {
-            bounds = QRect(ann.points.first(), ann.points.last()).normalized();
+            bounds = boxFromCorners(ann.points.first(), ann.points.last());
         }
     } else if (ann.points.size() == 1) {
         bounds = QRect(ann.points.first(), QSize(1, 1));
@@ -1284,7 +1286,7 @@ bool AnnotationEngine::annotationContainsPoint(const Annotation &ann, const QPoi
     case Rectangle: {
         if (ann.points.size() < 2)
             return rawAnnotationBounds(ann, tolerance).contains(hitPos);
-        const QRect r = QRect(ann.points.first(), ann.points.last()).normalized();
+        const QRect r = boxFromCorners(ann.points.first(), ann.points.last());
         if (!r.adjusted(-tolerance, -tolerance, tolerance, tolerance).contains(hitPos))
             return false;
         if (ann.filled)
@@ -1298,7 +1300,7 @@ bool AnnotationEngine::annotationContainsPoint(const Annotation &ann, const QPoi
     case Circle: {
         if (ann.points.size() < 2)
             return rawAnnotationBounds(ann, tolerance).contains(hitPos);
-        const QRect r = QRect(ann.points.first(), ann.points.last()).normalized();
+        const QRect r = boxFromCorners(ann.points.first(), ann.points.last());
         if (r.width() <= 0 || r.height() <= 0)
             return rawAnnotationBounds(ann, tolerance).contains(hitPos);
         if (!r.adjusted(-tolerance, -tolerance, tolerance, tolerance).contains(hitPos))
