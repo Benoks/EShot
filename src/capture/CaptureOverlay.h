@@ -118,7 +118,8 @@ private:
     QPoint capturePositionFromGlobal(const QPoint &point) const;
     void startCaptureInternal(CaptureSelectionMode selectionMode, bool recordingMode,
                               const QRect &preselectGlobal = QRect());
-    void showToolbar();
+    // refreshTools: re-read the tool settings; off while the selection is dragged.
+    void showToolbar(bool refreshTools = true);
     void hideToolbar();
     // composed: the result a caller already built, so it is not composed twice.
     void finishCapture(const QPixmap &composed = QPixmap());

@@ -3846,9 +3846,10 @@ void CaptureOverlay::mouseMoveEvent(QMouseEvent *event)
         }
 
         const bool nativeViews = m_screenViews && m_screenViews->isActive();
+        // Only reposition here; the release refreshes the tools once.
         if (m_selectionComplete && ((m_toolbar && m_toolbar->isVisible())
             || (nativeViews && m_recordingDrawerMode == RecordingDrawerMode::None)))
-            showToolbar();
+            showToolbar(false);
         movingUiRegion += visibleSelectionUiRegion();
         QRegion dirty = selectionUpdateRegion(
             oldSel, normalizedSelectionRect(), rect());
@@ -4390,7 +4391,7 @@ QString CaptureOverlay::resolveWindowTitle() const
     return "";
 }
 
-void CaptureOverlay::showToolbar()
+void CaptureOverlay::showToolbar(bool refreshTools)
 {
     if (!m_toolbar) return;
     QRect selRect = normalizedSelectionRect();
@@ -4416,7 +4417,7 @@ void CaptureOverlay::showToolbar()
     if (!toolbarBounds.isValid())
         toolbarBounds = rect().adjusted(5, 5, -5, -5);
 
-    if (!nativeViews)
+    if (!nativeViews && refreshTools)
         m_toolbar->refreshTools();
     QRect toolbarRect;
     if (m_toolbar->hasVisibleTools()) {
