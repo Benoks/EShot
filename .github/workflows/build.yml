@@ -512,7 +512,7 @@ jobs:
             throw 'Uninstall left behind the per-user startup entry'
           }
 
-          # Startup is unchecked by default. The Settings dialog can enable it
+          # Install without startupicon. Settings or the first-run wizard can enable it
           # later, so uninstall must also clean that independently created value.
           $result = Start-Process -FilePath $setup -ArgumentList @('/VERYSILENT', '/CURRENTUSER', '/TASKS=desktopicon', '/NORESTART') -Wait -PassThru
           if ($result.ExitCode -ne 0) { throw "Default per-user installation failed: $($result.ExitCode)" }
