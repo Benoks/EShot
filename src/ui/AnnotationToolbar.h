@@ -52,6 +52,11 @@ private slots:
     void onEyedropperClicked();
     void onLockClicked();
 
+protected:
+    // Draws one rounded bar behind each run of buttons between separators,
+    // so the toolbar reads as three groups: tools, colour/edit, share.
+    void paintEvent(QPaintEvent *event) override;
+
 private:
     void setupUI();
     void applyStyles();

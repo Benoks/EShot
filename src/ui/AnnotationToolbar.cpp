@@ -12,6 +12,8 @@
 #include <QFrame>
 #include <QGraphicsDropShadowEffect>
 #include <QStyle>
+#include <QPainter>
+#include <QPainterPath>
 #include <QSettings>
 #include <QRegularExpression>
 #include <QHBoxLayout>
@@ -19,6 +21,9 @@
 #include <QSpinBox>
 
 namespace {
+// Group bars: padding around the buttons and the gap between two bars.
+constexpr int GroupPadding = 6;
+constexpr int GroupGap = 8;
 QStringList defaultAnnotationTools()
 {
     return {"Pen","Arrow","Line","Rectangle","Circle","Text","Highlighter","SemiRect","Blur","Pixelate","Counter","Eraser"};
@@ -94,8 +99,6 @@ AnnotationToolbar::AnnotationToolbar(QWidget *parent)
     , m_uploadButton(nullptr)
     , m_lensButton(nullptr)
 {
-    // A QWidget subclass paints its style sheet background only with this.
-    setAttribute(Qt::WA_StyledBackground, true);
     if (!parent) {
         setWindowFlags(Qt::Tool | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
         setAttribute(Qt::WA_TranslucentBackground);
@@ -257,19 +260,60 @@ void AnnotationToolbar::setColor(const QColor &color)
 
 QWidget* AnnotationToolbar::createSeparator()
 {
+    // An empty gap between two group bars (see paintEvent).
     QFrame *sep = new QFrame(this);
-    sep->setFrameShape(QFrame::VLine);
-    sep->setFixedWidth(13);
+    sep->setFrameShape(QFrame::NoFrame);
+    sep->setFixedWidth(2 * GroupPadding + GroupGap - m_layout->spacing() * 2);
     sep->setFixedHeight(26);
     sep->setProperty("eshotSeparator", true);
     sep->setStyleSheet(separatorStyle());
     return sep;
 }
 
+void AnnotationToolbar::paintEvent(QPaintEvent *event)
+{
+    Q_UNUSED(event);
+    QPainter painter(this);
+    painter.setRenderHint(QPainter::Antialiasing);
+    const QColor fill = m_highContrast ? QColor(Qt::black) : QColor(0x2c, 0x2b, 0x29);
+    const QPen border = m_highContrast ? QPen(Qt::white, 2) : QPen(QColor(0x42, 0x40, 0x3d), 1);
+    QRect group;
+    const auto drawGroup = [&]() {
+        if (group.isNull())
+            return;
+        const QRectF bar = QRectF(group.adjusted(-GroupPadding, -GroupPadding, GroupPadding, GroupPadding))
+                               .adjusted(0.5, 0.5, -0.5, -0.5);
+        painter.setPen(border);
+        painter.setBrush(fill);
+        painter.drawRoundedRect(bar, 6, 6);
+        group = QRect();
+    };
+    for (int i = 0; m_layout && i < m_layout->count(); ++i) {
+        QWidget *widget = m_layout->itemAt(i)->widget();
+        if (!widget || widget->isHidden())
+            continue;
+        if (widget->property("eshotSeparator").toBool()) {
+            drawGroup();
+            continue;
+        }
+        group = group.isNull() ? widget->geometry() : group.united(widget->geometry());
+    }
+    drawGroup();
+    // Thin lines inside a bar, drawn over it.
+    painter.setPen(m_highContrast ? QPen(Qt::white, 1) : QPen(QColor(0x42, 0x40, 0x3d), 1));
+    for (int i = 0; m_layout && i < m_layout->count(); ++i) {
+        QWidget *widget = m_layout->itemAt(i)->widget();
+        if (widget && !widget->isHidden() && widget->property("eshotDivider").toBool()) {
+            const qreal x = widget->geometry().center().x() + 0.5;
+            painter.drawLine(QPointF(x, widget->geometry().top()), QPointF(x, widget->geometry().bottom()));
+        }
+    }
+}
+
 void AnnotationToolbar::setupUI()
 {
     m_layout = new QHBoxLayout(this);
-    m_layout->setContentsMargins(8, 6, 8, 6);
+    m_layout->setContentsMargins(GroupPadding, GroupPadding, GroupPadding, GroupPadding);
     m_layout->setSpacing(4);
 
     // Tool buttons
@@ -380,7 +424,13 @@ void AnnotationToolbar::setupUI()
     m_optionalControls["TextOptions"] = m_textOptionsWidget;
     m_layout->addWidget(m_textOptionsWidget);
 
-    m_layout->addWidget(createSeparator());
+    // Same bar as colour and lock, set apart by a thin line.
+    auto *editDivider = new QFrame(this);
+    editDivider->setFrameShape(QFrame::NoFrame);
+    editDivider->setFixedSize(9, 22);
+    editDivider->setProperty("eshotDivider", true);
+    editDivider->setStyleSheet(QStringLiteral("background: transparent; border: none;"));
+    m_layout->addWidget(editDivider);
 
     // Undo / Redo
     m_undoButton = createActionButton(":/icons/undo.svg", TranslationManager::toolUndo(), "undo");
@@ -483,11 +533,6 @@ void AnnotationToolbar::applyStyles()
 {
     if (m_highContrast) {
         setStyleSheet(R"(
-            AnnotationToolbar {
-                background-color: #000000;
-                border: 2px solid #ffffff;
-                border-radius: 10px;
-            }
             QToolTip {
                 color: #ffffff;
                 background-color: #000000;
@@ -499,11 +544,6 @@ void AnnotationToolbar::applyStyles()
         )");
     } else {
         setStyleSheet(R"(
-            AnnotationToolbar {
-                background-color: #2c2b29;
-                border: 1px solid #42403d;
-                border-radius: 6px;
-            }
             QToolTip {
                 color: #ffffff;
                 background-color: #3a3836;
@@ -542,8 +582,8 @@ QString AnnotationToolbar::colorButtonStyle(const QColor &color) const
 
 QString AnnotationToolbar::separatorStyle() const
 {
-    return QStringLiteral("color: %1; margin-left: 6px; margin-right: 6px;")
-        .arg(m_highContrast ? QStringLiteral("#ffffff") : QStringLiteral("#57534f"));
+    // Separators are empty gaps between the group bars.
+    return QStringLiteral("background: transparent; border: none;");
 }
 
 // High contrast reaches every toolbar button by appending these rules to its
