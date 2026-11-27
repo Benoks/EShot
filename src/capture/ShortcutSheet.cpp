@@ -137,8 +137,8 @@ int drawKeyChip(QPainter &painter, int x, int y, const QString &key)
         return width;
     }
     const QRect chip(x, y + 5, width, RowHeight - 10);
-    painter.setPen(QPen(QColor(0x48, 0x48, 0x4c), 1));
-    painter.setBrush(QColor(0x35, 0x35, 0x38));
+    painter.setPen(QPen(QColor(0x56, 0x56, 0x5b), 1));
+    painter.setBrush(QColor(0x3a, 0x3a, 0x3e));
     painter.drawRoundedRect(QRectF(chip).adjusted(0.5, 0.5, -0.5, -0.5), 3, 3);
     painter.setPen(QColor(0xd9, 0xd9, 0xdb));
     painter.drawText(chip, Qt::AlignCenter, key);

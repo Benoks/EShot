@@ -14,6 +14,7 @@
 #include "annotation/AnnotationRotationGeometry.h"
 #include "ui/AnnotationToolbar.h"
 #include "ui/OverlayPanelStyle.h"
+#include "ui/DesignTokens.h"
 #include "ui/OcrDialog.h"
 #include "core/ComponentPaths.h"
 #include "ShortcutSheet.h"
@@ -505,7 +506,7 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
         QTextEdit {
             background-color: rgba(0, 0, 0, 180);
             color: white;
-            border: 2px solid #0078d7;
+            border: 2px solid #8ab4f8;
             border-radius: 4px;
             padding: 4px 8px;
             font-size: 14px;
@@ -552,10 +553,10 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
         QToolButton:hover { background-color: #45484e; border-color: #6f7279; }
         QToolButton:pressed { background-color: #25272a; }
         QToolButton#textCommitButton {
-            background-color: #0878c9;
-            border-color: #1a86dd;
+            background-color: #3d74c5;
+            border-color: #4b82d1;
         }
-        QToolButton#textCommitButton:hover { background-color: #0b8de8; }
+        QToolButton#textCommitButton:hover { background-color: #4b82d1; }
         QToolButton:checked { background-color: #5a5d63; border-color: #8a8d93; }
         QFontComboBox, QSpinBox {
             background: #292b2f;
@@ -570,7 +571,7 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
             background: #202022;
         }
         QFontComboBox:focus, QSpinBox:focus {
-            border-color: #0078d7;
+            border-color: #8ab4f8;
         }
         QFontComboBox::drop-down {
             subcontrol-origin: padding;
@@ -604,7 +605,7 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
             border-bottom-right-radius: 6px;
         }
         QSpinBox::up-button:hover, QSpinBox::down-button:hover {
-            background: #353538;
+            background: #3a3a3e;
         }
         QSpinBox::up-arrow {
             image: url(:/icons/chevron_up.svg);
@@ -795,30 +796,30 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
         QPushButton *pinBtn = addBtn(":/icons/pin.svg", TranslationManager::actionPin(),
             [this]() { onPinToDesktop(); });
         pinBtn->setStyleSheet(R"(
-            QPushButton { background-color: #353538; border: 1px solid #48484c; border-radius: 8px; }
-            QPushButton:hover { background-color: #3f3f42; border-color: #545458; }
-            QPushButton:pressed { background-color: #2f2f31; }
+            QPushButton { background-color: #3a3a3e; border: 1px solid #56565b; border-radius: 8px; }
+            QPushButton:hover { background-color: #3f3f42; border-color: #646469; }
+            QPushButton:pressed { background-color: #323236; }
         )");
         QPushButton *copyBtn = addBtn(":/icons/copy.svg", TranslationManager::actionCopy(),
             [this]() { onCopyToClipboard(); });
         copyBtn->setStyleSheet(R"(
-            QPushButton { background-color: #353538; border: 1px solid #48484c; border-radius: 8px; }
-            QPushButton:hover { background-color: #3f3f42; border-color: #545458; }
-            QPushButton:pressed { background-color: #2f2f31; }
+            QPushButton { background-color: #3a3a3e; border: 1px solid #56565b; border-radius: 8px; }
+            QPushButton:hover { background-color: #3f3f42; border-color: #646469; }
+            QPushButton:pressed { background-color: #323236; }
         )");
         QPushButton *saveBtn = addBtn(":/icons/save.svg", TranslationManager::actionSave(),
             [this]() { onSave(); });
         saveBtn->setStyleSheet(R"(
-            QPushButton { background-color: #353538; border: 1px solid #48484c; border-radius: 8px; }
-            QPushButton:hover { background-color: #3f3f42; border-color: #545458; }
-            QPushButton:pressed { background-color: #2f2f31; }
+            QPushButton { background-color: #3a3a3e; border: 1px solid #56565b; border-radius: 8px; }
+            QPushButton:hover { background-color: #3f3f42; border-color: #646469; }
+            QPushButton:pressed { background-color: #323236; }
         )");
         QPushButton *closeBtn = addBtn(":/icons/close.svg", TranslationManager::actionClose(),
             [this]() { onClose(); });
         closeBtn->setStyleSheet(R"(
-            QPushButton { background-color: #353538; border: 1px solid #48484c; border-radius: 8px; }
-            QPushButton:hover { background-color: #3f3f42; border-color: #545458; }
-            QPushButton:pressed { background-color: #2f2f31; }
+            QPushButton { background-color: #3a3a3e; border: 1px solid #56565b; border-radius: 8px; }
+            QPushButton:hover { background-color: #3f3f42; border-color: #646469; }
+            QPushButton:pressed { background-color: #323236; }
         )");
         // Shortcut sheet, set apart at the bottom: it helps rather than acts.
         QFrame *helpSeparator = new QFrame(m_actionPanel);
@@ -831,9 +832,9 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
         m_helpButton->setToolTip(QStringLiteral("<b>%1</b>&nbsp;&nbsp;<span style='color:#adadb0'>? / F1</span>")
                                      .arg(TranslationManager::tr("sheetTitle").toHtmlEscaped()));
         m_helpButton->setStyleSheet(R"(
-            QPushButton { background-color: #353538; border: 1px solid #48484c; border-radius: 8px; }
-            QPushButton:hover { background-color: #3f3f42; border-color: #545458; }
-            QPushButton:pressed { background-color: #2f2f31; }
+            QPushButton { background-color: #3a3a3e; border: 1px solid #56565b; border-radius: 8px; }
+            QPushButton:hover { background-color: #3f3f42; border-color: #646469; }
+            QPushButton:pressed { background-color: #323236; }
         )");
 
     }
@@ -2936,7 +2937,7 @@ void CaptureOverlay::paintEvent(QPaintEvent *event)
     painter.save();
     painter.setClipRegion(selectionFrameClipRegion(selRect, rect()));
     painter.setPen(Qt::NoPen);
-    painter.setBrush(QColor(0, 120, 215));
+    painter.setBrush(QColor(DesignTokens::SelectionFrame));
     painter.drawRect(frameSegments.top);
     painter.drawRect(frameSegments.right);
     painter.drawRect(frameSegments.bottom);
@@ -4765,7 +4766,7 @@ void CaptureOverlay::updateTextEditorStyle()
         QTextEdit {
             background-color: rgba(0, 0, 0, 180);
             color: %1;
-            border: 2px solid #0078d7;
+            border: 2px solid #8ab4f8;
             border-radius: 4px;
             padding: 4px 8px;
         }

@@ -30,10 +30,10 @@ HintBubble::HintBubble(QWidget *parent)
     m_button->setCursor(Qt::PointingHandCursor);
     m_button->setFocusPolicy(Qt::NoFocus);
     m_button->setStyleSheet(QStringLiteral(
-        "QPushButton { background: #353538; color: #ececec; border: 1px solid #48484c;"
+        "QPushButton { background: #3a3a3e; color: #ececec; border: 1px solid #56565b;"
         " border-radius: 8px; padding: 4px 14px; font-size: 12px; font-weight: 600; }"
-        "QPushButton:hover { background: #3f3f42; border-color: #545458; }"
-        "QPushButton:pressed { background: #2f2f31; }"));
+        "QPushButton:hover { background: #3f3f42; border-color: #646469; }"
+        "QPushButton:pressed { background: #323236; }"));
     connect(m_button, &QPushButton::clicked, this, &HintBubble::dismiss);
 
     auto *buttonRow = new QHBoxLayout;
@@ -135,7 +135,7 @@ void HintBubble::paintEvent(QPaintEvent *)
     path = path.united(pointerPath);
 
     // Same greys as the overlay toolbar and panels.
-    painter.setPen(QPen(QColor(0x48, 0x48, 0x4c), 1.2));
+    painter.setPen(QPen(QColor(0x56, 0x56, 0x5b), 1.2));
     painter.setBrush(QColor(0x2a, 0x2a, 0x2c, 250));
     painter.drawPath(path);
 }

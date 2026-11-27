@@ -57,7 +57,7 @@ QPalette eshotApplicationPalette(bool dark, bool highContrast)
         p.setColor(QPalette::BrightText, Qt::red);
         p.setColor(QPalette::Link, QColor(DesignTokens::Link));
         p.setColor(QPalette::Highlight, QColor(DesignTokens::Accent));
-        p.setColor(QPalette::HighlightedText, Qt::white);
+        p.setColor(QPalette::HighlightedText, QColor(DesignTokens::OnAccent));
         p.setColor(QPalette::Mid, QColor(DesignTokens::ControlBorder));
         p.setColor(QPalette::Dark, QColor(DesignTokens::Field));
         setDisabledText(p, QColor(DesignTokens::TextDisabled), QColor(150, 152, 157));
@@ -94,15 +94,14 @@ QString eshotDialogStyleSheet()
         }
         QDialog QPushButton:hover { background: @controlHover; border-color: @controlBorderHover; }
         QDialog QPushButton:pressed { background: @controlPressed; }
-        QDialog QPushButton:focus { border-color: @accent; }
-        QDialog QPushButton:default { background: @accent; border-color: @accent; color: #ffffff; font-weight: 600; }
+        QDialog QPushButton:default { background: @accent; border-color: @accent; color: @onAccent; font-weight: 600; }
         QDialog QPushButton:default:hover { background: @accentHover; border-color: @accentHover; }
         QDialog QPushButton:default:pressed { background: @accentPressed; }
         QDialog QPushButton:disabled { color: @textDisabled; background: @controlPressed; border-color: @panelBorder; }
         QDialog QLineEdit, QDialog QPlainTextEdit, QDialog QTextEdit,
         QDialog QSpinBox, QDialog QComboBox, QDialog QKeySequenceEdit {
             background: @field; color: @text; border: 1px solid @controlBorder;
-            border-radius: 4px; selection-background-color: @accent; selection-color: #ffffff;
+            border-radius: 4px; selection-background-color: @accent; selection-color: @onAccent;
         }
         QDialog QLineEdit, QDialog QSpinBox, QDialog QComboBox { padding: 3px 6px; min-height: 20px; }
         QDialog QLineEdit:focus, QDialog QPlainTextEdit:focus, QDialog QTextEdit:focus,
@@ -131,7 +130,16 @@ QString eshotDialogStyleSheet()
             border: 1px solid @controlBorderHover; background: @field;
         }
         QDialog QCheckBox::indicator:hover { border-color: @textMuted; }
-        QDialog QCheckBox::indicator:checked { background: @accent; border-color: @accent; image: url(:/icons/check.svg); }
+        QDialog QCheckBox::indicator:checked { background: @accent; border-color: @accent; image: url(:/icons/check_dark.svg); }
+        QDialog QRadioButton::indicator { width: 14px; height: 14px; border-radius: 8px; border: 1px solid @controlBorderHover; background: @field; }
+        QDialog QRadioButton::indicator:checked { background: @accent; border: 4px solid @field; }
+        QDialog QTabWidget::pane { border: 1px solid @panelBorder; border-radius: 6px; top: -1px; }
+        QDialog QTabBar::tab {
+            background: transparent; color: @textMuted; padding: 6px 14px; margin-right: 2px;
+            border: 1px solid transparent; border-bottom: none; border-top-left-radius: 4px; border-top-right-radius: 4px;
+        }
+        QDialog QTabBar::tab:hover { color: @text; background: @controlHover; }
+        QDialog QTabBar::tab:selected { color: @text; background: @panel; border-color: @panelBorder; }
         QDialog QCheckBox::indicator:disabled { background: @controlPressed; border-color: @panelBorder; }
         QDialog QGroupBox {
             border: 1px solid @panelBorder; border-radius: 6px; margin-top: 16px; padding: 10px 8px 8px;
@@ -156,6 +164,7 @@ QString eshotDialogStyleSheet()
         {"@accentPressed", DesignTokens::AccentPressed},
         {"@accentHover", DesignTokens::AccentHover},
         {"@accent", DesignTokens::Accent},
+        {"@onAccent", DesignTokens::OnAccent},
         {"@textDisabled", DesignTokens::TextDisabled},
         {"@textMuted", DesignTokens::TextMuted},
         {"@text", DesignTokens::Text},

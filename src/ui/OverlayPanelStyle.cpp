@@ -159,7 +159,7 @@ QString highContrastOverrides()
         }
         QPushButton[panelAction="primary"]:pressed,
         QPushButton[panelAction="secondary"]:pressed {
-            background: #2f2f31;
+            background: #323236;
         }
         QPushButton[panelSegment]:checked {
             background: #ffff00;
@@ -239,11 +239,11 @@ QString overlayPanelStyleSheet(bool highContrast)
         QComboBox {
             min-height: 28px;
             max-height: 28px;
-            background: #353538;
-            border: 1px solid #48484c;
+            background: #3a3a3e;
+            border: 1px solid #56565b;
             border-radius: 4px;
             color: #ececec;
-            selection-background-color: #3e3e41;
+            selection-background-color: #444449;
         }
         QComboBox {
             padding: 0 8px;
@@ -253,12 +253,12 @@ QString overlayPanelStyleSheet(bool highContrast)
         }
         QSpinBox:hover,
         QComboBox:hover {
-            border-color: #545458;
-            background: #3e3e41;
+            border-color: #646469;
+            background: #444449;
         }
         QSpinBox:focus,
         QComboBox:focus {
-            border-color: #0078d7;
+            border-color: #8ab4f8;
         }
         QSpinBox:disabled,
         QComboBox:disabled {
@@ -273,7 +273,7 @@ QString overlayPanelStyleSheet(bool highContrast)
             border-left: 1px solid #444448;
             border-top-right-radius: 4px;
             border-bottom-right-radius: 4px;
-            background: #353538;
+            background: #3a3a3e;
         }
         QComboBox::drop-down:disabled {
             background: #2a2a2c;
@@ -327,17 +327,17 @@ QString overlayPanelStyleSheet(bool highContrast)
             width: 14px;
             height: 14px;
             border-radius: 3px;
-            border: 1px solid #545458;
+            border: 1px solid #646469;
             background: #202022;
         }
         QCheckBox::indicator:hover {
             border-color: #87878a;
-            background: #3e3e41;
+            background: #444449;
         }
         QCheckBox::indicator:checked {
-            background: #0078d7;
-            border-color: #1a86dd;
-            image: url(:/icons/check.svg);
+            background: #8ab4f8;
+            border-color: #8ab4f8;
+            image: url(:/icons/check_dark.svg);
         }
         QSlider::groove:horizontal {
             background: #3f3f42;
@@ -359,43 +359,43 @@ QString overlayPanelStyleSheet(bool highContrast)
         QPushButton[panelAction="primary"] {
             min-height: 32px;
             max-height: 32px;
-            background: #0078d7;
-            border: 1px solid #1a86dd;
+            background: #8ab4f8;
+            border: 1px solid #8ab4f8;
             border-radius: 4px;
-            color: white;
+            color: #0f1f38;
             font-weight: 600;
         }
         QPushButton[panelAction="primary"]:hover {
-            background: #1a86dd;
+            background: #a1c3fa;
         }
         QPushButton[panelAction="primary"]:pressed {
-            background: #006abf;
+            background: #76a2ec;
         }
         QPushButton[panelAction="primary"]:focus {
-            border-color: #70bdff;
+            border-color: #a1c3fa;
         }
         QPushButton[panelAction="primary"]:disabled {
             color: #87878a;
-            background: #353538;
+            background: #3a3a3e;
             border-color: #3f3f42;
         }
         QPushButton[panelAction="secondary"] {
             min-height: 30px;
             max-height: 30px;
-            background: #353538;
-            border: 1px solid #48484c;
+            background: #3a3a3e;
+            border: 1px solid #56565b;
             border-radius: 4px;
             color: #d9d9db;
         }
         QPushButton[panelAction="secondary"]:hover {
-            background: #3e3e41;
-            border-color: #545458;
+            background: #444449;
+            border-color: #646469;
         }
         QPushButton[panelAction="secondary"]:pressed {
             background: #202022;
         }
         QPushButton[panelAction="secondary"]:focus {
-            border-color: #0078d7;
+            border-color: #646469;
         }
         QPushButton[panelAction="secondary"]:disabled {
             color: #87878a;
@@ -409,7 +409,7 @@ QString overlayPanelStyleSheet(bool highContrast)
             min-height: 28px;
             max-height: 28px;
             background: #202022;
-            border: 1px solid #48484c;
+            border: 1px solid #56565b;
             color: #d9d9db;
             font-weight: 600;
         }
@@ -423,11 +423,11 @@ QString overlayPanelStyleSheet(bool highContrast)
             border-bottom-right-radius: 4px;
         }
         QPushButton[panelSegment]:hover {
-            background: #3e3e41;
+            background: #444449;
         }
         QPushButton[panelSegment]:checked {
             background: #444448;
-            border-color: #545458;
+            border-color: #646469;
             color: #ececec;
         }
         QPushButton[panelSegment]:focus {
@@ -483,13 +483,13 @@ QString overlayPanelStyleSheet(bool highContrast)
         QWidget#recordingDrawer QComboBox {
             min-height: 30px;
             max-height: 30px;
-            padding: 0 4px 0 6px;
-            background: transparent;
-            border: 1px solid transparent;
+            padding: 0 4px 0 8px;
+            background: #3a3a3e;
+            border: 1px solid #56565b;
         }
         QWidget#recordingDrawer QComboBox:hover {
-            background: #353538;
-            border-color: #48484c;
+            background: #444449;
+            border-color: #646469;
         }
         QWidget#recordingDrawer QComboBox::drop-down {
             width: 18px;
@@ -509,7 +509,7 @@ QString overlayPanelStyleSheet(bool highContrast)
         }
         QWidget#recordingDrawer QToolButton:hover,
         QPushButton[panelAction="icon"]:hover {
-            background: #3e3e41;
+            background: #444449;
         }
         QWidget#recordingDrawer QToolButton:checked {
             background: #444448;

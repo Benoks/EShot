@@ -18,6 +18,7 @@
         <file alias="icons/volume.svg">../icons/volume.svg</file>
         <file alias="icons/mic.svg">../icons/mic.svg</file>
         <file alias="icons/record_dot.svg">../icons/record_dot.svg</file>
+        <file alias="icons/check_dark.svg">../icons/check_dark.svg</file>
         <file alias="icons/copy.svg">../icons/copy.svg</file>
         <file alias="icons/save.svg">../icons/save.svg</file>
         <file alias="icons/close.svg">../icons/close.svg</file>
