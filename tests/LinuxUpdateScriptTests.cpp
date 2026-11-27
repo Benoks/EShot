@@ -27,6 +27,9 @@ private slots:
         QVERIFY(script.contains(QStringLiteral("mv -f -- \"$staged\" \"$current\"")));
         QVERIFY(script.contains(QStringLiteral("\"$current\" --silent")));
         QVERIFY(script.contains(QStringLiteral("rm -f -- \"$download\" \"$0\"")));
+        // A failed step relaunches the current copy; success clears that.
+        QVERIFY(script.indexOf(QStringLiteral("' EXIT\n")) < script.indexOf(QStringLiteral("cp -f")));
+        QVERIFY(script.indexOf(QStringLiteral("trap - EXIT")) > script.indexOf(QStringLiteral("mv -f")));
     }
 
     void quotesSingleQuotesInPaths()
@@ -88,6 +91,36 @@ private slots:
         QFile installed(current);
         QVERIFY(installed.open(QIODevice::ReadOnly));
         QCOMPARE(installed.readAll(), QByteArray("#!/bin/sh\nexit 0\n"));
+        QVERIFY(!QFileInfo::exists(current + QStringLiteral(".new")));
+    }
+
+    void restartsCurrentAppImageWhenTheUpdateFails()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString current = QDir(dir.path()).filePath(QStringLiteral("EShot.AppImage"));
+        const QString marker = QDir(dir.path()).filePath(QStringLiteral("restart-args"));
+        const QString scriptPath = QDir(dir.path()).filePath(QStringLiteral("apply-update.sh"));
+        QFile oldFile(current);
+        QVERIFY(oldFile.open(QIODevice::WriteOnly));
+        oldFile.write(QByteArray("#!/bin/sh\nprintf '%s' \"$*\" > '") + marker.toUtf8() + "'\n");
+        oldFile.close();
+        QFile::setPermissions(current, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+        QFile scriptFile(scriptPath);
+        QVERIFY(scriptFile.open(QIODevice::WriteOnly));
+        // The download is gone, so the very first copy fails.
+        scriptFile.write(buildLinuxUpdateScript(2147483647, current,
+                                                QDir(dir.path()).filePath(QStringLiteral("missing"))).toUtf8());
+        scriptFile.close();
+
+        QProcess process;
+        process.start(QStringLiteral("/bin/sh"), {scriptPath});
+        QVERIFY(process.waitForFinished(5000));
+        QVERIFY(process.exitCode() != 0);
+        QTRY_VERIFY_WITH_TIMEOUT(QFileInfo(marker).size() > 0, 5000);
+        QFile args(marker);
+        QVERIFY(args.open(QIODevice::ReadOnly));
+        QCOMPARE(args.readAll(), QByteArray("--silent"));
         QVERIFY(!QFileInfo::exists(current + QStringLiteral(".new")));
     }
 

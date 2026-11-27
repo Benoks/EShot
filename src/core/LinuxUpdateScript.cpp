@@ -34,16 +34,23 @@ QString buildLinuxUpdateScript(qint64 processId,
     script += QStringLiteral("current=%1\n").arg(shellSingleQuote(currentAppImage));
     script += QStringLiteral("download=%1\n").arg(shellSingleQuote(downloadedAppImage));
     script += QStringLiteral("staged=\"${current}.new\"\n");
+    script += QStringLiteral("wait_for_exit() {\n");
+    script += QStringLiteral("  attempts=0\n");
+    script += QStringLiteral("  while kill -0 \"$pid\" 2>/dev/null && [ \"$attempts\" -lt 300 ]; do\n");
+    script += QStringLiteral("    sleep 0.2\n");
+    script += QStringLiteral("    attempts=$((attempts + 1))\n");
+    script += QStringLiteral("  done\n");
+    script += QStringLiteral("}\n");
+    // EShot quits for the update: whatever fails below (set -e exits on the
+    // spot), start the current copy again unless EShot never quit.
+    script += QStringLiteral("trap 'rm -f -- \"$staged\"; wait_for_exit; "
+                             "if ! kill -0 \"$pid\" 2>/dev/null; then \"$current\" --silent >/dev/null 2>&1 & fi' EXIT\n");
     script += QStringLiteral("cp -f -- \"$download\" \"$staged\"\n");
     script += QStringLiteral("chmod 0755 -- \"$staged\"\n");
-    script += QStringLiteral("if [ ! -s \"$staged\" ] || [ ! -x \"$staged\" ]; then rm -f -- \"$staged\"; exit 1; fi\n");
+    script += QStringLiteral("if [ ! -s \"$staged\" ] || [ ! -x \"$staged\" ]; then exit 1; fi\n");
     script += QStringLiteral("sync\n");
-    script += QStringLiteral("attempts=0\n");
-    script += QStringLiteral("while kill -0 \"$pid\" 2>/dev/null && [ \"$attempts\" -lt 300 ]; do\n");
-    script += QStringLiteral("  sleep 0.2\n");
-    script += QStringLiteral("  attempts=$((attempts + 1))\n");
-    script += QStringLiteral("done\n");
-    script += QStringLiteral("if kill -0 \"$pid\" 2>/dev/null; then rm -f -- \"$staged\"; exit 1; fi\n");
+    script += QStringLiteral("wait_for_exit\n");
+    script += QStringLiteral("if kill -0 \"$pid\" 2>/dev/null; then exit 1; fi\n");
     const QString digest = plainSha256(expectedSha256);
     if (!digest.isEmpty()) {
         // The download sat in a user-writable cache; never install a file
@@ -51,7 +58,7 @@ QString buildLinuxUpdateScript(qint64 processId,
         script += QStringLiteral("expected=%1\n").arg(digest);
         script += QStringLiteral("if command -v sha256sum >/dev/null 2>&1; then\n");
         script += QStringLiteral("  actual=$(sha256sum -- \"$staged\" | cut -d' ' -f1)\n");
-        script += QStringLiteral("  if [ \"$actual\" != \"$expected\" ]; then rm -f -- \"$staged\"; \"$current\" --silent >/dev/null 2>&1 & exit 1; fi\n");
+        script += QStringLiteral("  if [ \"$actual\" != \"$expected\" ]; then exit 1; fi\n");
         script += QStringLiteral("fi\n");
     }
     script += QStringLiteral("cp -f -- \"$current\" \"$current.bak\"\n");
@@ -65,6 +72,7 @@ QString buildLinuxUpdateScript(qint64 processId,
     script += QStringLiteral("if [ \"$current\" = \"${HOME:-}/.local/opt/EShot/EShot.AppImage\" ]; then\n");
     script += QStringLiteral("  \"$current\" --integrate-only >/dev/null 2>&1 || true\n");
     script += QStringLiteral("fi\n");
+    script += QStringLiteral("trap - EXIT\n");
     script += QStringLiteral("\"$current\" --silent >/dev/null 2>&1 &\n");
     script += QStringLiteral("rm -f -- \"$download\" \"$0\"\n");
     return script;
