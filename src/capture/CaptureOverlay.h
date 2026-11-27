@@ -360,6 +360,8 @@ private:
     // Resize handle of the selected shape under pos, or ShapeHandle::None.
     AnnotationEngine::ShapeHandle shapeHandleAt(const QPoint &pos) const;
     void applyDrawModifiers(Qt::KeyboardModifiers modifiers);
+    void showSelectToEditHint(QWidget *slider, bool blur);
+    bool m_selectToEditHintShown = false;
     enum TextResizeHandle { TextResizeNone, TextResizeTopLeft, TextResizeTopRight,
                             TextResizeBottomLeft, TextResizeBottomRight };
     TextResizeHandle m_textResizeHandle = TextResizeNone;

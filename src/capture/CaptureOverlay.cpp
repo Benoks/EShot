@@ -918,6 +918,8 @@ void CaptureOverlay::setupToolSettingsDrawer()
 
     addSliderRow(TranslationManager::quickPenWidth(), m_quickPenWidthSlider, m_quickPenWidthValueLabel, 1, 20, 3);
     addSliderRow(TranslationManager::quickBlurIntensity(), m_quickBlurSlider, m_quickBlurValueLabel, 4, 64, 16);
+    m_quickPenWidthSlider->setToolTip(TranslationManager::tr("quickAppliesToSelectedTip"));
+    m_quickBlurSlider->setToolTip(TranslationManager::tr("quickAppliesToSelectedTip"));
     m_quickShapeFillCheck = new QCheckBox(TranslationManager::tr("quickShapeFill"), m_toolSettingsDrawer);
     m_quickShapeFillCheck->setToolTip(TranslationManager::tr("quickShapeFillTip"));
     drawerLayout->addWidget(m_quickShapeFillCheck);
@@ -977,6 +979,8 @@ void CaptureOverlay::setupToolSettingsDrawer()
             if (m_annotationEngine->setAnnotationPenWidth(m_annotationEngine->selectedIndex(), value)) {
                 update();
                 updateUndoRedoState();
+            } else if (m_quickPenWidthSlider->isSliderDown()) {
+                showSelectToEditHint(m_quickPenWidthSlider, false);
             }
         }
         if (m_settingsWriter)
@@ -1014,6 +1018,8 @@ void CaptureOverlay::setupToolSettingsDrawer()
             if (m_annotationEngine->setAnnotationBlurIntensity(m_annotationEngine->selectedIndex(), value)) {
                 update();
                 updateUndoRedoState();
+            } else if (m_quickBlurSlider->isSliderDown()) {
+                showSelectToEditHint(m_quickBlurSlider, true);
             }
         }
         if (m_settingsWriter)
@@ -2088,6 +2094,7 @@ void CaptureOverlay::startCaptureInternal(CaptureSelectionMode selectionMode, bo
         return;
     }
     m_preselectGlobal = preselectGlobal;
+    m_selectToEditHintShown = false;
     releaseCaptureBuffers();
     ++m_captureGeneration;
     m_showHighlighterStraightHint = false;
@@ -3191,6 +3198,28 @@ void CaptureOverlay::mousePressEvent(QMouseEvent *event)
             update();
             return;
         }
+        // Step back one level per right click: put the drawing tool away,
+        // then drop the selected object, then clear the region.
+        if (m_selectionComplete && m_annotationEngine && m_resizeMode == ResNone
+            && !m_isDraggingAnnotation && !m_isRotatingAnnotation && !m_isResizingShape
+            && !m_isResizingTextAnnotation && (!m_textEdit || !m_textEdit->isVisible())) {
+            if (m_annotationEngine->currentTool() != AnnotationEngine::None) {
+                m_annotationEngine->setCurrentTool(AnnotationEngine::None);
+                if (m_toolbar)
+                    m_toolbar->selectTool(AnnotationEngine::None);
+                updateCounterQuickSettings();
+                updateCursor(event->pos());
+                update();
+                return;
+            }
+            if (m_annotationEngine->selectedIndex() >= 0) {
+                m_annotationEngine->setSelectedIndex(-1);
+                updateCounterQuickSettings();
+                updateCursor(event->pos());
+                update();
+                return;
+            }
+        }
         if (m_selectionComplete || m_resizeMode != ResNone) {
             resetSelection();
         } else {
@@ -3207,6 +3236,7 @@ void CaptureOverlay::resetGestureState()
     m_isDraggingAnnotation = false;
     m_isRotatingAnnotation = false;
     m_isResizingTextAnnotation = false;
+    m_isResizingShape = false;
     m_textPanelDragging = false;
 }
 
@@ -3237,6 +3267,31 @@ void CaptureOverlay::startAnnotationMove(int index, const QPoint &pos)
     setCursor(Qt::SizeAllCursor);
     updateCounterQuickSettings(); // the fill option follows the selection
     update();
+}
+
+void CaptureOverlay::showSelectToEditHint(QWidget *slider, bool blur)
+{
+    // Dragging a slider with nothing selected only changes new objects. Say
+    // so once per capture (three captures in total) when there are placed
+    // objects the slider could have changed.
+    if (m_selectToEditHintShown || !m_annotationEngine || !slider || m_annotationEngine->selectedIndex() >= 0)
+        return;
+    bool editable = false;
+    for (int i = 0; i < m_annotationEngine->annotationCount() && !editable; ++i) {
+        const AnnotationEngine::Tool tool = m_annotationEngine->toolOf(i);
+        const bool blurTool = tool == AnnotationEngine::Blur || tool == AnnotationEngine::Pixelate;
+        editable = blur ? blurTool : (!blurTool && tool != AnnotationEngine::Text);
+    }
+    if (!editable)
+        return;
+    QSettings settings(QStringLiteral("EShot"), QStringLiteral("EShot"));
+    const int shown = settings.value(QStringLiteral("selectToEditHintShown"), 0).toInt();
+    if (shown >= 3)
+        return;
+    settings.setValue(QStringLiteral("selectToEditHintShown"), shown + 1);
+    m_selectToEditHintShown = true;
+    const QRect anchor(slider->mapTo(this, QPoint(slider->width(), slider->height() / 2)), QSize(1, 1));
+    hintBubble()->showTip(TranslationManager::tr("tipSelectToEdit"), anchor, HintBubble::Pointer::Left, rect());
 }
 
 AnnotationEngine::ShapeHandle CaptureOverlay::shapeHandleAt(const QPoint &pos) const

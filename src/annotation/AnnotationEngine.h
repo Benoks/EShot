@@ -134,6 +134,7 @@ public:
     bool isRotatable(int index) const;
     bool isTextAnnotation(int index) const;
     Tool toolOf(int index) const;
+    int annotationCount() const { return m_annotations.size(); }
     qreal rotationDegreesOf(int index) const;
     void rotateAnnotation(int index, qreal degrees);
     void beginRotate(int index);

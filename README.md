@@ -224,6 +224,7 @@ Instant capture, capture screen now, capture last region, GIF and video recordin
 | Arrow keys | Move the selection (`Shift`: 10 px) |
 | `Ctrl` + arrow keys | Resize the selection (`Shift`: 10 px) |
 | `Esc` | Cancel or close |
+| Right-click | Put the drawing tool away, then deselect the object, then clear the selection |
 | `?` / `F1` | Show or hide the shortcut sheet |
 
 ### Pinned images
@@ -281,7 +282,7 @@ Instant capture, capture screen now, capture last region, GIF and video recordin
 | `Ctrl+B` | Bold text |
 | `Ctrl` `+` / `Ctrl` `-` | Larger / smaller text |
 
-With an object selected, the width and blur sliders in Quick Settings change it too, and **Fill shapes** fills rectangles and ellipses with their colour.
+The width and blur sliders in Quick Settings apply to new objects; to change one you already placed, click it first (Ctrl+click while a tool is active). **Fill shapes** fills rectangles and ellipses with their colour.
 
 ## Command line
 
