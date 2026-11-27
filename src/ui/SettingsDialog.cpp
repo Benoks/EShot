@@ -953,8 +953,6 @@ QWidget* SettingsDialog::createCaptureTab()
     m_delaySpin->setSpecialValueText(TranslationManager::noDelay());
     m_delaySpin->setToolTip(TranslationManager::tr("tipCaptureDelay"));
     capLayout->addRow(TranslationManager::delay(), m_delaySpin);
-    m_copyAfterCaptureCheck = new QCheckBox(TranslationManager::copyAfterCapture());
-    m_copyAfterCaptureCheck->hide();
     m_closeAfterCopyCheck = new QCheckBox(TranslationManager::closeAfterCopy());
     m_closeAfterCopyCheck->setToolTip(TranslationManager::tr("tipCloseAfterCopy"));
     m_instantCopyAfterSelectionCheck = new QCheckBox(TranslationManager::tr("instantCopyAfterSelection"));
@@ -2325,7 +2323,6 @@ void SettingsDialog::loadSettings()
     m_qualitySlider->setValue(q);
     m_qualitySpin->setValue(q);
     m_delaySpin->setValue(m_settings->value("captureDelay", 0).toInt());
-    m_copyAfterCaptureCheck->setChecked(false);
     m_closeAfterCopyCheck->setChecked(m_settings->value("closeAfterCopy", true).toBool());
     if (m_instantCopyAfterSelectionCheck)
         m_instantCopyAfterSelectionCheck->setChecked(m_settings->value("instantCopyAfterSelection", false).toBool());
@@ -2999,7 +2996,7 @@ void SettingsDialog::onSave()
     m_settings->setValue("imageFormat",        m_formatCombo->currentData().toString());
     m_settings->setValue("imageQuality",       m_qualitySpin->value());
     m_settings->setValue("captureDelay",       m_delaySpin->value());
-    m_settings->setValue("copyAfterCapture",   false);
+    m_settings->remove("copyAfterCapture"); // retired, never had an effect
     m_settings->setValue("closeAfterCopy",     m_closeAfterCopyCheck->isChecked());
     m_settings->setValue("instantCopyAfterSelection",
                          m_instantCopyAfterSelectionCheck ? m_instantCopyAfterSelectionCheck->isChecked() : false);
@@ -3189,7 +3186,6 @@ void SettingsDialog::onExportSettings()
     obj["imageFormat"] = m_formatCombo->currentData().toString();
     obj["imageQuality"] = m_qualitySpin->value();
     obj["captureDelay"] = m_delaySpin->value();
-    obj["copyAfterCapture"] = false;
     obj["closeAfterCopy"] = m_closeAfterCopyCheck->isChecked();
     obj["instantCopyAfterSelection"] = m_instantCopyAfterSelectionCheck ? m_instantCopyAfterSelectionCheck->isChecked() : false;
     obj["rememberLastAnnotationTool"] = m_rememberLastAnnotationToolCheck ? m_rememberLastAnnotationToolCheck->isChecked() : false;
@@ -3357,7 +3353,6 @@ void SettingsDialog::onImportSettings()
         m_qualitySpin->setValue(obj["imageQuality"].toInt());
     }
     if (obj.contains("captureDelay")) m_delaySpin->setValue(obj["captureDelay"].toInt());
-    if (obj.contains("copyAfterCapture")) m_copyAfterCaptureCheck->setChecked(false);
     if (obj.contains("closeAfterCopy")) m_closeAfterCopyCheck->setChecked(obj["closeAfterCopy"].toBool());
     if (m_instantCopyAfterSelectionCheck && obj.contains("instantCopyAfterSelection"))
         m_instantCopyAfterSelectionCheck->setChecked(obj["instantCopyAfterSelection"].toBool());

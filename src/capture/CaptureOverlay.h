@@ -413,7 +413,6 @@ private:
     bool m_hasCrosshairPosition = false;
 
     // Settings
-    bool m_copyAfterCapture;
     bool m_closeAfterCopy;
     bool m_instantCopyAfterSelection;
     bool m_showCaptureHints;

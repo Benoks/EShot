@@ -131,7 +131,6 @@ public:
     static QString captureSettings()  { return tr("captureSettings"); }
     static QString delay()            { return tr("delay"); }
     static QString noDelay()          { return tr("noDelay"); }
-    static QString copyAfterCapture() { return tr("copyAfterCapture"); }
     static QString closeAfterCopy()   { return tr("closeAfterCopy"); }
     static QString captureHintDrag()  { return tr("captureHintDrag"); }
     static QString captureHintScreen(){ return tr("captureHintScreen"); }
@@ -501,7 +500,6 @@ private:
         {"captureSettings",{"Yakalama Ayarları", "Capture Settings", "Erfassungseinstellungen", "Paramètres de capture", "Configuración de captura", "キャプチャ設定", "捕获设置", "Параметры захвата"}},
         {"delay",          {"Gecikme:", "Delay:", "Verzögerung:", "Délai:", "Retraso:", "遅延:", "延迟:", "Задержка:"}},
         {"noDelay",        {"Gecikme yok", "No delay", "Keine Verzögerung", "Pas de délai", "Sin retraso", "遅延なし", "无延迟", "Без задержки"}},
-        {"copyAfterCapture",{"Yakaladıktan sonra kopyala", "Copy after capture", "Nach Erfassung kopieren", "Copier après capture", "Copiar después de capturar", "キャプチャ後にコピー", "捕获后复制", "Копировать после захвата"}},
         {"closeAfterCopy", {"Kopyaladıktan sonra kapat", "Close after copy", "Nach Kopieren schließen", "Fermer après copie", "Cerrar después de copiar", "コピー後に閉じる", "复制后关闭", "Закрыть после копирования"}},
         {"captureHintDrag", {"Alan seçmek için sürükleyin", "Drag to select an area", "Ziehen, um einen Bereich auszuwählen", "Faites glisser pour sélectionner une zone", "Arrastra para seleccionar un área", "ドラッグして範囲を選択", "拖动以选择区域", "Перетащите, чтобы выбрать область"}},
         {"captureHintScreen", {"Ekranı seçmek için çift tıklayın", "Double-click to select a screen", "Doppelklicken, um einen Bildschirm auszuwählen", "Double-cliquez pour sélectionner un écran", "Haz doble clic para seleccionar una pantalla", "ダブルクリックで画面を選択", "双击以选择屏幕", "Дважды щёлкните, чтобы выбрать экран"}},

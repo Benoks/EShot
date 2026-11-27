@@ -147,7 +147,6 @@ private:
     QSlider *m_qualitySlider = nullptr;
     QSpinBox *m_qualitySpin = nullptr;
     QSpinBox *m_delaySpin = nullptr;
-    QCheckBox *m_copyAfterCaptureCheck = nullptr;
     QCheckBox *m_closeAfterCopyCheck = nullptr;
     QCheckBox *m_instantCopyAfterSelectionCheck = nullptr;
     QCheckBox *m_rememberLastAnnotationToolCheck = nullptr;

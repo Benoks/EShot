@@ -453,7 +453,6 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
     , m_captureDelayTimer(nullptr)
     , m_overlayOpacity(100)
     , m_crosshairStyle("dash")
-    , m_copyAfterCapture(false)
     , m_closeAfterCopy(false)
     , m_instantCopyAfterSelection(false)
     , m_showCaptureHints(true)
@@ -2282,7 +2281,6 @@ void CaptureOverlay::startCaptureInternal(CaptureSelectionMode selectionMode, bo
 
     m_overlayOpacity = s.value("overlayOpacity", 100).toInt();
     m_crosshairStyle = s.value("crosshairStyle", "dash").toString();
-    m_copyAfterCapture = s.value("copyAfterCapture", true).toBool();
     m_closeAfterCopy = s.value("closeAfterCopy", true).toBool();
     m_instantCopyAfterSelection = s.value("instantCopyAfterSelection", false).toBool();
     m_autoLockSelection = s.value("autoLockSelection", false).toBool();
