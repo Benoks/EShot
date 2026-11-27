@@ -23,17 +23,17 @@ HintBubble::HintBubble(QWidget *parent)
 
     m_label = new QLabel(this);
     m_label->setWordWrap(true);
-    m_label->setStyleSheet(QStringLiteral("color: #ececec; font-size: 13px; background: transparent;"));
+    m_label->setStyleSheet(QStringLiteral("color: #edebe8; font-size: 13px; background: transparent;"));
     m_label->setMaximumWidth(280);
 
     m_button = new QPushButton(TranslationManager::tr("tipGotIt"), this);
     m_button->setCursor(Qt::PointingHandCursor);
     m_button->setFocusPolicy(Qt::NoFocus);
     m_button->setStyleSheet(QStringLiteral(
-        "QPushButton { background: #3a3a3e; color: #ececec; border: 1px solid #56565b;"
+        "QPushButton { background: #3a3836; color: #edebe8; border: 1px solid #57534f;"
         " border-radius: 8px; padding: 4px 14px; font-size: 12px; font-weight: 600; }"
-        "QPushButton:hover { background: #3f3f42; border-color: #646469; }"
-        "QPushButton:pressed { background: #323236; }"));
+        "QPushButton:hover { background: #42403d; border-color: #66625d; }"
+        "QPushButton:pressed { background: #33312f; }"));
     connect(m_button, &QPushButton::clicked, this, &HintBubble::dismiss);
 
     auto *buttonRow = new QHBoxLayout;
@@ -135,7 +135,7 @@ void HintBubble::paintEvent(QPaintEvent *)
     path = path.united(pointerPath);
 
     // Same greys as the overlay toolbar and panels.
-    painter.setPen(QPen(QColor(0x56, 0x56, 0x5b), 1.2));
-    painter.setBrush(QColor(0x2a, 0x2a, 0x2c, 250));
+    painter.setPen(QPen(QColor(0x57, 0x53, 0x4f), 1.2));
+    painter.setBrush(QColor(0x2c, 0x2b, 0x29, 250));
     painter.drawPath(path);
 }

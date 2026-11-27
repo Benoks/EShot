@@ -29,9 +29,9 @@ Swatch swatch(Role role)
     // Light values keep at least 4.5:1 against the light window (#f0f0f0);
     // high-contrast values are pure white/yellow/green/cyan on black.
     switch (role) {
-    case Role::Muted:           return {0xadadb0, 0x4f4f4f, 0xffffff};
-    case Role::Hint:            return {0xa6a6a9, 0x595959, 0xffffff};
-    case Role::Secondary:       return {0xd9d9db, 0x2f2f2f, 0xffffff};
+    case Role::Muted:           return {0xb1ada8, 0x4f4f4f, 0xffffff};
+    case Role::Hint:            return {0xa9a5a0, 0x595959, 0xffffff};
+    case Role::Secondary:       return {0xdcd9d5, 0x2f2f2f, 0xffffff};
     case Role::Success:         return {0x4caf50, 0x276b2d, 0x00ff00};
     case Role::SuccessSoft:     return {0x8bd17c, 0x276b2d, 0x00ff00};
     case Role::Warning:         return {0xff9800, 0xa85100, 0xffff00};
@@ -39,14 +39,14 @@ Swatch swatch(Role role)
     case Role::BannerText:      return {0xffd166, 0x5c4300, 0xffff00};
     case Role::BannerErrorText: return {0xffb3bc, 0x9b1c28, 0xff8080};
     case Role::Danger:          return {0xff6b6b, 0xc62828, 0xff6060};
-    case Role::AccentText:      return {0x7dbdf7, 0x1a5fb4, 0x00ffff};
-    case Role::Link:            return {0x7dbdf7, 0x0b57d0, 0x00ffff};
-    case Role::ListBackground:  return {0x202022, 0xffffff, 0x000000};
-    case Role::ListBorder:      return {0x3f3f42, 0xbdbdbd, 0xffffff};
-    case Role::ListHover:       return {0x3a3a3e, 0xe5f1fb, 0x333333};
-    case Role::InputBackground: return {0x202022, 0xffffff, 0x000000};
-    case Role::InputBorder:     return {0x56565b, 0x8a8a8a, 0xffffff};
-    case Role::InputText:       return {0xececec, 0x000000, 0xffffff};
+    case Role::AccentText:      return {0xe0dcd6, 0x1a5fb4, 0x00ffff};
+    case Role::Link:            return {0xe0dcd6, 0x0b57d0, 0x00ffff};
+    case Role::ListBackground:  return {0x22211f, 0xffffff, 0x000000};
+    case Role::ListBorder:      return {0x42403d, 0xbdbdbd, 0xffffff};
+    case Role::ListHover:       return {0x3a3836, 0xe5f1fb, 0x333333};
+    case Role::InputBackground: return {0x22211f, 0xffffff, 0x000000};
+    case Role::InputBorder:     return {0x57534f, 0x8a8a8a, 0xffffff};
+    case Role::InputText:       return {0xedebe8, 0x000000, 0xffffff};
     }
     return {0xffffff, 0x000000, 0xffffff};
 }

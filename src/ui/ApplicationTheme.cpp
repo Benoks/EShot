@@ -50,7 +50,7 @@ QPalette eshotApplicationPalette(bool dark, bool highContrast)
         setDisabledText(p, QColor(150, 150, 150), QColor(200, 200, 200));
         p.setColor(QPalette::Disabled, QPalette::Highlight, QColor(90, 90, 90));
     } else if (dark) {
-        // Charcoal, the same values as the capture overlay (DesignTokens.h).
+        // Warm charcoal, the same values as the capture overlay (DesignTokens.h).
         p.setColor(QPalette::Window, QColor(DesignTokens::Panel));
         p.setColor(QPalette::WindowText, QColor(DesignTokens::Text));
         p.setColor(QPalette::Base, QColor(DesignTokens::Field));
@@ -139,13 +139,19 @@ QString eshotDialogStyleSheet()
         QDialog QCheckBox::indicator:checked { background: @accent; border-color: @accent; image: url(:/icons/check_dark.svg); }
         QDialog QRadioButton::indicator { width: 14px; height: 14px; border-radius: 8px; border: 1px solid @controlBorderHover; background: @field; }
         QDialog QRadioButton::indicator:checked { background: @accent; border: 4px solid @field; }
-        QDialog QTabWidget::pane { border: 1px solid @panelBorder; border-radius: 6px; top: 6px; padding-top: 4px; }
-        QDialog QTabBar::tab {
-            background: @control; color: @text; padding: 5px 12px; margin-right: 4px;
-            border: 1px solid @controlBorder; border-radius: 4px;
+        QDialog QTabWidget::pane {
+            border: 1px solid @panelBorder; border-radius: 6px; border-top-left-radius: 0;
+            top: -1px; background: @panel;
         }
-        QDialog QTabBar::tab:hover { background: @controlHover; border-color: @controlBorderHover; }
-        QDialog QTabBar::tab:selected { background: @selected; border-color: @controlBorderHover; font-weight: 600; }
+        QDialog QTabBar::tab {
+            background: @field; color: @textMuted; padding: 6px 14px; margin-right: 2px; margin-top: 3px;
+            border: 1px solid @panelBorder; border-bottom: none;
+            border-top-left-radius: 6px; border-top-right-radius: 6px;
+        }
+        QDialog QTabBar::tab:hover { color: @text; background: @controlPressed; }
+        QDialog QTabBar::tab:selected {
+            background: @panel; color: @text; font-weight: 600; margin-top: 0; margin-bottom: -1px; padding-bottom: 7px;
+        }
         QDialog QCheckBox::indicator:disabled { background: @controlPressed; border-color: @panelBorder; }
         QDialog QGroupBox {
             border: 1px solid @panelBorder; border-radius: 6px; margin-top: 16px; padding: 10px 8px 8px;

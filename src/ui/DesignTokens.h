@@ -5,27 +5,27 @@
 // sheet. High contrast keeps its own black/white/yellow values.
 namespace DesignTokens {
 
-inline constexpr const char *Panel = "#2a2a2c";          // toolbar, panels, windows
-inline constexpr const char *PanelBorder = "#3f3f42";
-inline constexpr const char *Field = "#202022";          // text fields, segmented track
-inline constexpr const char *Control = "#3a3a3e";        // buttons, combo boxes
-inline constexpr const char *ControlHover = "#444449";
-inline constexpr const char *ControlPressed = "#323236";
-inline constexpr const char *ControlBorder = "#56565b";
-inline constexpr const char *ControlBorderHover = "#646469";
-inline constexpr const char *Selected = "#444448";       // checked segment, pressed toggle
-inline constexpr const char *Separator = "#343437";
-inline constexpr const char *Text = "#ececec";
-inline constexpr const char *TextMuted = "#adadb0";      // 6.4:1 on Panel
-inline constexpr const char *TextDisabled = "#87878a";
-inline constexpr const char *Accent = "#8ab4f8";         // primary button, checkbox, focus (soft blue)
-inline constexpr const char *AccentHover = "#a1c3fa";
-inline constexpr const char *AccentPressed = "#76a2ec";
-inline constexpr const char *OnAccent = "#0f1f38";        // text and icons on Accent
-inline constexpr const char *ToolActive = "#3d74c5";      // selected toolbar tool, white icon on it
-inline constexpr const char *ToolActiveBorder = "#4b82d1";
+inline constexpr const char *Panel = "#2c2b29";          // toolbar, panels, windows
+inline constexpr const char *PanelBorder = "#42403d";
+inline constexpr const char *Field = "#22211f";          // text fields, segmented track
+inline constexpr const char *Control = "#3a3836";        // buttons, combo boxes
+inline constexpr const char *ControlHover = "#45433f";
+inline constexpr const char *ControlPressed = "#33312f";
+inline constexpr const char *ControlBorder = "#57534f";
+inline constexpr const char *ControlBorderHover = "#66625d";
+inline constexpr const char *Selected = "#4a4743";       // checked segment, pressed toggle
+inline constexpr const char *Separator = "#383633";
+inline constexpr const char *Text = "#edebe8";
+inline constexpr const char *TextMuted = "#b1ada8";      // 6.3:1 on Panel
+inline constexpr const char *TextDisabled = "#8a8681";
+inline constexpr const char *Accent = "#e6e3de";         // primary button, checkbox, focus (light warm grey)
+inline constexpr const char *AccentHover = "#f1efeb";
+inline constexpr const char *AccentPressed = "#d6d2cc";
+inline constexpr const char *OnAccent = "#1c1a17";        // text and icons on Accent
+inline constexpr const char *ToolActive = "#625d57";      // selected toolbar tool, white icon on it (warm grey)
+inline constexpr const char *ToolActiveBorder = "#7a746d";
 inline constexpr const char *SelectionFrame = "#0078d7";  // capture selection frame, stays vivid on screenshots
-inline constexpr const char *Link = "#7dbdf7";
+inline constexpr const char *Link = "#e0dcd6";
 inline constexpr const char *Record = "#d44848";
 
 }
