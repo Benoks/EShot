@@ -40,7 +40,15 @@ QString current()
 #if defined(ESHOT_HAVE_X11)
     if (!QGuiApplication::platformName().contains(QStringLiteral("xcb"), Qt::CaseInsensitive))
         return {};
-    Display *display = XOpenDisplay(nullptr);
+    Display *display = nullptr;
+#if QT_CONFIG(xcb)
+    // Reuse Qt's own connection rather than connecting anew on every capture.
+    if (auto *x11 = qGuiApp->nativeInterface<QNativeInterface::QX11Application>())
+        display = x11->display();
+#endif
+    const bool ownDisplay = !display;
+    if (ownDisplay)
+        display = XOpenDisplay(nullptr);
     if (!display)
         return {};
     QString title;
@@ -58,7 +66,8 @@ QString current()
                 : QString::fromUtf8(utf8Title);
         }
     }
-    XCloseDisplay(display);
+    if (ownDisplay)
+        XCloseDisplay(display);
     return title.trimmed();
 #else
     return {};
