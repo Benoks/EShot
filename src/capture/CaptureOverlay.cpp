@@ -505,7 +505,7 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
         QTextEdit {
             background-color: rgba(0, 0, 0, 180);
             color: white;
-            border: 2px solid #0078D4;
+            border: 2px solid #0078d7;
             border-radius: 4px;
             padding: 4px 8px;
             font-size: 14px;
@@ -539,12 +539,12 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
     m_textEditPanel->setObjectName(QStringLiteral("textEditPanel"));
     m_textEditPanel->setStyleSheet(R"(
         QWidget#textEditPanel {
-            background-color: rgba(31, 32, 35, 245);
+            background-color: rgba(59, 61, 66, 245);
             border: 1px solid #56585d;
             border-radius: 8px;
         }
         QToolButton {
-            background-color: #34363a;
+            background-color: #44464b;
             color: white;
             border: 1px solid #505258;
             border-radius: 6px;
@@ -553,7 +553,7 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
         QToolButton:pressed { background-color: #25272a; }
         QToolButton#textCommitButton {
             background-color: #0878c9;
-            border-color: #1593e6;
+            border-color: #1a86dd;
         }
         QToolButton#textCommitButton:hover { background-color: #0b8de8; }
         QToolButton:checked { background-color: #5a5d63; border-color: #8a8d93; }
@@ -567,19 +567,19 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
         QFontComboBox { padding: 0px 8px; }
         QFontComboBox:hover, QSpinBox:hover {
             border-color: #6a6a6a;
-            background: #303030;
+            background: #303237;
         }
         QFontComboBox:focus, QSpinBox:focus {
-            border-color: #0078D4;
+            border-color: #0078d7;
         }
         QFontComboBox::drop-down {
             subcontrol-origin: padding;
             subcontrol-position: top right;
             width: 28px;
-            border-left: 1px solid #4b4d52;
+            border-left: 1px solid #55575d;
             border-top-right-radius: 6px;
             border-bottom-right-radius: 6px;
-            background: #34363a;
+            background: #44464b;
         }
         QFontComboBox::down-arrow {
             image: url(:/icons/chevron_down.svg);
@@ -592,8 +592,8 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
         QSpinBox::up-button, QSpinBox::down-button {
             subcontrol-origin: border;
             width: 22px;
-            background: #34363a;
-            border-left: 1px solid #4b4d52;
+            background: #44464b;
+            border-left: 1px solid #55575d;
         }
         QSpinBox::up-button {
             subcontrol-position: top right;
@@ -604,7 +604,7 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
             border-bottom-right-radius: 6px;
         }
         QSpinBox::up-button:hover, QSpinBox::down-button:hover {
-            background: #3a3a3a;
+            background: #46484e;
         }
         QSpinBox::up-arrow {
             image: url(:/icons/chevron_up.svg);
@@ -775,7 +775,7 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
     m_actionPanel = new QWidget(this);
     m_actionPanel->setCursor(Qt::ArrowCursor);
     m_actionPanel->setStyleSheet(R"(
-        QWidget { background-color: #2d2d2d; border: 1px solid #404040; border-radius: 10px; }
+        QWidget { background-color: #3b3d42; border: 1px solid #505257; border-radius: 10px; }
     )");
     QVBoxLayout *actionLayout = new QVBoxLayout(m_actionPanel);
     actionLayout->setContentsMargins(6, 8, 6, 8);
@@ -795,45 +795,45 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
         QPushButton *pinBtn = addBtn(":/icons/pin.svg", TranslationManager::actionPin(),
             [this]() { onPinToDesktop(); });
         pinBtn->setStyleSheet(R"(
-            QPushButton { background-color: #3a3a3a; border: 1px solid #505050; border-radius: 8px; }
-            QPushButton:hover { background-color: #454545; border-color: #606060; }
-            QPushButton:pressed { background-color: #333333; }
+            QPushButton { background-color: #46484e; border: 1px solid #5a5c62; border-radius: 8px; }
+            QPushButton:hover { background-color: #505257; border-color: #64666c; }
+            QPushButton:pressed { background-color: #404247; }
         )");
         QPushButton *copyBtn = addBtn(":/icons/copy.svg", TranslationManager::actionCopy(),
             [this]() { onCopyToClipboard(); });
         copyBtn->setStyleSheet(R"(
-            QPushButton { background-color: #3a3a3a; border: 1px solid #505050; border-radius: 8px; }
-            QPushButton:hover { background-color: #454545; border-color: #606060; }
-            QPushButton:pressed { background-color: #333333; }
+            QPushButton { background-color: #46484e; border: 1px solid #5a5c62; border-radius: 8px; }
+            QPushButton:hover { background-color: #505257; border-color: #64666c; }
+            QPushButton:pressed { background-color: #404247; }
         )");
         QPushButton *saveBtn = addBtn(":/icons/save.svg", TranslationManager::actionSave(),
             [this]() { onSave(); });
         saveBtn->setStyleSheet(R"(
-            QPushButton { background-color: #3a3a3a; border: 1px solid #505050; border-radius: 8px; }
-            QPushButton:hover { background-color: #454545; border-color: #606060; }
-            QPushButton:pressed { background-color: #333333; }
+            QPushButton { background-color: #46484e; border: 1px solid #5a5c62; border-radius: 8px; }
+            QPushButton:hover { background-color: #505257; border-color: #64666c; }
+            QPushButton:pressed { background-color: #404247; }
         )");
         QPushButton *closeBtn = addBtn(":/icons/close.svg", TranslationManager::actionClose(),
             [this]() { onClose(); });
         closeBtn->setStyleSheet(R"(
-            QPushButton { background-color: #3a3a3a; border: 1px solid #505050; border-radius: 8px; }
-            QPushButton:hover { background-color: #454545; border-color: #606060; }
-            QPushButton:pressed { background-color: #333333; }
+            QPushButton { background-color: #46484e; border: 1px solid #5a5c62; border-radius: 8px; }
+            QPushButton:hover { background-color: #505257; border-color: #64666c; }
+            QPushButton:pressed { background-color: #404247; }
         )");
         // Shortcut sheet, set apart at the bottom: it helps rather than acts.
         QFrame *helpSeparator = new QFrame(m_actionPanel);
         helpSeparator->setFixedHeight(1);
-        helpSeparator->setStyleSheet(QStringLiteral("background: #404040; border: none;"));
+        helpSeparator->setStyleSheet(QStringLiteral("background: #505257; border: none;"));
         actionLayout->addSpacing(2);
         actionLayout->addWidget(helpSeparator);
         actionLayout->addSpacing(2);
         m_helpButton = addBtn(":/icons/help.svg", QString(), [this]() { toggleShortcutSheet(); });
-        m_helpButton->setToolTip(QStringLiteral("<b>%1</b>&nbsp;&nbsp;<span style='color:#a8a8a8'>? / F1</span>")
+        m_helpButton->setToolTip(QStringLiteral("<b>%1</b>&nbsp;&nbsp;<span style='color:#b3b5ba'>? / F1</span>")
                                      .arg(TranslationManager::tr("sheetTitle").toHtmlEscaped()));
         m_helpButton->setStyleSheet(R"(
-            QPushButton { background-color: #3a3a3a; border: 1px solid #505050; border-radius: 8px; }
-            QPushButton:hover { background-color: #454545; border-color: #606060; }
-            QPushButton:pressed { background-color: #333333; }
+            QPushButton { background-color: #46484e; border: 1px solid #5a5c62; border-radius: 8px; }
+            QPushButton:hover { background-color: #505257; border-color: #64666c; }
+            QPushButton:pressed { background-color: #404247; }
         )");
 
     }
@@ -1060,55 +1060,74 @@ void CaptureOverlay::setupToolSettingsDrawer()
 
 void CaptureOverlay::setupRecordingDrawer()
 {
+    // One row under the selection, like the capture toolbar it replaces:
+    // GIF/Video, quality, duration, countdown, audio toggles, "more", record.
+    // Less used settings sit in a small panel opened from "more".
     m_recordingDrawer = new QWidget(this);
     m_recordingDrawer->setObjectName(QStringLiteral("recordingDrawer"));
-    m_recordingDrawer->setFixedWidth(320);
     m_recordingDrawer->setStyleSheet(overlayPanelStyleSheet());
+    auto *layout = new QHBoxLayout(m_recordingDrawer);
+    layout->setContentsMargins(6, 6, 6, 6);
+    layout->setSpacing(4);
 
+    m_recordingMorePanel = new QWidget(this);
+    m_recordingMorePanel->setObjectName(QStringLiteral("recordingMorePanel"));
+    m_recordingMorePanel->setStyleSheet(overlayPanelStyleSheet());
+    m_recordingMorePanel->setFixedWidth(300);
     const OverlayPanelMetrics panelMetrics = overlayPanelMetrics();
-    auto *layout = new QVBoxLayout(m_recordingDrawer);
-    layout->setContentsMargins(panelMetrics.contentMargin, panelMetrics.contentMargin,
-                               panelMetrics.contentMargin, panelMetrics.contentMargin);
-    layout->setSpacing(panelMetrics.rowSpacing);
-    auto *title = new QLabel(TranslationManager::tabRecording(), m_recordingDrawer);
-    title->setObjectName(QStringLiteral("recordingDrawerTitle"));
-    title->setProperty("panelRole", QStringLiteral("title"));
-    layout->addWidget(title);
+    auto *moreLayout = new QVBoxLayout(m_recordingMorePanel);
+    moreLayout->setContentsMargins(14, 12, 14, 12);
+    moreLayout->setSpacing(panelMetrics.rowSpacing);
 
-    // GIF ⇄ Video segmented switch.
-    auto *modeRow = new QHBoxLayout();
-    modeRow->setContentsMargins(0, 0, 0, 0);
-    modeRow->setSpacing(0);
-    auto makeSegment = [this](const QString &text, const QString &position) {
-        auto *button = new QPushButton(text, m_recordingDrawer);
+    const auto separator = [this]() {
+        auto *line = new QFrame(m_recordingDrawer);
+        line->setProperty("panelRole", QStringLiteral("vseparator"));
+        line->setFixedSize(1, 22);
+        return line;
+    };
+    const auto fieldLabel = [this](const QString &text) {
+        auto *label = new QLabel(text, m_recordingDrawer);
+        label->setProperty("panelRole", QStringLiteral("fieldLabel"));
+        return label;
+    };
+    const auto iconToggle = [this](const QString &icon, const QString &tip) {
+        auto *button = new QToolButton(m_recordingDrawer);
         button->setCheckable(true);
-        button->setAutoDefault(false);
-        button->setCursor(Qt::PointingHandCursor);
-        button->setProperty("panelSegment", position);
+        button->setIcon(QIcon(icon));
+        button->setIconSize(QSize(16, 16));
+        button->setToolTip(tip);
+        button->setAccessibleName(tip);
         return button;
     };
-    m_recordingGifModeButton = makeSegment(QStringLiteral("GIF"), QStringLiteral("first"));
-    m_recordingVideoModeButton = makeSegment(TranslationManager::tr("recSegmentVideo"),
-                                             QStringLiteral("last"));
+
+    // GIF ⇄ Video segmented switch.
+    auto *modeTrack = new QWidget(m_recordingDrawer);
+    modeTrack->setProperty("panelRole", QStringLiteral("segmentTrack"));
+    auto *modeRow = new QHBoxLayout(modeTrack);
+    modeRow->setContentsMargins(2, 2, 2, 2);
+    modeRow->setSpacing(0);
+    auto makeSegment = [this, modeTrack](const QString &text) {
+        auto *button = new QPushButton(text, modeTrack);
+        button->setCheckable(true);
+        button->setAutoDefault(false);
+        button->setProperty("panelSegment", QStringLiteral("track"));
+        return button;
+    };
+    m_recordingGifModeButton = makeSegment(QStringLiteral("GIF"));
+    m_recordingVideoModeButton = makeSegment(TranslationManager::tr("recSegmentVideo"));
     m_recordingGifModeButton->setObjectName(QStringLiteral("recordingGifModeButton"));
     m_recordingVideoModeButton->setObjectName(QStringLiteral("recordingVideoModeButton"));
     auto *modeGroup = new QButtonGroup(m_recordingDrawer);
     modeGroup->setExclusive(true);
     modeGroup->addButton(m_recordingGifModeButton);
     modeGroup->addButton(m_recordingVideoModeButton);
-    modeRow->addWidget(m_recordingGifModeButton, 1);
-    modeRow->addWidget(m_recordingVideoModeButton, 1);
-    layout->addLayout(modeRow);
+    modeRow->addWidget(m_recordingGifModeButton);
+    modeRow->addWidget(m_recordingVideoModeButton);
+    layout->addWidget(modeTrack);
+    layout->addSpacing(4);
+    layout->addWidget(separator());
+    layout->addSpacing(4);
 
-    auto *form = new QFormLayout();
-    form->setContentsMargins(0, 2, 0, 0);
-    form->setHorizontalSpacing(10);
-    form->setVerticalSpacing(panelMetrics.rowSpacing);
-    form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
-    form->setLabelAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-    // Long labels (e.g. Russian) move above their field instead of
-    // squeezing the choices.
-    form->setRowWrapPolicy(QFormLayout::WrapLongRows);
     m_recordingQualityCombo = new QComboBox(m_recordingDrawer);
     m_recordingQualityCombo->setObjectName(QStringLiteral("recordingQualityCombo"));
     m_recordingDurationCombo = new QComboBox(m_recordingDrawer);
@@ -1117,16 +1136,69 @@ void CaptureOverlay::setupRecordingDrawer()
     m_recordingStartDelayCombo->setObjectName(QStringLiteral("recordingStartDelayCombo"));
     m_recordingStartDelayCombo->setToolTip(TranslationManager::tr("tipRecordingStartDelay"));
     for (QComboBox *combo : {m_recordingQualityCombo, m_recordingDurationCombo, m_recordingStartDelayCombo})
-        combo->setMinimumWidth(170);
+        combo->setSizeAdjustPolicy(QComboBox::AdjustToContents);
     for (int seconds : recordingStartDelayChoices()) {
         m_recordingStartDelayCombo->addItem(seconds == 0 ? TranslationManager::noDelay()
                                                          : recordingSecondsText(seconds),
                                             seconds);
     }
-    form->addRow(TranslationManager::tr("recQualityLabel"), m_recordingQualityCombo);
+    layout->addWidget(fieldLabel(TranslationManager::tr("recQualityLabel")));
+    layout->addWidget(m_recordingQualityCombo);
+    layout->addSpacing(6);
+    layout->addWidget(fieldLabel(TranslationManager::tr("recDurationLabel")));
+    layout->addWidget(m_recordingDurationCombo);
+    layout->addSpacing(6);
+    layout->addWidget(fieldLabel(withoutTrailingColon(TranslationManager::tr("recordingStartDelayLabel"))));
+    layout->addWidget(m_recordingStartDelayCombo);
 
+    // Video only: audio sources as toggles. Devices and volumes: "more" and Settings.
+    m_recordingVideoOptions = new QWidget(m_recordingDrawer);
+    auto *videoLayout = new QHBoxLayout(m_recordingVideoOptions);
+    videoLayout->setContentsMargins(4, 0, 0, 0);
+    videoLayout->setSpacing(4);
+    videoLayout->addWidget(separator());
+    videoLayout->addSpacing(4);
+    m_recordingDesktopAudioCheck = iconToggle(QStringLiteral(":/icons/volume.svg"),
+                                              TranslationManager::audioSystemLoopback());
+    m_recordingDesktopAudioCheck->setToolTip(TranslationManager::tr("tipVideoDesktopAudio"));
+    m_recordingMicrophoneCheck = iconToggle(QStringLiteral(":/icons/mic.svg"),
+                                            TranslationManager::audioMicrophone());
+    m_recordingMicrophoneCheck->setToolTip(TranslationManager::tr("tipVideoMicrophone"));
+    videoLayout->addWidget(m_recordingDesktopAudioCheck);
+    videoLayout->addWidget(m_recordingMicrophoneCheck);
+    layout->addWidget(m_recordingVideoOptions);
+
+    m_recordingMoreButton = iconToggle(QStringLiteral(":/icons/more.svg"),
+                                       TranslationManager::tr("recMoreSettings"));
+    layout->addWidget(m_recordingMoreButton);
+    layout->addSpacing(4);
+    layout->addWidget(separator());
+    layout->addSpacing(4);
+
+    m_recordingStartButton = new QPushButton(TranslationManager::recordingStart(), m_recordingDrawer);
+    m_recordingStartButton->setObjectName(QStringLiteral("recordingStartButton"));
+    m_recordingStartButton->setProperty("panelAction", QStringLiteral("record"));
+    m_recordingStartButton->setIcon(QIcon(QStringLiteral(":/icons/record_dot.svg")));
+    m_recordingStartButton->setIconSize(QSize(10, 10));
+    m_recordingStartButton->setToolTip(QStringLiteral("%1 (Enter)").arg(TranslationManager::recordingStart()));
+    // Enter on a focused button clicks that button (outside a dialog Qt
+    // leaves autoDefault off); elsewhere in the bar Enter starts.
+    m_recordingStartButton->setAutoDefault(true);
+    m_recordingStartButton->setDefault(true);
+    m_recordingCancelButton = new QPushButton(m_recordingDrawer);
+    m_recordingCancelButton->setObjectName(QStringLiteral("recordingCancelButton"));
+    m_recordingCancelButton->setProperty("panelAction", QStringLiteral("icon"));
+    m_recordingCancelButton->setIcon(QIcon(QStringLiteral(":/icons/close.svg")));
+    m_recordingCancelButton->setIconSize(QSize(14, 14));
+    m_recordingCancelButton->setToolTip(QStringLiteral("%1 (Esc)").arg(TranslationManager::recordingCancel()));
+    m_recordingCancelButton->setAccessibleName(TranslationManager::recordingCancel());
+    m_recordingCancelButton->setAutoDefault(false);
+    layout->addWidget(m_recordingStartButton);
+    layout->addWidget(m_recordingCancelButton);
+
+    // "More" panel: custom quality values, microphone device, hotkeys, Settings.
     // "Custom" quality: the raw values, edited right here.
-    m_recordingCustomQuality = new QWidget(m_recordingDrawer);
+    m_recordingCustomQuality = new QWidget(m_recordingMorePanel);
     m_recordingCustomQuality->setObjectName(QStringLiteral("recordingCustomQuality"));
     auto *customLayout = new QVBoxLayout(m_recordingCustomQuality);
     customLayout->setContentsMargins(0, 0, 0, 0);
@@ -1194,72 +1266,38 @@ void CaptureOverlay::setupRecordingDrawer()
     videoQualityHint->setWordWrap(true);
     videoForm->addRow(videoQualityHint);
     customLayout->addWidget(m_recordingCustomVideo);
-    form->addRow(m_recordingCustomQuality);
+    moreLayout->addWidget(m_recordingCustomQuality);
     m_recordingCustomQuality->hide();
 
-    form->addRow(TranslationManager::tr("recDurationLabel"), m_recordingDurationCombo);
-    form->addRow(withoutTrailingColon(TranslationManager::tr("recordingStartDelayLabel")),
-                 m_recordingStartDelayCombo);
-    layout->addLayout(form);
-
-    // Video only: audio sources. Volumes and the system audio device are on
-    // the Settings recording tab.
-    m_recordingVideoOptions = new QWidget(m_recordingDrawer);
-    auto *videoLayout = new QVBoxLayout(m_recordingVideoOptions);
-    videoLayout->setContentsMargins(0, 0, 0, 0);
-    videoLayout->setSpacing(panelMetrics.rowSpacing);
-    addOverlayPanelSection(videoLayout, m_recordingVideoOptions, TranslationManager::audioMode());
-    m_recordingDesktopAudioCheck = new QCheckBox(TranslationManager::audioSystemLoopback(),
-                                                 m_recordingVideoOptions);
-    m_recordingDesktopAudioCheck->setToolTip(TranslationManager::tr("tipVideoDesktopAudio"));
-    m_recordingMicrophoneCheck = new QCheckBox(TranslationManager::audioMicrophone(),
-                                               m_recordingVideoOptions);
-    m_recordingMicrophoneCheck->setToolTip(TranslationManager::tr("tipVideoMicrophone"));
-    m_recordingMicrophoneDeviceCombo = new QComboBox(m_recordingVideoOptions);
+    m_recordingMicrophoneDeviceCombo = new QComboBox(m_recordingMorePanel);
     m_recordingMicrophoneDeviceCombo->setObjectName(QStringLiteral("recordingMicrophoneDeviceCombo"));
     m_recordingMicrophoneDeviceCombo->setToolTip(TranslationManager::tr("tipVideoMicrophoneDevice"));
     m_recordingMicrophoneDeviceCombo->addItem(TranslationManager::tr("defaultAudioDevice"),
                                               QStringLiteral("default"));
-    videoLayout->addWidget(m_recordingDesktopAudioCheck);
-    videoLayout->addWidget(m_recordingMicrophoneCheck);
-    auto *deviceRow = new QHBoxLayout();
-    deviceRow->setContentsMargins(21, 0, 0, 0);
-    deviceRow->addWidget(m_recordingMicrophoneDeviceCombo, 1);
-    videoLayout->addLayout(deviceRow);
-    layout->addWidget(m_recordingVideoOptions);
+    m_recordingMicrophoneRow = new QWidget(m_recordingMorePanel);
+    auto *micRow = new QHBoxLayout(m_recordingMicrophoneRow);
+    micRow->setContentsMargins(0, 0, 0, 0);
+    micRow->setSpacing(10);
+    micRow->addWidget(new QLabel(TranslationManager::audioMicrophone(), m_recordingMicrophoneRow));
+    micRow->addWidget(m_recordingMicrophoneDeviceCombo, 1);
+    moreLayout->addWidget(m_recordingMicrophoneRow);
 
-    auto *advancedButton = new QPushButton(TranslationManager::tr("recAdvancedSettings"), m_recordingDrawer);
-    advancedButton->setObjectName(QStringLiteral("recordingAdvancedSettingsButton"));
-    advancedButton->setProperty("panelAction", QStringLiteral("link"));
-    advancedButton->setAutoDefault(false);
-    advancedButton->setCursor(Qt::PointingHandCursor);
-    auto *advancedRow = new QHBoxLayout();
-    advancedRow->setContentsMargins(0, 0, 0, 0);
-    advancedRow->addWidget(advancedButton);
-    advancedRow->addStretch(1);
-    layout->addLayout(advancedRow);
-
-    m_recordingHotkeyHint = new QLabel(m_recordingDrawer);
+    m_recordingHotkeyHint = new QLabel(m_recordingMorePanel);
     m_recordingHotkeyHint->setObjectName(QStringLiteral("recordingHotkeyHint"));
     m_recordingHotkeyHint->setProperty("panelRole", QStringLiteral("hint"));
     m_recordingHotkeyHint->setWordWrap(true);
-    layout->addWidget(m_recordingHotkeyHint);
+    moreLayout->addWidget(m_recordingHotkeyHint);
 
-    m_recordingStartButton = new QPushButton(TranslationManager::recordingStart(), m_recordingDrawer);
-    m_recordingStartButton->setObjectName(QStringLiteral("recordingStartButton"));
-    m_recordingStartButton->setProperty("panelAction", QStringLiteral("primary"));
-    m_recordingStartButton->setToolTip(QStringLiteral("%1 (Enter)").arg(TranslationManager::recordingStart()));
-    // Enter on a focused button clicks that button (outside a dialog Qt
-    // leaves autoDefault off); elsewhere in the drawer Enter starts.
-    m_recordingStartButton->setAutoDefault(true);
-    m_recordingStartButton->setDefault(true);
-    m_recordingCancelButton = new QPushButton(TranslationManager::recordingCancel(), m_recordingDrawer);
-    m_recordingCancelButton->setObjectName(QStringLiteral("recordingCancelButton"));
-    m_recordingCancelButton->setProperty("panelAction", QStringLiteral("secondary"));
-    m_recordingCancelButton->setAutoDefault(true);
-    layout->addWidget(m_recordingStartButton);
-    layout->addWidget(m_recordingCancelButton);
+    auto *advancedButton = new QPushButton(TranslationManager::tr("recAdvancedSettings"), m_recordingMorePanel);
+    advancedButton->setObjectName(QStringLiteral("recordingAdvancedSettingsButton"));
+    advancedButton->setProperty("panelAction", QStringLiteral("link"));
+    advancedButton->setAutoDefault(false);
+    moreLayout->addWidget(advancedButton, 0, Qt::AlignLeft);
 
+    connect(m_recordingMoreButton, &QToolButton::toggled, this, [this](bool open) {
+        m_recordingMorePanel->setVisible(open);
+        placeRecordingDrawer();
+    });
     connect(m_recordingGifModeButton, &QPushButton::clicked, this, [this]() {
         setRecordingDrawerMode(RecordingDrawerMode::Gif);
     });
@@ -1301,10 +1339,10 @@ void CaptureOverlay::setupRecordingDrawer()
         QSettings("EShot", "EShot").setValue(QStringLiteral("recordingStartDelaySeconds"),
                                              m_recordingStartDelayCombo->itemData(index).toInt());
     });
-    connect(m_recordingDesktopAudioCheck, &QCheckBox::toggled, this, [](bool enabled) {
+    connect(m_recordingDesktopAudioCheck, &QAbstractButton::toggled, this, [](bool enabled) {
         QSettings("EShot", "EShot").setValue("videoDesktopAudioEnabled", enabled);
     });
-    connect(m_recordingMicrophoneCheck, &QCheckBox::toggled, this, [this](bool enabled) {
+    connect(m_recordingMicrophoneCheck, &QAbstractButton::toggled, this, [this](bool enabled) {
         QSettings("EShot", "EShot").setValue("videoMicrophoneEnabled", enabled);
         if (m_recordingMicrophoneDeviceCombo)
             m_recordingMicrophoneDeviceCombo->setEnabled(enabled);
@@ -1317,7 +1355,9 @@ void CaptureOverlay::setupRecordingDrawer()
     connect(m_recordingStartButton, &QPushButton::clicked, this, &CaptureOverlay::startRecordingFromDrawer);
     connect(m_recordingCancelButton, &QPushButton::clicked, this, [this] { hideRecordingDrawer(); });
     applyPanelCursors(m_recordingDrawer);
+    applyPanelCursors(m_recordingMorePanel);
     m_recordingDrawer->hide();
+    m_recordingMorePanel->hide();
 }
 
 static void applyPanelCursors(QWidget *panel)
@@ -1369,6 +1409,7 @@ void CaptureOverlay::setRecordingDrawerMode(RecordingDrawerMode mode)
     if (mode == RecordingDrawerMode::Video)
         ensureAudioDevicesLoaded();
     m_recordingVideoOptions->setVisible(fields.contains(QStringLiteral("systemAudio")));
+    m_recordingMicrophoneRow->setVisible(fields.contains(QStringLiteral("systemAudio")));
     {
         QSignalBlocker gifBlocker(m_recordingGifModeButton);
         QSignalBlocker videoBlocker(m_recordingVideoModeButton);
@@ -1534,6 +1575,9 @@ void CaptureOverlay::updateRecordingCustomQualityVisibility()
     m_recordingCustomGif->setVisible(gif);
     m_recordingCustomVideo->setVisible(!gif);
     m_recordingCustomQuality->setVisible(custom);
+    // "Custom" values are edited in the "more" panel; open it for them.
+    if (custom && m_recordingDrawer && m_recordingDrawer->isVisible() && m_recordingMoreButton)
+        m_recordingMoreButton->setChecked(true);
     if (m_recordingDrawer && m_recordingDrawer->isVisible())
         placeRecordingDrawer();
 }
@@ -1546,8 +1590,28 @@ void CaptureOverlay::placeRecordingDrawer()
     QRect bounds = m_selectionAnchorScreenRect.intersected(rect());
     if (bounds.isEmpty())
         bounds = rect();
-    bounds.adjust(12, 12, -12, -12);
-    m_recordingDrawer->move(recordingDrawerPosition(bounds, m_recordingDrawer->size()));
+    bounds.adjust(5, 5, -5, -5);
+    const QRect selection = normalizedSelectionRect();
+    m_recordingDrawer->move(recordingBarPosition(selection, m_recordingDrawer->size(), bounds, 12));
+    if (!m_recordingMorePanel || !m_recordingMorePanel->isVisible())
+        return;
+    // The "more" panel hangs from its button, on the side of the bar away
+    // from the selection, inside the screen.
+    m_recordingMorePanel->adjustSize();
+    const QRect bar = m_recordingDrawer->geometry();
+    const QSize panel = m_recordingMorePanel->size();
+    const QPoint buttonRight = m_recordingMoreButton
+        ? m_recordingMoreButton->mapTo(this, QPoint(m_recordingMoreButton->width(), 0)) : bar.topRight();
+    int x = qBound(bounds.left(), buttonRight.x() - panel.width(),
+                   qMax(bounds.left(), bounds.right() + 1 - panel.width()));
+    const bool barBelowSelection = bar.top() > selection.center().y();
+    int y = barBelowSelection ? bar.bottom() + 1 + 6 : bar.top() - 6 - panel.height();
+    if (y + panel.height() > bounds.bottom() + 1)
+        y = bar.top() - 6 - panel.height();
+    if (y < bounds.top())
+        y = bar.bottom() + 1 + 6;
+    m_recordingMorePanel->move(x, y);
+    m_recordingMorePanel->raise();
 }
 
 void CaptureOverlay::openRecordingSettings()
@@ -1567,6 +1631,10 @@ void CaptureOverlay::hideRecordingDrawer(bool restoreToolbar)
 {
     if (m_recordingDrawer)
         m_recordingDrawer->hide();
+    if (m_recordingMoreButton)
+        m_recordingMoreButton->setChecked(false);
+    if (m_recordingMorePanel)
+        m_recordingMorePanel->hide();
     m_recordingDrawerMode = RecordingDrawerMode::None;
     if (restoreToolbar && m_selectionComplete) {
         showToolbar();
@@ -1856,6 +1924,9 @@ bool CaptureOverlay::isToolSettingsUiAt(const QPoint &pos) const
     if (m_recordingDrawer && m_recordingDrawer->isVisible()
         && m_recordingDrawer->geometry().contains(pos))
         return true;
+    if (m_recordingMorePanel && m_recordingMorePanel->isVisible()
+        && m_recordingMorePanel->geometry().contains(pos))
+        return true;
     if (m_toolSettingsButton && m_toolSettingsButton->isVisible() &&
         m_toolSettingsButton->geometry().contains(pos))
         return true;
@@ -1899,6 +1970,8 @@ void CaptureOverlay::refreshUI()
     if (m_recordingDrawer && !m_recordingDrawer->isVisible()) {
         m_recordingDrawer->deleteLater();
         m_recordingDrawer = nullptr;
+        m_recordingMorePanel->deleteLater();
+        m_recordingMorePanel = nullptr;
         setupRecordingDrawer();
         populateAudioDeviceCombos();
     }
@@ -1917,7 +1990,7 @@ void CaptureOverlay::refreshUI()
         }
     }
     if (m_helpButton) {
-        m_helpButton->setToolTip(QStringLiteral("<b>%1</b>&nbsp;&nbsp;<span style='color:#a8a8a8'>? / F1</span>")
+        m_helpButton->setToolTip(QStringLiteral("<b>%1</b>&nbsp;&nbsp;<span style='color:#b3b5ba'>? / F1</span>")
                                      .arg(TranslationManager::tr("sheetTitle").toHtmlEscaped()));
     }
 }
@@ -4383,6 +4456,7 @@ void CaptureOverlay::hideToolbar()
     if (m_toolSettingsButton) m_toolSettingsButton->hide();
     if (m_toolSettingsDrawer) m_toolSettingsDrawer->hide();
     if (m_recordingDrawer) m_recordingDrawer->hide();
+    if (m_recordingMorePanel) m_recordingMorePanel->hide();
     m_recordingDrawerMode = RecordingDrawerMode::None;
     m_managedOverlayEditor = nullptr;
     m_managedOverlayEditorSelectAll = false;
@@ -4691,7 +4765,7 @@ void CaptureOverlay::updateTextEditorStyle()
         QTextEdit {
             background-color: rgba(0, 0, 0, 180);
             color: %1;
-            border: 2px solid #0078D4;
+            border: 2px solid #0078d7;
             border-radius: 4px;
             padding: 4px 8px;
         }

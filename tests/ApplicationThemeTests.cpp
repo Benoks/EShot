@@ -14,7 +14,7 @@ class ApplicationThemeTests : public QObject {
 private slots:
     void createsExplicitPalettes()
     {
-        QCOMPARE(eshotApplicationPalette(true, false).color(QPalette::Window), QColor(53, 53, 53));
+        QCOMPARE(eshotApplicationPalette(true, false).color(QPalette::Window), QColor(0x3b, 0x3d, 0x42));
         QCOMPARE(eshotApplicationPalette(false, false).color(QPalette::Base), QColor(Qt::white));
         QCOMPARE(eshotApplicationPalette(false, true).color(QPalette::Highlight), QColor(Qt::yellow));
     }
@@ -38,7 +38,7 @@ private slots:
         const QString dark = eshotTrayMenuStyleSheet(true, false);
         const QString light = eshotTrayMenuStyleSheet(false, false);
         const QString highContrast = eshotTrayMenuStyleSheet(true, true);
-        QVERIFY(dark.contains(QStringLiteral("background: #2b2b2b")));
+        QVERIFY(dark.contains(QStringLiteral("background: #3b3d42")));
         QVERIFY(light.contains(QStringLiteral("background: #f9f9f9")));
         QVERIFY(highContrast.contains(QStringLiteral("2px solid #ffffff")));
         QVERIFY(highContrast.contains(QStringLiteral("background: #ffff00")));
@@ -57,10 +57,10 @@ private slots:
     void themeColorsKeepTheDarkLookAndReadableLightText()
     {
         using namespace ThemeColors;
-        // Dark values are the colours the dialogs used before.
-        QCOMPARE(css(Role::Muted, Theme::Dark), QStringLiteral("#aaaaaa"));
+        // Dark values follow the graphite design tokens.
+        QCOMPARE(css(Role::Muted, Theme::Dark), QStringLiteral("#b3b5ba"));
         QCOMPARE(css(Role::Warning, Theme::Dark), QStringLiteral("#ff9800"));
-        QCOMPARE(css(Role::ListBackground, Theme::Dark), QStringLiteral("#252525"));
+        QCOMPARE(css(Role::ListBackground, Theme::Dark), QStringLiteral("#303237"));
 
         const auto contrast = [](const QColor &a, const QColor &b) {
             auto luminance = [](const QColor &c) {
@@ -76,6 +76,11 @@ private slots:
         };
         const QColor lightWindow = eshotApplicationPalette(false, false).color(QPalette::Window);
         const QColor hcWindow = eshotApplicationPalette(true, true).color(QPalette::Window);
+        const QColor darkWindow = eshotApplicationPalette(true, false).color(QPalette::Window);
+        for (Role role : {Role::Muted, Role::Hint, Role::Secondary, Role::AccentText, Role::Link}) {
+            QVERIFY2(contrast(color(role, Theme::Dark), darkWindow) >= 4.5,
+                     qPrintable(css(role, Theme::Dark)));
+        }
         for (Role role : {Role::Muted, Role::Hint, Role::Secondary, Role::Success, Role::SuccessSoft,
                           Role::Warning, Role::Caution, Role::Danger, Role::AccentText, Role::Link}) {
             QVERIFY2(contrast(color(role, Theme::Light), lightWindow) >= 4.5,
@@ -103,7 +108,7 @@ private slots:
         QWidget window;
         QLabel label(&window);
         ThemeColors::setStyleSheet(&label, QStringLiteral("color: @hint;"));
-        QCOMPARE(label.styleSheet(), QStringLiteral("color: #999999;"));
+        QCOMPARE(label.styleSheet(), QStringLiteral("color: #a9abb0;"));
         // Qt delivers the palette change events from the event loop.
         applyEShotApplicationTheme(app, false, false);
         QTRY_COMPARE(label.styleSheet(), QStringLiteral("color: #595959;"));

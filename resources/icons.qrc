@@ -15,6 +15,9 @@
         <file alias="icons/pixelate.svg">../icons/pixelate.svg</file>
         <file alias="icons/help.svg">../icons/help.svg</file>
         <file alias="icons/bug.svg">../icons/bug.svg</file>
+        <file alias="icons/volume.svg">../icons/volume.svg</file>
+        <file alias="icons/mic.svg">../icons/mic.svg</file>
+        <file alias="icons/record_dot.svg">../icons/record_dot.svg</file>
         <file alias="icons/copy.svg">../icons/copy.svg</file>
         <file alias="icons/save.svg">../icons/save.svg</file>
         <file alias="icons/close.svg">../icons/close.svg</file>

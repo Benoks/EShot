@@ -16,10 +16,18 @@ QStringList recordingDrawerFields(RecordingDrawerMode mode)
     return {};
 }
 
-QPoint recordingDrawerPosition(const QRect &availableBounds, const QSize &drawerSize)
+QPoint recordingBarPosition(const QRect &selection, const QSize &barSize, const QRect &bounds, int gap)
 {
-    const int x = availableBounds.x() + qMax(0, (availableBounds.width() - drawerSize.width()) / 2);
-    const int y = availableBounds.y() + qMax(0, (availableBounds.height() - drawerSize.height()) / 2);
+    // Centred under the selection like the capture toolbar; above it when
+    // there is no room below, inside its bottom edge when neither fits.
+    int x = selection.center().x() - barSize.width() / 2;
+    x = qBound(bounds.left(), x, qMax(bounds.left(), bounds.right() + 1 - barSize.width()));
+    int y = selection.bottom() + 1 + gap;
+    if (y + barSize.height() > bounds.bottom() + 1)
+        y = selection.top() - gap - barSize.height();
+    if (y < bounds.top())
+        y = selection.bottom() + 1 - gap - barSize.height();
+    y = qBound(bounds.top(), y, qMax(bounds.top(), bounds.bottom() + 1 - barSize.height()));
     return {x, y};
 }
 

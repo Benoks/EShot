@@ -82,6 +82,7 @@ OcrDialog::OcrDialog(const QPixmap &pixmap, QWidget *parent)
     auto *btnRow = new QHBoxLayout();
     m_copyBtn = new QPushButton(TranslationManager::ocrCopy(), this);
     m_copyBtn->setEnabled(false);
+    m_copyBtn->setDefault(true); // the primary action
     m_translateBtn = new QPushButton(TranslationManager::tr("ocrTranslate"), this);
     m_translateBtn->setIcon(QIcon(QStringLiteral(":/icons/external_link.svg")));
     m_translateBtn->setIconSize(QSize(16, 16));

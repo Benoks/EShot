@@ -2,6 +2,10 @@
 
 #include <QApplication>
 #include <QColor>
+#include <QList>
+#include <QPair>
+
+#include "DesignTokens.h"
 
 namespace {
 
@@ -40,21 +44,24 @@ QPalette eshotApplicationPalette(bool dark, bool highContrast)
         setDisabledText(p, QColor(150, 150, 150), QColor(200, 200, 200));
         p.setColor(QPalette::Disabled, QPalette::Highlight, QColor(90, 90, 90));
     } else if (dark) {
-        p.setColor(QPalette::Window, QColor(53, 53, 53));
-        p.setColor(QPalette::WindowText, Qt::white);
-        p.setColor(QPalette::Base, QColor(42, 42, 42));
-        p.setColor(QPalette::AlternateBase, QColor(66, 66, 66));
-        p.setColor(QPalette::ToolTipBase, QColor(53, 53, 53));
-        p.setColor(QPalette::ToolTipText, Qt::white);
-        p.setColor(QPalette::Text, Qt::white);
-        p.setColor(QPalette::Button, QColor(53, 53, 53));
-        p.setColor(QPalette::ButtonText, Qt::white);
+        // Graphite, the same values as the capture overlay (DesignTokens.h).
+        p.setColor(QPalette::Window, QColor(DesignTokens::Panel));
+        p.setColor(QPalette::WindowText, QColor(DesignTokens::Text));
+        p.setColor(QPalette::Base, QColor(DesignTokens::Field));
+        p.setColor(QPalette::AlternateBase, QColor(DesignTokens::Separator));
+        p.setColor(QPalette::ToolTipBase, QColor(DesignTokens::Control));
+        p.setColor(QPalette::ToolTipText, QColor(DesignTokens::Text));
+        p.setColor(QPalette::Text, QColor(DesignTokens::Text));
+        p.setColor(QPalette::Button, QColor(DesignTokens::Control));
+        p.setColor(QPalette::ButtonText, QColor(DesignTokens::Text));
         p.setColor(QPalette::BrightText, Qt::red);
-        p.setColor(QPalette::Link, QColor(42, 130, 218));
-        p.setColor(QPalette::Highlight, QColor(42, 130, 218));
-        p.setColor(QPalette::HighlightedText, Qt::black);
-        setDisabledText(p, QColor(127, 127, 127), QColor(150, 150, 150));
-        p.setColor(QPalette::Disabled, QPalette::Highlight, QColor(80, 80, 80));
+        p.setColor(QPalette::Link, QColor(DesignTokens::Link));
+        p.setColor(QPalette::Highlight, QColor(DesignTokens::Accent));
+        p.setColor(QPalette::HighlightedText, Qt::white);
+        p.setColor(QPalette::Mid, QColor(DesignTokens::ControlBorder));
+        p.setColor(QPalette::Dark, QColor(DesignTokens::Field));
+        setDisabledText(p, QColor(DesignTokens::TextDisabled), QColor(150, 152, 157));
+        p.setColor(QPalette::Disabled, QPalette::Highlight, QColor(DesignTokens::ControlBorder));
     } else {
         p.setColor(QPalette::Window, QColor(240, 240, 240));
         p.setColor(QPalette::WindowText, Qt::black);
@@ -75,9 +82,97 @@ QPalette eshotApplicationPalette(bool dark, bool highContrast)
     return p;
 }
 
+QString eshotDialogStyleSheet()
+{
+    // Graphite dialogs share the overlay's controls: flat 4 px controls, one
+    // accent for the default button and focus. Scoped to QDialog so the
+    // capture overlay keeps its own style sheets.
+    QString css = QStringLiteral(R"(
+        QDialog QPushButton {
+            background: @control; color: @text; border: 1px solid @controlBorder;
+            border-radius: 4px; padding: 4px 14px; min-height: 20px;
+        }
+        QDialog QPushButton:hover { background: @controlHover; border-color: @controlBorderHover; }
+        QDialog QPushButton:pressed { background: @controlPressed; }
+        QDialog QPushButton:focus { border-color: @accent; }
+        QDialog QPushButton:default { background: @accent; border-color: @accent; color: #ffffff; font-weight: 600; }
+        QDialog QPushButton:default:hover { background: @accentHover; border-color: @accentHover; }
+        QDialog QPushButton:default:pressed { background: @accentPressed; }
+        QDialog QPushButton:disabled { color: @textDisabled; background: @controlPressed; border-color: @panelBorder; }
+        QDialog QLineEdit, QDialog QPlainTextEdit, QDialog QTextEdit,
+        QDialog QSpinBox, QDialog QComboBox, QDialog QKeySequenceEdit {
+            background: @field; color: @text; border: 1px solid @controlBorder;
+            border-radius: 4px; selection-background-color: @accent; selection-color: #ffffff;
+        }
+        QDialog QLineEdit, QDialog QSpinBox, QDialog QComboBox { padding: 3px 6px; min-height: 20px; }
+        QDialog QLineEdit:focus, QDialog QPlainTextEdit:focus, QDialog QTextEdit:focus,
+        QDialog QSpinBox:focus, QDialog QComboBox:focus { border-color: @accent; }
+        QDialog QLineEdit:disabled, QDialog QSpinBox:disabled, QDialog QComboBox:disabled {
+            color: @textDisabled; border-color: @panelBorder;
+        }
+        QDialog QComboBox::drop-down {
+            subcontrol-origin: padding; subcontrol-position: top right; width: 24px;
+            border-left: 1px solid @controlBorder;
+        }
+        QDialog QComboBox::down-arrow { image: url(:/icons/chevron_down.svg); width: 12px; height: 12px; }
+        QDialog QComboBox QAbstractItemView {
+            background: @panel; color: @text; border: 1px solid @panelBorder;
+            selection-background-color: @selected; selection-color: @text; outline: none;
+        }
+        QDialog QSpinBox::up-button, QDialog QSpinBox::down-button {
+            subcontrol-origin: border; width: 20px; border-left: 1px solid @controlBorder; background: @control;
+        }
+        QDialog QSpinBox::up-button { subcontrol-position: top right; border-top-right-radius: 4px; }
+        QDialog QSpinBox::down-button { subcontrol-position: bottom right; border-bottom-right-radius: 4px; }
+        QDialog QSpinBox::up-arrow { image: url(:/icons/chevron_up.svg); width: 10px; height: 10px; }
+        QDialog QSpinBox::down-arrow { image: url(:/icons/chevron_down.svg); width: 10px; height: 10px; }
+        QDialog QCheckBox::indicator {
+            width: 14px; height: 14px; border-radius: 3px;
+            border: 1px solid @controlBorderHover; background: @field;
+        }
+        QDialog QCheckBox::indicator:hover { border-color: @textMuted; }
+        QDialog QCheckBox::indicator:checked { background: @accent; border-color: @accent; image: url(:/icons/check.svg); }
+        QDialog QCheckBox::indicator:disabled { background: @controlPressed; border-color: @panelBorder; }
+        QDialog QGroupBox {
+            border: 1px solid @panelBorder; border-radius: 6px; margin-top: 16px; padding: 10px 8px 8px;
+        }
+        QDialog QGroupBox::title {
+            subcontrol-origin: margin; subcontrol-position: top left; left: 10px; padding: 0 4px;
+            color: @text; font-weight: 600;
+        }
+        QDialog QScrollBar:vertical { background: transparent; width: 10px; margin: 0; }
+        QDialog QScrollBar::handle:vertical { background: @controlBorder; border-radius: 4px; min-height: 28px; margin: 1px; }
+        QDialog QScrollBar::handle:vertical:hover { background: @controlBorderHover; }
+        QDialog QScrollBar::add-line:vertical, QDialog QScrollBar::sub-line:vertical { height: 0; }
+        QDialog QScrollBar::add-page:vertical, QDialog QScrollBar::sub-page:vertical { background: none; }
+        QToolTip { background: @control; color: @text; border: 1px solid @panelBorder; padding: 4px 6px; }
+    )");
+    const QList<QPair<const char *, const char *>> tokens = {
+        {"@controlBorderHover", DesignTokens::ControlBorderHover},
+        {"@controlBorder", DesignTokens::ControlBorder},
+        {"@controlPressed", DesignTokens::ControlPressed},
+        {"@controlHover", DesignTokens::ControlHover},
+        {"@control", DesignTokens::Control},
+        {"@accentPressed", DesignTokens::AccentPressed},
+        {"@accentHover", DesignTokens::AccentHover},
+        {"@accent", DesignTokens::Accent},
+        {"@textDisabled", DesignTokens::TextDisabled},
+        {"@textMuted", DesignTokens::TextMuted},
+        {"@text", DesignTokens::Text},
+        {"@panelBorder", DesignTokens::PanelBorder},
+        {"@panel", DesignTokens::Panel},
+        {"@field", DesignTokens::Field},
+        {"@selected", DesignTokens::Selected},
+    };
+    for (const auto &token : tokens)
+        css.replace(QLatin1String(token.first), QLatin1String(token.second));
+    return css;
+}
+
 void applyEShotApplicationTheme(QApplication &application, bool dark, bool highContrast)
 {
     application.setPalette(eshotApplicationPalette(dark, highContrast));
+    application.setStyleSheet(dark && !highContrast ? eshotDialogStyleSheet() : QString());
 }
 
 QString eshotTrayMenuStyleSheet(bool dark, bool highContrast)
@@ -95,7 +190,9 @@ QString eshotTrayMenuStyleSheet(bool dark, bool highContrast)
     const MenuColors colors = highContrast
         ? MenuColors{"#000000", "#ffffff", "#ffffff", "#ffff00", "#000000", "#969696", "#ffffff", 2}
         : dark
-            ? MenuColors{"#2b2b2b", "#ffffff", "#4a4a4a", "#3a3a3a", "#ffffff", "#8a8a8a", "#424242", 1}
+            ? MenuColors{DesignTokens::Panel, DesignTokens::Text, DesignTokens::PanelBorder,
+                         DesignTokens::Selected, DesignTokens::Text, DesignTokens::TextDisabled,
+                         DesignTokens::Separator, 1}
             : MenuColors{"#f9f9f9", "#1a1a1a", "#c4c4c4", "#dceaf8", "#000000", "#6e6e6e", "#d4d4d4", 1};
     return QStringLiteral(
                "QMenu {"

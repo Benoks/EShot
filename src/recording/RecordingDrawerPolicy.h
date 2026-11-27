@@ -23,7 +23,8 @@ enum class OverlayMenuPressAction {
 };
 
 QStringList recordingDrawerFields(RecordingDrawerMode mode);
-QPoint recordingDrawerPosition(const QRect &availableBounds, const QSize &drawerSize);
+// Top-left of the recording bar for a selection, kept inside bounds.
+QPoint recordingBarPosition(const QRect &selection, const QSize &barSize, const QRect &bounds, int gap);
 OverlayMenuPressAction overlayMenuPressAction(bool recordingOpen,
                                               bool quickSettingsOpen,
                                               bool pressInsideMenu);

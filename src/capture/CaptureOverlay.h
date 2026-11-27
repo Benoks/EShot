@@ -23,6 +23,8 @@
 class HintBubble;
 class ShortcutSheetLayer;
 class QPainter;
+class QAbstractButton;
+class QToolButton;
 
 #include "CaptureGeometry.h"
 #include "CaptureScreenImage.h"
@@ -303,8 +305,11 @@ private:
     QComboBox *m_recordingDurationCombo = nullptr;
     QComboBox *m_recordingStartDelayCombo = nullptr;
     QWidget *m_recordingVideoOptions = nullptr;
-    QCheckBox *m_recordingDesktopAudioCheck = nullptr;
-    QCheckBox *m_recordingMicrophoneCheck = nullptr;
+    QAbstractButton *m_recordingDesktopAudioCheck = nullptr;
+    QAbstractButton *m_recordingMicrophoneCheck = nullptr;
+    QWidget *m_recordingMorePanel = nullptr;
+    QToolButton *m_recordingMoreButton = nullptr;
+    QWidget *m_recordingMicrophoneRow = nullptr;
     QComboBox *m_recordingMicrophoneDeviceCombo = nullptr;
     QLabel *m_recordingHotkeyHint = nullptr;
     QPushButton *m_recordingStartButton = nullptr;

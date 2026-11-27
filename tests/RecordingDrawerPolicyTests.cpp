@@ -9,7 +9,7 @@ private slots:
     void gifShowsOnlyGifEssentials();
     void videoShowsOnlyVideoEssentials();
     void noneShowsNoFields();
-    void drawerIsCenteredInAvailableOverlayArea();
+    void barSitsUnderTheSelectionAndStaysOnScreen();
     void quickSettingsOutsidePressClosesAndContinuesCapture();
     void recordingOutsidePressRemainsModal();
     void insidePressDoesNotCloseAnOverlayMenu();
@@ -47,10 +47,20 @@ void RecordingDrawerPolicyTests::noneShowsNoFields()
     QVERIFY(recordingDrawerFields(RecordingDrawerMode::None).isEmpty());
 }
 
-void RecordingDrawerPolicyTests::drawerIsCenteredInAvailableOverlayArea()
+void RecordingDrawerPolicyTests::barSitsUnderTheSelectionAndStaysOnScreen()
 {
-    QCOMPARE(recordingDrawerPosition(QRect(10, 20, 1000, 700), QSize(260, 200)),
-             QPoint(380, 270));
+    const QRect screen(0, 0, 1920, 1080);
+    // Below, centred.
+    QCOMPARE(recordingBarPosition(QRect(600, 200, 400, 300), QSize(800, 44), screen, 10),
+             QPoint(399, 510));
+    // Pushed inside the left edge.
+    QCOMPARE(recordingBarPosition(QRect(0, 200, 200, 300), QSize(800, 44), screen, 10),
+             QPoint(0, 510));
+    // No room below: above the selection.
+    QCOMPARE(recordingBarPosition(QRect(600, 700, 400, 370), QSize(800, 44), screen, 10),
+             QPoint(399, 646));
+    // Full screen selection: inside its bottom edge.
+    QCOMPARE(recordingBarPosition(screen, QSize(800, 44), screen, 10), QPoint(559, 1026));
 }
 
 void RecordingDrawerPolicyTests::quickSettingsOutsidePressClosesAndContinuesCapture()
