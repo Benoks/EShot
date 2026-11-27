@@ -181,6 +181,10 @@ OCR is powered by Tesseract. The first-run wizard can install English, the syste
 
 Anonymous providers work without credentials. Google Drive and Yandex Disk require OAuth access tokens; Allwebs requires a service API key. OAuth tokens are stored in the operating system credential store, never in EShot's plain-text settings file.
 
+`Ctrl+U` uploads in one step: the dialog starts uploading to the last used service right away and copies the link to the clipboard when it is done. If that service still needs a token or API key, enter it first and press **Upload**. You can pick another service and upload again from the same dialog.
+
+**History** in the upload dialog lists the last 50 uploads with their links and delete links, so you can copy or open them later, remove single entries, or clear the list. The history is kept in `upload-history.json` in EShot's app data folder, not in the screenshots folder. Uguu, TmpFiles.org, and temp.sh delete files after their time limit, so older links from those services may no longer work.
+
 ### Google Drive token setup
 
 1. Open [Google OAuth 2.0 Playground](https://developers.google.com/oauthplayground).
