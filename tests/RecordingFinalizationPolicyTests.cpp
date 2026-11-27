@@ -43,6 +43,18 @@ private slots:
         QVERIFY(portalGifPassTimeoutMs(hundredHours) > 0);
         QVERIFY(portalGifPassTimeoutMs(hundredHours) <= 24 * 60 * 60 * 1000);
         QVERIFY(videoMuxTimeoutMs(-5) >= 30000);
+        QVERIFY(portalGifFinalizationTimeoutMs(hundredHours, 60000) > 0);
+    }
+
+    void finalizationTimeoutCoversEveryStep()
+    {
+        // The quit watchdog waits this long; it must outlast each step's limit.
+        const qint64 recordedMs = 5 * 60 * 1000;
+        QCOMPARE(videoFinalizationTimeoutMs(recordedMs, 15000),
+                 15000 + segmentConcatTimeoutMs(recordedMs) + videoMuxTimeoutMs(recordedMs));
+        QCOMPARE(portalGifFinalizationTimeoutMs(recordedMs, 15000),
+                 15000 + segmentConcatTimeoutMs(recordedMs) + 2 * portalGifPassTimeoutMs(recordedMs));
+        QVERIFY(portalGifFinalizationTimeoutMs(0, 0) > 120000);
     }
 
     void gifConversionUsesSeparatePaletteAndEncodePasses()

@@ -19,6 +19,10 @@ VideoMuxCompletionAction videoMuxCompletionAction(bool normalExit, int exitCode,
 int videoMuxTimeoutMs(qint64 recordedMs);
 int segmentConcatTimeoutMs(qint64 recordedMs);
 int portalGifPassTimeoutMs(qint64 recordedMs);
+// Longest a stopped recording can take to be saved, every step running to
+// its timeout; the quit watchdog must not cut a save shorter than that.
+int videoFinalizationTimeoutMs(qint64 recordedMs, int encoderStopGraceMs);
+int portalGifFinalizationTimeoutMs(qint64 recordedMs, int encoderStopGraceMs);
 
 // Two-pass portal GIF conversion: the palette pass writes a PNG so the encode
 // pass streams frames instead of buffering the whole recording. A valid

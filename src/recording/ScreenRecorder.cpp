@@ -81,9 +81,29 @@ ScreenRecorder::ScreenRecorder(QObject *parent) : QObject(parent)
 
 ScreenRecorder::~ScreenRecorder()
 {
+    // The receivers may already be half destroyed (application exit).
+    blockSignals(true);
     discardPreparedSource();
-    if (isRecording()) cancel();
+    if (isFinalizing()) keepFilesOfInterruptedConversion();
+    else if (isRecording()) cancel();
     cleanupPortalConversion();
+}
+
+int ScreenRecorder::finalizationTimeoutMs() const
+{
+    const qint64 recordedMs = qMax(m_recordedMs, m_timeline.activeElapsedMs(nowMs()));
+    return portalGifFinalizationTimeoutMs(recordedMs, gstStopGraceMs(recordedMs));
+}
+
+// Quitting mid-conversion (the quit watchdog) must not delete the recording
+// like cancel() does: end the step as a failed one, which keeps the video.
+void ScreenRecorder::keepFilesOfInterruptedConversion()
+{
+    disconnect(m_conversionProcess, nullptr, this, nullptr);
+    m_conversionProcess->kill();
+    // Windows cannot rename the inputs while ffmpeg still has them open.
+    m_conversionProcess->waitForFinished(3000);
+    failPortalConversion(QStringLiteral("quit during the GIF conversion"));
 }
 
 void ScreenRecorder::start(const QRect &captureRect, int fps, int maxSeconds, int loopCount,

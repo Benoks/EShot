@@ -497,14 +497,50 @@ VideoRecorder::VideoRecorder(QObject *parent)
 
 VideoRecorder::~VideoRecorder()
 {
+    // The receivers may already be half destroyed (application exit).
+    blockSignals(true);
     discardPreparedSource();
-    if (isRecording())
+    if (isFinalizing())
+        keepFilesOfInterruptedFinalization();
+    else if (isRecording())
         cancel();
     // cancel() is asynchronous (the encoder exits via the event loop), so make
     // sure the system-audio thread is joined here; the call is idempotent.
     stopSystemAudioCapture();
     cleanupMuxProcess();
     cleanupConcatProcess();
+}
+
+int VideoRecorder::finalizationTimeoutMs() const
+{
+    // The stop grace differs per backend; either bound is a safe one.
+    const qint64 recordedMs = qMax(m_recordedMs, activeElapsedMs());
+    const int stopGraceMs = qMax(gstStopGraceMs(recordedMs),
+                                 windowsEncoderStopGraceMs(m_captureRect.size(), m_fps));
+    return videoFinalizationTimeoutMs(recordedMs, stopGraceMs);
+}
+
+// Quitting mid-finalization (the quit watchdog) must not delete the recording
+// like cancel() does: end the step as a failed one, which keeps the footage
+// under visible names.
+void VideoRecorder::keepFilesOfInterruptedFinalization()
+{
+    for (QProcess *process : {m_concatProcess, m_muxProcess}) {
+        if (!process)
+            continue;
+        disconnect(process, nullptr, this, nullptr);
+        process->kill();
+        // Windows cannot rename the inputs while ffmpeg still has them open.
+        process->waitForFinished(3000);
+    }
+    if (m_concatProcess) {
+        cleanupConcatProcess();
+        keepSegmentsAfterFailedConcat(QStringLiteral("quit during the join step"));
+    }
+    if (m_muxProcess) {
+        cleanupMuxProcess();
+        useVideoWithoutSystemAudio(QStringLiteral("quit while adding the system audio"));
+    }
 }
 
 void VideoRecorder::start(const QRect &captureRect, int fps, int maxSeconds, int crf,

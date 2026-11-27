@@ -44,6 +44,20 @@ int portalGifPassTimeoutMs(qint64 recordedMs)
     return scaledTimeoutMs(recordedMs, 60000, 4000);
 }
 
+int videoFinalizationTimeoutMs(qint64 recordedMs, int encoderStopGraceMs)
+{
+    // Join the pause segments, then add the system audio.
+    return qMax(0, encoderStopGraceMs) + segmentConcatTimeoutMs(recordedMs)
+        + videoMuxTimeoutMs(recordedMs);
+}
+
+int portalGifFinalizationTimeoutMs(qint64 recordedMs, int encoderStopGraceMs)
+{
+    // Join the pause segments, then the palette and the encode pass.
+    return qMax(0, encoderStopGraceMs) + segmentConcatTimeoutMs(recordedMs)
+        + 2 * portalGifPassTimeoutMs(recordedMs);
+}
+
 namespace {
 QString gifFrameFilter(int fps, const QSize &scaleTo)
 {

@@ -33,6 +33,8 @@ public:
     bool isFinalizing() const { return m_muxProcess != nullptr || m_concatProcess != nullptr; }
     QRect captureRect() const { return m_displayRect.isValid() ? m_displayRect : m_captureRect; }
     int maxSeconds() const { return m_maxSeconds; }
+    // Upper bound for stop() to end in recordingStopped()/recordingFailed().
+    int finalizationTimeoutMs() const;
     // Problems that did not stop the recording but changed what was saved
     // (e.g. a dropped audio source); valid once recordingStopped() is emitted.
     QStringList warnings() const { return m_warnings; }
@@ -104,6 +106,7 @@ private:
     bool startSegmentConcat();
     void keepSegmentsAfterFailedConcat(const QString &reason);
     void cleanupConcatProcess();
+    void keepFilesOfInterruptedFinalization();
     void cleanupProcess();
     void stopSystemAudioCapture();
     void removeRecordingFiles();

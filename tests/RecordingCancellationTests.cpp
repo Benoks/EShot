@@ -140,6 +140,80 @@ private slots:
         QCOMPARE(canceled.count(), 1);
     }
 
+    static void writeFile(const QString &path, const QByteArray &data)
+    {
+        QFile file(path);
+        if (!file.open(QIODevice::WriteOnly) || file.write(data) != data.size())
+            qFatal("Could not write %s", qPrintable(path));
+    }
+
+    static QByteArray readFile(const QString &path)
+    {
+        QFile file(path);
+        return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray();
+    }
+
+    // The quit watchdog destroys a recorder that is still finalizing; that
+    // must keep the footage, not delete it like a cancel.
+    void videoQuitDuringJoinKeepsTheParts()
+    {
+        QTemporaryDir dir;
+        auto *recorder = new VideoRecorder;
+        recorder->m_outputPath = dir.filePath(QStringLiteral("out.mp4"));
+        const QString first = dir.filePath(QStringLiteral(".eshot_segment_s_000.mp4"));
+        const QString second = dir.filePath(QStringLiteral(".eshot_segment_s_001.mp4"));
+        writeFile(first, "first");
+        writeFile(second, "second");
+        writeFile(recorder->m_outputPath, "partial join");
+        recorder->m_segmentPaths = {first, second};
+        recorder->m_concatListPath = dir.filePath(QStringLiteral(".eshot_segments_s.txt"));
+        writeFile(recorder->m_concatListPath, "list");
+        recorder->m_concatProcess = encoder(recorder);
+        delete recorder;
+        QCOMPARE(readFile(dir.filePath(QStringLiteral("out_part1.mp4"))), QByteArray("first"));
+        QCOMPARE(readFile(dir.filePath(QStringLiteral("out_part2.mp4"))), QByteArray("second"));
+        QVERIFY(!QFile::exists(first));
+        QVERIFY(!QFile::exists(second));
+        QVERIFY(!QFile::exists(dir.filePath(QStringLiteral("out.mp4"))));
+        QVERIFY(!QFile::exists(dir.filePath(QStringLiteral(".eshot_segments_s.txt"))));
+    }
+
+    void videoQuitDuringAudioMuxKeepsTheVideo()
+    {
+        QTemporaryDir dir;
+        auto *recorder = new VideoRecorder;
+        recorder->m_systemAudioLoopback = true;
+        recorder->m_outputPath = dir.filePath(QStringLiteral("out.mp4"));
+        recorder->m_videoOnlyPath = dir.filePath(QStringLiteral(".eshot_video_s.mp4"));
+        recorder->m_audioPath = dir.filePath(QStringLiteral(".eshot_audio_s.wav"));
+        writeFile(recorder->m_outputPath, "partial mux");
+        writeFile(recorder->m_videoOnlyPath, "video");
+        writeFile(recorder->m_audioPath, "audio");
+        recorder->m_muxProcess = encoder(recorder);
+        delete recorder;
+        QCOMPARE(readFile(dir.filePath(QStringLiteral("out.mp4"))), QByteArray("video"));
+        QVERIFY(!QFile::exists(dir.filePath(QStringLiteral(".eshot_video_s.mp4"))));
+    }
+
+    void gifQuitDuringConversionKeepsTheVideo()
+    {
+        QTemporaryDir dir;
+        auto *recorder = new ScreenRecorder;
+        recorder->m_outputPath = dir.filePath(QStringLiteral("out.gif"));
+        recorder->m_portalVideoPath = dir.filePath(QStringLiteral(".eshot_gif_s.mp4"));
+        recorder->m_portalPalettePath = dir.filePath(QStringLiteral(".eshot_palette_s.png"));
+        writeFile(recorder->m_outputPath, "partial gif");
+        writeFile(recorder->m_portalVideoPath, "video");
+        writeFile(recorder->m_portalPalettePath, "palette");
+        recorder->m_portalSegments = {recorder->m_portalVideoPath};
+        recorder->m_conversionProcess = encoder(recorder);
+        delete recorder;
+        QCOMPARE(readFile(dir.filePath(QStringLiteral("out.mp4"))), QByteArray("video"));
+        QVERIFY(!QFile::exists(dir.filePath(QStringLiteral("out.gif"))));
+        QVERIFY(!QFile::exists(dir.filePath(QStringLiteral(".eshot_gif_s.mp4"))));
+        QVERIFY(!QFile::exists(dir.filePath(QStringLiteral(".eshot_palette_s.png"))));
+    }
+
     void gifCancelCompletesAfterCleanup()
     {
         ScreenRecorder recorder;

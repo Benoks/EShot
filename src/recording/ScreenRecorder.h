@@ -40,6 +40,8 @@ public:
     QRect captureRect() const { return m_displayRect.isValid() ? m_displayRect : m_captureRect; }
     int frameCount() const { return m_frameCount; }
     int maxSeconds() const { return m_maxSeconds; }
+    // Upper bound for stop() to end in recordingStopped()/recordingFailed().
+    int finalizationTimeoutMs() const;
     // How the running recording captures the screen (for the indicator's
     // capture exclusion); valid once recordingStarted() is emitted.
     RecordingCaptureBackend captureBackend() const;
@@ -93,6 +95,7 @@ private:
     QString ffmpegPath() const;
     bool startPortalVideoToGifConversion();
     void cleanupPortalConversion();
+    void keepFilesOfInterruptedConversion();
     void closePortalSession();
     QStringList portalCaptureArguments(int pipewireFd, const QString &outputPath) const;
     bool startPortalSegment(const QSharedPointer<int> &pipewireFd, const QString &outputPath,

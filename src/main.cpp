@@ -563,17 +563,25 @@ public slots:
             return;
         m_quitAfterRecording = true;
         const auto quitSoon = []() { QTimer::singleShot(1500, qApp, &QCoreApplication::quit); };
+        int finalizationMs = 0;
+        // A stop during startup ends as a cancel: nothing was recorded.
         if (auto *video = qobject_cast<VideoRecorder *>(recorder)) {
             connect(video, &VideoRecorder::recordingStopped, qApp, quitSoon, Qt::QueuedConnection);
             connect(video, &VideoRecorder::recordingFailed, qApp, quitSoon, Qt::QueuedConnection);
+            connect(video, &VideoRecorder::recordingCanceled, qApp, quitSoon, Qt::QueuedConnection);
+            finalizationMs = video->finalizationTimeoutMs();
             stopActiveRecording();
         } else if (auto *gif = qobject_cast<ScreenRecorder *>(recorder)) {
             connect(gif, &ScreenRecorder::recordingStopped, qApp, quitSoon, Qt::QueuedConnection);
             connect(gif, &ScreenRecorder::recordingFailed, qApp, quitSoon, Qt::QueuedConnection);
+            connect(gif, &ScreenRecorder::recordingCanceled, qApp, quitSoon, Qt::QueuedConnection);
+            finalizationMs = gif->finalizationTimeoutMs();
             stopActiveRecording();
         }
-        // Never hang on a stuck encoder; GIF conversion can take a while.
-        QTimer::singleShot(120000, qApp, &QCoreApplication::quit);
+        // Never hang on a stuck encoder, but never cut a save short either:
+        // the recorder's own step timeouts end it first. Killed mid-save, the
+        // recorders keep what was recorded.
+        QTimer::singleShot(finalizationMs + 10000, qApp, &QCoreApplication::quit);
     }
 
     bool isRecordingActive() const
