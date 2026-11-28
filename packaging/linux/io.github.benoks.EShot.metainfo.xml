@@ -44,6 +44,11 @@
   <url type="homepage">https://github.com/Benoks/EShot</url>
   <url type="bugtracker">https://github.com/Benoks/EShot/issues</url>
   <releases>
+    <release version="5.0.0" date="2026-11-28">
+      <description>
+        <p>A new warm charcoal design for the capture overlay and windows, a one-row recording bar, search in Settings, start at login in the first-run wizard, resizable shapes and more annotation shortcuts, one-step uploads with a history, faster drawing on large screens, and many fixes.</p>
+      </description>
+    </release>
     <release version="4.9.0" date="2026-11-21">
       <description>
         <p>Adds Capture Last Region and a setting for what a tray icon click does, makes pinned images borderless with sharper scaling, and keeps a locked selection resizable.</p>
