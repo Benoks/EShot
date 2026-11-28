@@ -66,7 +66,7 @@ private slots:
         // A missing folder is created on the first save.
         const QString path = dir.filePath(QStringLiteral("sub/history.json"));
         UploadHistory::Entry e = entry(QStringLiteral("https://u.example/x.png"));
-        e.time = QDateTime(QDate(2026, 5, 4), QTime(3, 2, 1), QTimeZone::UTC);
+        e.time = QDateTime(QDate(2026, 5, 4), QTime(3, 2, 1), QTimeZone::utc());
         e.deleteUrl = QStringLiteral("https://u.example/delete/x");
         e.imageSize = QSize(640, 480);
         e.thumbnailPng = QByteArray("\x89PNG\r\n\x1a\n-binary", 16);
